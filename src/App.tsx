@@ -18,6 +18,7 @@ import SelectionsModalV2 from './components/SelectionsModalV2';
 import JobPriceSummary from './components/JobPriceSummary';
 import SelectionsPage from './components/SelectionsPage';
 import OptionDetailPage from './components/OptionDetailPage';
+import AIAPayApp from './components/AIAPayApp';
 import { JOBS } from './mockData';
 import { getNextId } from './mockData';
 
@@ -25,7 +26,7 @@ export default function App() {
   const [invoice, setInvoice] = useState<Invoice>(defaultInvoice);
   const [jobOpen, setJobOpen] = useState(false);
   const [selectedJob, setSelectedJob] = useState(1);
-  const [activePage, setActivePage] = useState<'invoice' | 'job-price-summary' | 'selections' | 'option-detail'>('invoice');
+  const [activePage, setActivePage] = useState<'invoice' | 'job-price-summary' | 'selections' | 'option-detail' | 'progress-invoice'>('invoice');
   const [selectedOption, setSelectedOption] = useState<{ name: string; category: string; price: number; allowanceName?: string; status: string } | null>(null);
   const [activeView, setActiveView] = useState<'builder' | 'preview'>('builder');
   const [previewTab, setPreviewTab] = useState<'client' | 'email'>('client');
@@ -116,6 +117,17 @@ export default function App() {
     window.addEventListener('resize', handler);
     return () => window.removeEventListener('resize', handler);
   }, []);
+
+  if (activePage === 'progress-invoice') {
+    return (
+      <div style={{display: 'flex', flexDirection: 'column', height: '100vh'}}>
+        <TopNav onNavigate={(page) => setActivePage(page as any)} />
+        <div style={{flex: 1, overflowY: 'auto'}}>
+          <AIAPayApp />
+        </div>
+      </div>
+    );
+  }
 
   if (activePage === 'option-detail') {
     return (
