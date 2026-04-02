@@ -1,0 +1,1306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap" rel="stylesheet" />
+  <title>Buildertrend - Proposal to Invoice Flow</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bt-midnight: #001a43;
+      --bt-cyan: #00d8d8;
+      --bt-gold: #ffc26f;
+      --bt-blue: #0065db;
+      --bt-blue-light: #e8f1fc;
+      --bt-blue-hover: #0054b8;
+      --g50: #f8f9fb; --g100: #f1f3f5; --g200: #e5e8eb; --g300: #d1d5db;
+      --g400: #9ca3af; --g500: #6b7280; --g600: #4b5563; --g700: #374151; --g800: #1f2937;
+      --red: #dc2626; --red-bg: #fef2f2; --green-bg: #dcfce7; --green: #15803d;
+      --yellow-bg: #fef3c7; --yellow: #92400e;
+      --orange-bg: #fff7ed; --orange: #c2410c;
+      --radius: 6px;
+    }
+
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      font-size: 14px; line-height: 20px; color: var(--g800);
+      background: var(--g50); -webkit-font-smoothing: antialiased;
+      overflow: hidden; height: 100vh;
+    }
+
+    /* ── Inputs ── */
+    .fi {
+      width: 100%; padding: 8px 12px; font-size: 14px; line-height: 20px;
+      font-family: inherit; color: var(--g800); background: white;
+      border: 1px solid var(--g200); border-radius: var(--radius); outline: none;
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    .fi:focus { border-color: var(--bt-blue); box-shadow: 0 0 0 3px rgba(0,101,219,0.12); }
+    .fi::placeholder { color: var(--g300); }
+    select.fi {
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg width='12' height='8' viewBox='0 0 12 8' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1.5L6 6.5L11 1.5' stroke='%236b7280' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+      background-repeat: no-repeat; background-position: right 12px center; padding-right: 32px;
+    }
+    .fl { display: block; font-size: 12px; font-weight: 600; color: var(--g600); margin-bottom: 4px; }
+    textarea.fi { resize: vertical; min-height: 60px; }
+
+    /* ── Buttons ── */
+    .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 20px; font-size: 14px; font-weight: 600; font-family: inherit; border-radius: var(--radius); cursor: pointer; transition: all 0.15s; border: none; white-space: nowrap; }
+    .btn-p { background: var(--bt-blue); color: white; }
+    .btn-p:hover { background: var(--bt-blue-hover); }
+    .btn-s { background: white; color: var(--g700); border: 1px solid var(--g200); }
+    .btn-s:hover { background: var(--g50); border-color: var(--g300); }
+    .btn-g { background: none; border: none; color: var(--bt-blue); padding: 4px 0; font-weight: 500; cursor: pointer; font-family: inherit; font-size: 13px; }
+    .btn-g:hover { color: var(--bt-blue-hover); }
+    .btn-danger { background: var(--red); color: white; }
+    .btn-danger:hover { background: #b91c1c; }
+    .btn-success { background: var(--green); color: white; }
+    .btn-success:hover { background: #166534; }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* ── Badge / Status ── */
+    .badge { display: inline-block; padding: 2px 8px; font-size: 12px; font-weight: 500; border: 1px solid var(--g200); border-radius: 4px; color: var(--g600); background: white; }
+    .status { display: inline-flex; align-items: center; padding: 3px 10px; font-size: 12px; font-weight: 600; border-radius: 20px; }
+    .status-draft { background: var(--g100); color: var(--g600); }
+    .status-sent { background: var(--bt-blue-light); color: var(--bt-blue); }
+    .status-approved { background: var(--green-bg); color: var(--green); }
+    .status-denied { background: var(--red-bg); color: var(--red); }
+    .status-paid { background: var(--green-bg); color: var(--green); }
+    .status-budget { background: var(--orange-bg); color: var(--orange); }
+
+    /* ── Top nav ── */
+    .topnav {
+      display: flex; align-items: center; justify-content: space-between;
+      height: 48px; padding: 0 16px; background: #002f77; color: white; font-size: 14px;
+      flex-shrink: 0;
+    }
+    .topnav-left { display: flex; align-items: center; }
+    .topnav-item {
+      display: flex; align-items: center; gap: 2px; padding: 4px 8px; height: 32px;
+      background: none; border: none; color: white; font-family: 'Arial', sans-serif;
+      font-size: 14px; font-weight: 700; cursor: pointer; border-radius: 4px; white-space: nowrap;
+    }
+    .topnav-item:hover { background: rgba(255,255,255,0.1); }
+    .topnav-item svg { opacity: 0.6; flex-shrink: 0; }
+    .topnav-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+    .topnav-search {
+      background: white; border: 1px solid #f1f4fa;
+      border-radius: 4px; padding: 4px 16px 4px 32px; color: #1f2937; font-size: 14px;
+      font-family: 'Arial', sans-serif; width: 212px; height: 32px; outline: none;
+    }
+    .topnav-search::placeholder { color: #666d7c; }
+    .topnav-icon-btn {
+      display: flex; align-items: center; justify-content: center;
+      width: 32px; height: 32px; background: none; border: none;
+      border-radius: 4px; cursor: pointer; color: white;
+    }
+    .topnav-icon-btn:hover { background: rgba(255,255,255,0.1); }
+    .topnav-avatar {
+      display: flex; align-items: center; justify-content: center;
+      width: 24px; height: 24px; background: #c4fae2; border-radius: 20px;
+      font-family: 'Arial', sans-serif; font-size: 8px; color: #005c35;
+      text-transform: uppercase; font-weight: 400;
+    }
+
+    /* ── Layout ── */
+    .layout { display: flex; flex: 1; min-height: 0; }
+    .content-area { flex: 1; display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
+
+    /* ── Page header ── */
+    .pg-hdr { background: white; border-bottom: 1px solid var(--g200); flex-shrink: 0; }
+    .pg-accent { height: 4px; background: linear-gradient(90deg, var(--bt-cyan), var(--bt-blue)); }
+    .pg-hdr-content { display: flex; align-items: center; justify-content: space-between; padding: 12px 24px; }
+    .pg-hdr-sub { font-size: 12px; color: var(--g400); }
+    .pg-title { font-size: 22px; font-weight: 700; color: var(--bt-midnight); letter-spacing: -0.02em; }
+    .pg-hdr-right { display: flex; align-items: center; gap: 8px; }
+
+    /* ── Stepper ── */
+    .stepper-wrap {
+      background: white; border-bottom: 1px solid var(--g200); padding: 16px 24px;
+      overflow-x: auto; flex-shrink: 0;
+    }
+    .stepper {
+      display: flex; align-items: center; gap: 0; min-width: max-content;
+    }
+    .step {
+      display: flex; align-items: center; gap: 8px; cursor: pointer;
+      padding: 6px 12px; border-radius: var(--radius); transition: all 0.15s;
+      white-space: nowrap;
+    }
+    .step:hover { background: var(--g50); }
+    .step-num {
+      width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center;
+      justify-content: center; font-size: 12px; font-weight: 700; flex-shrink: 0;
+      border: 2px solid var(--g300); color: var(--g400); background: white;
+      transition: all 0.2s;
+    }
+    .step.active .step-num { border-color: var(--bt-blue); background: var(--bt-blue); color: white; }
+    .step.done .step-num { border-color: var(--green); background: var(--green); color: white; }
+    .step.done .step-num::after { content: '\2713'; }
+    .step-label { font-size: 12px; font-weight: 500; color: var(--g500); transition: color 0.15s; }
+    .step.active .step-label { color: var(--bt-blue); font-weight: 600; }
+    .step.done .step-label { color: var(--green); }
+    .step-arrow { color: var(--g300); font-size: 16px; margin: 0 2px; flex-shrink: 0; }
+
+    /* ── Main content scrollable area ── */
+    .main-scroll { flex: 1; overflow-y: auto; padding: 24px; background: var(--g50); }
+    .main-scroll::-webkit-scrollbar { width: 6px; }
+    .main-scroll::-webkit-scrollbar-track { background: transparent; }
+    .main-scroll::-webkit-scrollbar-thumb { background: var(--g300); border-radius: 3px; }
+
+    /* ── Cards ── */
+    .card {
+      background: white; border-radius: 8px; border: 1px solid var(--g200);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.04); max-width: 800px; margin: 0 auto;
+    }
+    .card-header {
+      padding: 16px 24px; border-bottom: 1px solid var(--g100);
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .card-title { font-size: 16px; font-weight: 700; color: var(--bt-midnight); }
+    .card-body { padding: 20px 24px; }
+    .card-footer { padding: 16px 24px; border-top: 1px solid var(--g100); display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+
+    /* ── Grid ── */
+    .g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .g3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+
+    /* ── Table ── */
+    .tbl { width: 100%; border-collapse: collapse; }
+    .tbl thead th {
+      font-size: 11px; font-weight: 600; color: var(--bt-blue); padding: 10px 12px;
+      text-align: left; background: var(--g50); border-bottom: 2px solid var(--g200);
+      text-transform: uppercase; letter-spacing: 0.04em; white-space: nowrap;
+    }
+    .tbl tbody td {
+      padding: 10px 12px; font-size: 13px; color: var(--g700);
+      border-bottom: 1px solid var(--g100); vertical-align: middle;
+    }
+    .tbl tbody tr:hover { background: var(--g50); }
+    .tbl .amt { text-align: right; font-weight: 600; }
+
+    /* ── Payment schedule items ── */
+    .ps-item {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 12px 16px; border: 1px solid var(--g200); border-radius: var(--radius);
+      margin-bottom: 8px; background: white; transition: border-color 0.15s;
+    }
+    .ps-item:hover { border-color: var(--bt-blue); }
+    .ps-item-left { display: flex; flex-direction: column; gap: 2px; }
+    .ps-item-name { font-size: 14px; font-weight: 600; color: var(--g800); }
+    .ps-item-desc { font-size: 12px; color: var(--g500); }
+    .ps-item-right { text-align: right; }
+    .ps-item-amount { font-size: 16px; font-weight: 700; color: var(--bt-midnight); }
+    .ps-item-pct { font-size: 11px; color: var(--g400); }
+
+    /* ── Client-facing proposal card ── */
+    .proposal-card {
+      background: white; border-radius: 8px; overflow: hidden;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 6px 16px rgba(0,0,0,0.04);
+      max-width: 600px; margin: 0 auto;
+    }
+    .proposal-accent { height: 4px; background: linear-gradient(90deg, var(--bt-cyan), var(--bt-blue)); }
+    .proposal-header { padding: 24px; border-bottom: 1px solid var(--g100); display: flex; align-items: center; gap: 12px; }
+    .proposal-logo { width: 40px; height: 40px; border-radius: 8px; background: var(--bt-midnight); color: var(--bt-cyan); display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 18px; }
+    .proposal-body { padding: 24px; }
+
+    /* ── Modal overlay ── */
+    .modal-overlay {
+      position: fixed; inset: 0; background: rgba(0,26,67,0.5);
+      display: flex; align-items: center; justify-content: center; z-index: 100;
+      opacity: 0; pointer-events: none; transition: opacity 0.2s;
+    }
+    .modal-overlay.show { opacity: 1; pointer-events: auto; }
+    .modal {
+      background: white; border-radius: 12px; width: 560px; max-width: 90vw;
+      max-height: 80vh; overflow-y: auto;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.2); transform: translateY(10px);
+      transition: transform 0.2s;
+    }
+    .modal-overlay.show .modal { transform: translateY(0); }
+    .modal-header {
+      padding: 20px 24px; border-bottom: 1px solid var(--g100);
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .modal-title { font-size: 18px; font-weight: 700; color: var(--bt-midnight); }
+    .modal-close { background: none; border: none; font-size: 24px; color: var(--g400); cursor: pointer; padding: 4px; line-height: 1; }
+    .modal-close:hover { color: var(--g700); }
+    .modal-body { padding: 20px 24px; }
+    .modal-footer { padding: 16px 24px; border-top: 1px solid var(--g100); display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+
+    /* ── Bottom bar ── */
+    .bbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 24px; background: white; border-top: 1px solid var(--g200); flex-shrink: 0; }
+    .bbar-left { display: flex; align-items: center; gap: 8px; }
+    .bbar-right { display: flex; align-items: center; gap: 8px; }
+
+    /* ── Info callout ── */
+    .callout {
+      padding: 12px 16px; border-radius: var(--radius); font-size: 13px;
+      display: flex; align-items: flex-start; gap: 10px; margin-bottom: 16px;
+    }
+    .callout-info { background: var(--bt-blue-light); color: var(--bt-blue); border: 1px solid rgba(0,101,219,0.15); }
+    .callout-success { background: var(--green-bg); color: var(--green); border: 1px solid rgba(21,128,61,0.15); }
+    .callout-warning { background: var(--yellow-bg); color: var(--yellow); border: 1px solid rgba(146,64,14,0.15); }
+    .callout-icon { font-size: 16px; flex-shrink: 0; margin-top: 1px; }
+
+    /* ── Notification toast ── */
+    .toast {
+      position: fixed; top: 60px; right: 24px; z-index: 200;
+      background: white; border-radius: 8px; padding: 14px 20px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.15); border-left: 4px solid var(--green);
+      display: flex; align-items: center; gap: 10px; font-size: 13px;
+      transform: translateX(120%); transition: transform 0.3s ease;
+    }
+    .toast.show { transform: translateX(0); }
+    .toast-icon { font-size: 18px; }
+
+    /* ── Checkbox ── */
+    .checkbox-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; cursor: pointer; }
+    .checkbox {
+      width: 18px; height: 18px; border-radius: 4px; border: 2px solid var(--g300);
+      display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+      transition: all 0.15s; cursor: pointer;
+    }
+    .checkbox.on { background: var(--bt-blue); border-color: var(--bt-blue); }
+    .checkbox.on::after { content: ''; display: block; width: 5px; height: 9px; border: solid white; border-width: 0 2px 2px 0; transform: rotate(45deg) translateY(-1px); }
+
+    /* ── Amount display ── */
+    .amount-display {
+      text-align: center; padding: 20px; background: var(--g50);
+      border: 1px solid var(--g200); border-radius: 8px; margin: 16px 0;
+    }
+    .amount-label { font-size: 12px; font-weight: 600; color: var(--g400); text-transform: uppercase; letter-spacing: 0.05em; }
+    .amount-value { font-size: 36px; font-weight: 700; color: var(--bt-midnight); letter-spacing: -0.02em; margin-top: 4px; }
+    .amount-sub { font-size: 12px; color: var(--g400); margin-top: 4px; }
+
+    /* ── Progress bar ── */
+    .progress-bar { height: 6px; background: var(--g200); border-radius: 3px; overflow: hidden; margin: 8px 0; }
+    .progress-fill { height: 100%; background: linear-gradient(90deg, var(--bt-cyan), var(--bt-blue)); border-radius: 3px; transition: width 0.5s ease; }
+
+    /* ── Divider ── */
+    .divider { height: 1px; background: var(--g100); margin: 16px 0; }
+
+    /* ── Step content sections ── */
+    .step-content { display: none; }
+    .step-content.active { display: block; }
+
+    /* ── Sidebar ── */
+    .job-sidebar {
+      width: 260px; min-width: 260px; background: white; border-right: 1px solid var(--g200);
+      display: flex; flex-direction: column; overflow: hidden; flex-shrink: 0;
+    }
+    .job-sidebar-header { padding: 12px 16px; border-bottom: 1px solid var(--g100); display: flex; align-items: center; justify-content: space-between; }
+    .job-sidebar-inner { display: flex; flex-direction: column; width: 260px; height: 100%; overflow: hidden; }
+    .job-new-btn { display: block; width: calc(100% - 32px); margin: 8px 16px; padding: 8px; background: var(--bt-blue); color: white; border: none; border-radius: var(--radius); font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit; text-align: center; }
+    .job-search { margin: 0 16px 8px; padding: 6px 10px; font-size: 13px; border: 1px solid var(--g200); border-radius: var(--radius); font-family: inherit; outline: none; width: calc(100% - 32px); }
+    .job-search:focus { border-color: var(--bt-blue); }
+    .job-list { flex: 1; overflow-y: auto; }
+    .job-item { padding: 10px 16px; cursor: pointer; border-left: 3px solid transparent; transition: all 0.1s; font-size: 13px; }
+    .job-item:hover { background: var(--g50); }
+    .job-item.active { background: var(--bt-blue-light); border-left-color: var(--bt-blue); }
+    .job-item-name { font-weight: 600; color: var(--g800); }
+    .job-item-addr { font-size: 11px; color: var(--g400); margin-top: 1px; }
+    .job-group { padding: 8px 16px; font-size: 11px; font-weight: 600; color: var(--g400); text-transform: uppercase; letter-spacing: 0.05em; }
+
+    /* ── Decision diamond ── */
+    .decision-box {
+      background: white; border: 2px solid var(--bt-blue); border-radius: 8px;
+      padding: 20px 24px; text-align: center; max-width: 400px; margin: 20px auto;
+    }
+    .decision-box h3 { font-size: 15px; font-weight: 700; color: var(--bt-midnight); margin-bottom: 12px; }
+    .decision-actions { display: flex; gap: 12px; justify-content: center; margin-top: 16px; }
+
+    /* ── Responsive ── */
+    @media (max-width: 960px) {
+      .job-sidebar { display: none; }
+      .stepper-wrap { padding: 12px 16px; }
+      .main-scroll { padding: 16px; }
+      .card-body { padding: 16px; }
+      .card-header { padding: 12px 16px; }
+      .card-footer { padding: 12px 16px; }
+      .bbar { padding: 10px 16px; }
+      .g2, .g3 { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <!-- Top Nav -->
+  <div class="topnav">
+    <div class="topnav-left">
+      <button class="topnav-item">Sales <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M5 7.5L10 12.5L15 7.5" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      <button class="topnav-item">Project Management <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M5 7.5L10 12.5L15 7.5" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      <button class="topnav-item">Financial <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M5 7.5L10 12.5L15 7.5" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+    </div>
+    <div class="topnav-right">
+      <div style="position:relative">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" style="position:absolute;left:8px;top:50%;transform:translateY(-50%);pointer-events:none">
+          <circle cx="9" cy="9" r="5.5" stroke="#666d7c" stroke-width="1.5"/><path d="M13 13L16.5 16.5" stroke="#666d7c" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+        <input class="topnav-search" placeholder="Search" />
+      </div>
+      <button class="topnav-icon-btn" title="Add"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M10 5V15M5 10H15" stroke="white" stroke-width="1.5" stroke-linecap="round"/></svg></button>
+      <button class="topnav-icon-btn" title="Profile"><span class="topnav-avatar">AL</span></button>
+    </div>
+  </div>
+
+  <div class="layout" style="height: calc(100vh - 48px);">
+    <!-- Sidebar -->
+    <div class="job-sidebar">
+      <div class="job-sidebar-inner">
+        <div class="job-sidebar-header">
+          <button class="btn-g" style="font-size:12px">&larr; Back to Summary</button>
+        </div>
+        <button class="job-new-btn">New Job</button>
+        <div style="padding: 0 16px 4px; display: flex; align-items: center; gap: 6px">
+          <span style="font-size: 13px; font-weight: 600; color: var(--g700)">Jobs</span>
+          <span style="font-size: 11px; color: var(--g400)">(3)</span>
+        </div>
+        <input class="job-search" placeholder="Search jobs..." />
+        <div class="job-list">
+          <div class="job-group">Open</div>
+          <div class="job-item active">
+            <div class="job-item-name">Thompson Kitchen Remodel</div>
+            <div class="job-item-addr">1234 Oak Street, Lincoln, NE</div>
+          </div>
+          <div class="job-item">
+            <div class="job-item-name">Garcia Home Addition</div>
+            <div class="job-item-addr">567 Maple Ave, Omaha, NE</div>
+          </div>
+          <div class="job-group">All Jobs</div>
+          <div class="job-item">
+            <div class="job-item-name">Patel Bathroom Reno</div>
+            <div class="job-item-addr">890 Pine Rd, Lincoln, NE</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Content -->
+    <div class="content-area">
+      <!-- Page Header -->
+      <div class="pg-hdr">
+        <div class="pg-accent"></div>
+        <div class="pg-hdr-content">
+          <div>
+            <div class="pg-hdr-sub">Thompson Kitchen Remodel</div>
+            <div class="pg-title">Proposal to Invoice</div>
+          </div>
+          <div class="pg-hdr-right">
+            <span class="status" id="flowStatus">Draft</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Stepper -->
+      <div class="stepper-wrap">
+        <div class="stepper" id="stepper">
+          <!-- Steps injected by JS -->
+        </div>
+      </div>
+
+      <!-- Main scrollable content -->
+      <div class="main-scroll" id="mainContent">
+        <!-- Step content injected by JS -->
+      </div>
+
+      <!-- Bottom bar -->
+      <div class="bbar">
+        <div class="bbar-left">
+          <button class="btn btn-s" id="prevBtn" onclick="prevStep()" style="display:none">&larr; Previous</button>
+        </div>
+        <div class="bbar-right">
+          <button class="btn btn-s" id="saveBtn">Save Draft</button>
+          <button class="btn btn-p" id="nextBtn" onclick="nextStep()">Continue &rarr;</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Send to Budget Modal -->
+  <div class="modal-overlay" id="budgetModal">
+    <div class="modal">
+      <div class="modal-header">
+        <div class="modal-title">Send to Budget</div>
+        <button class="modal-close" onclick="closeBudgetModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="callout callout-info">
+          <span class="callout-icon">&#8505;</span>
+          <div>Review the payment schedule before sending to budget. You can edit line items or adjust amounts.</div>
+        </div>
+
+        <h4 style="font-size:14px; font-weight:700; color:var(--bt-midnight); margin-bottom:12px;">Payment Schedule</h4>
+
+        <div class="ps-item">
+          <div class="ps-item-left">
+            <div class="ps-item-name">Deposit</div>
+            <div class="ps-item-desc">Due upon signing</div>
+          </div>
+          <div class="ps-item-right">
+            <div class="ps-item-amount">$8,500.00</div>
+            <div class="ps-item-pct">25% of total</div>
+          </div>
+        </div>
+        <div class="ps-item">
+          <div class="ps-item-left">
+            <div class="ps-item-name">Design Fee</div>
+            <div class="ps-item-desc">Due at design completion</div>
+          </div>
+          <div class="ps-item-right">
+            <div class="ps-item-amount">$3,400.00</div>
+            <div class="ps-item-pct">10% of total</div>
+          </div>
+        </div>
+        <div class="ps-item">
+          <div class="ps-item-left">
+            <div class="ps-item-name">Progress Payment 1</div>
+            <div class="ps-item-desc">Due at rough-in</div>
+          </div>
+          <div class="ps-item-right">
+            <div class="ps-item-amount">$11,050.00</div>
+            <div class="ps-item-pct">32.5% of total</div>
+          </div>
+        </div>
+        <div class="ps-item">
+          <div class="ps-item-left">
+            <div class="ps-item-name">Final Payment</div>
+            <div class="ps-item-desc">Due at completion</div>
+          </div>
+          <div class="ps-item-right">
+            <div class="ps-item-amount">$11,050.00</div>
+            <div class="ps-item-pct">32.5% of total</div>
+          </div>
+        </div>
+
+        <div class="divider"></div>
+
+        <div style="display:flex; justify-content:space-between; font-size:15px; font-weight:700; color:var(--bt-midnight);">
+          <span>Total</span>
+          <span>$34,000.00</span>
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="checkbox-row" onclick="this.querySelector('.checkbox').classList.toggle('on')">
+          <div class="checkbox on"></div>
+          <span style="font-size:13px; color:var(--g700)">Auto-generate invoices for each payment request</span>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-s" onclick="closeBudgetModal()">Cancel</button>
+        <button class="btn btn-s" onclick="closeBudgetModal()">Edit Schedule</button>
+        <button class="btn btn-p" onclick="sendToBudget()">Confirm &amp; Send to Budget</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast notification -->
+  <div class="toast" id="toast">
+    <span class="toast-icon">&#10004;</span>
+    <span id="toastMsg">Action completed successfully</span>
+  </div>
+
+  <script>
+    const STEPS = [
+      { id: 'estimate', label: 'Create Estimate', icon: '1' },
+      { id: 'proposal', label: 'Create Proposal', icon: '2' },
+      { id: 'schedule', label: 'Payment Schedule', icon: '3' },
+      { id: 'send', label: 'Send to Client', icon: '4' },
+      { id: 'client-action', label: 'Client Response', icon: '5' },
+      { id: 'payment', label: 'Client Payment', icon: '6' },
+      { id: 'notify', label: 'Notification', icon: '7' },
+      { id: 'budget', label: 'Send to Budget', icon: '8' },
+      { id: 'invoices', label: 'Generate Invoices', icon: '9' },
+    ];
+
+    let currentStep = 0;
+
+    function renderStepper() {
+      const el = document.getElementById('stepper');
+      el.innerHTML = STEPS.map((s, i) => {
+        let cls = 'step';
+        if (i < currentStep) cls += ' done';
+        if (i === currentStep) cls += ' active';
+        const arrow = i < STEPS.length - 1 ? '<span class="step-arrow">&#8250;</span>' : '';
+        return `
+          <div class="${cls}" onclick="goToStep(${i})">
+            <div class="step-num">${i < currentStep ? '' : s.icon}</div>
+            <span class="step-label">${s.label}</span>
+          </div>
+          ${arrow}
+        `;
+      }).join('');
+    }
+
+    function getStepContent(stepId) {
+      switch (stepId) {
+        case 'estimate':
+          return `
+            <div class="card">
+              <div class="card-header">
+                <div class="card-title">Create Estimate</div>
+                <span class="status status-draft">Draft</span>
+              </div>
+              <div class="card-body">
+                <div class="callout callout-info">
+                  <span class="callout-icon">&#8505;</span>
+                  <div>Start by creating an estimate for the project. This will be the basis for the proposal and payment schedule.</div>
+                </div>
+                <div class="g2" style="margin-bottom:16px">
+                  <div>
+                    <label class="fl">Estimate Name</label>
+                    <input class="fi" value="Kitchen Remodel - Full Scope" />
+                  </div>
+                  <div>
+                    <label class="fl">Estimate Date</label>
+                    <input class="fi" type="date" value="2026-03-12" />
+                  </div>
+                </div>
+                <div class="g2" style="margin-bottom:16px">
+                  <div>
+                    <label class="fl">Client</label>
+                    <input class="fi" value="Sarah Thompson" />
+                  </div>
+                  <div>
+                    <label class="fl">Job</label>
+                    <input class="fi" value="Thompson Kitchen Remodel" readonly style="background:var(--g50)" />
+                  </div>
+                </div>
+                <div style="margin-bottom:16px">
+                  <label class="fl">Description</label>
+                  <textarea class="fi">Complete kitchen renovation including cabinets, countertops, flooring, plumbing, electrical, and appliance installation.</textarea>
+                </div>
+
+                <h4 style="font-size:14px; font-weight:700; color:var(--bt-midnight); margin:16px 0 12px;">Line Items</h4>
+                <div style="overflow-x:auto; margin:0 -24px; padding:0 24px;">
+                  <table class="tbl">
+                    <thead>
+                      <tr>
+                        <th>Item</th>
+                        <th>Cost Type</th>
+                        <th>Qty</th>
+                        <th>Unit Cost</th>
+                        <th>Markup</th>
+                        <th class="amt">Client Price</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td style="font-weight:500">Custom Cabinets</td>
+                        <td><span class="badge">Material</span></td>
+                        <td>1</td>
+                        <td>$8,500.00</td>
+                        <td>20%</td>
+                        <td class="amt">$10,200.00</td>
+                      </tr>
+                      <tr>
+                        <td style="font-weight:500">Granite Countertops</td>
+                        <td><span class="badge">Material</span></td>
+                        <td>45 sqft</td>
+                        <td>$75.00</td>
+                        <td>25%</td>
+                        <td class="amt">$4,218.75</td>
+                      </tr>
+                      <tr>
+                        <td style="font-weight:500">Tile Flooring</td>
+                        <td><span class="badge">Material</span></td>
+                        <td>200 sqft</td>
+                        <td>$12.00</td>
+                        <td>20%</td>
+                        <td class="amt">$2,880.00</td>
+                      </tr>
+                      <tr>
+                        <td style="font-weight:500">Plumbing Labor</td>
+                        <td><span class="badge">Labor</span></td>
+                        <td>24 hrs</td>
+                        <td>$95.00</td>
+                        <td>15%</td>
+                        <td class="amt">$2,622.00</td>
+                      </tr>
+                      <tr>
+                        <td style="font-weight:500">Electrical Work</td>
+                        <td><span class="badge">Labor</span></td>
+                        <td>16 hrs</td>
+                        <td>$110.00</td>
+                        <td>15%</td>
+                        <td class="amt">$2,024.00</td>
+                      </tr>
+                      <tr>
+                        <td style="font-weight:500">Demolition & Prep</td>
+                        <td><span class="badge">Labor</span></td>
+                        <td>1</td>
+                        <td>$3,200.00</td>
+                        <td>10%</td>
+                        <td class="amt">$3,520.00</td>
+                      </tr>
+                      <tr>
+                        <td style="font-weight:500">Appliances (Package)</td>
+                        <td><span class="badge">Material</span></td>
+                        <td>1</td>
+                        <td>$6,800.00</td>
+                        <td>15%</td>
+                        <td class="amt">$7,820.00</td>
+                      </tr>
+                      <tr>
+                        <td style="font-weight:500">Permits & Inspections</td>
+                        <td><span class="badge">Other</span></td>
+                        <td>1</td>
+                        <td>$715.25</td>
+                        <td>0%</td>
+                        <td class="amt">$715.25</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+                <div style="display:flex; justify-content:space-between; padding:14px 12px; background:var(--g50); border-top:2px solid var(--g200); font-weight:700; color:var(--bt-midnight); font-size:14px; margin-top:0;">
+                  <span>Total Estimate</span>
+                  <span>$34,000.00</span>
+                </div>
+              </div>
+            </div>
+          `;
+
+        case 'proposal':
+          return `
+            <div class="card">
+              <div class="card-header">
+                <div class="card-title">Create Proposal</div>
+                <span class="status status-draft">Draft</span>
+              </div>
+              <div class="card-body">
+                <div class="callout callout-info">
+                  <span class="callout-icon">&#8505;</span>
+                  <div>Build a proposal from the estimate to send to your client for approval. This includes project scope, terms, and the payment schedule.</div>
+                </div>
+                <div class="g2" style="margin-bottom:16px">
+                  <div>
+                    <label class="fl">Proposal Title</label>
+                    <input class="fi" value="Kitchen Remodel Proposal" />
+                  </div>
+                  <div>
+                    <label class="fl">Valid Until</label>
+                    <input class="fi" type="date" value="2026-04-12" />
+                  </div>
+                </div>
+                <div style="margin-bottom:16px">
+                  <label class="fl">Introduction</label>
+                  <textarea class="fi" rows="3">Thank you for choosing Modern Builds for your kitchen renovation. We're excited to transform your space into the kitchen of your dreams. Below you'll find the full scope of work and payment terms.</textarea>
+                </div>
+                <div style="margin-bottom:16px">
+                  <label class="fl">Scope of Work</label>
+                  <textarea class="fi" rows="4">- Complete demolition of existing kitchen
+- Custom cabinet installation
+- Granite countertop fabrication & installation
+- Tile flooring throughout kitchen area
+- Full plumbing rough-in and finish
+- Electrical panel upgrade and new circuit installation
+- Appliance delivery and installation
+- Final inspection and punch list</textarea>
+                </div>
+                <div class="g2" style="margin-bottom:16px">
+                  <div>
+                    <label class="fl">Estimated Start Date</label>
+                    <input class="fi" type="date" value="2026-04-15" />
+                  </div>
+                  <div>
+                    <label class="fl">Estimated Duration</label>
+                    <input class="fi" value="6–8 weeks" />
+                  </div>
+                </div>
+                <div style="margin-bottom:16px">
+                  <label class="fl">Terms & Conditions</label>
+                  <textarea class="fi" rows="3">All work subject to final site inspection. Change orders will be documented separately. Warranty: 1 year on workmanship, manufacturer warranty on materials and appliances.</textarea>
+                </div>
+
+                <div class="divider"></div>
+
+                <div style="display:flex; align-items:center; justify-content:space-between;">
+                  <div>
+                    <div style="font-size:13px; font-weight:600; color:var(--g600)">Proposal Total</div>
+                    <div style="font-size:24px; font-weight:700; color:var(--bt-midnight)">$34,000.00</div>
+                  </div>
+                  <span class="badge">Based on estimate</span>
+                </div>
+              </div>
+            </div>
+          `;
+
+        case 'schedule':
+          return `
+            <div class="card">
+              <div class="card-header">
+                <div class="card-title">Payment Schedule</div>
+                <span class="badge">Attached to Proposal</span>
+              </div>
+              <div class="card-body">
+                <div class="callout callout-info">
+                  <span class="callout-icon">&#8505;</span>
+                  <div>Set up your payment schedule. Add a deposit and design fee as the first payment requests, then schedule progress payments as needed.</div>
+                </div>
+
+                <div class="ps-item" style="border-color: var(--bt-blue); background: var(--bt-blue-light);">
+                  <div class="ps-item-left">
+                    <div class="ps-item-name" style="display:flex;align-items:center;gap:8px;">
+                      Deposit
+                      <span style="font-size:10px; font-weight:600; padding:2px 6px; background:var(--bt-blue); color:white; border-radius:3px;">1ST PAYMENT</span>
+                    </div>
+                    <div class="ps-item-desc">Due upon signing proposal</div>
+                  </div>
+                  <div class="ps-item-right">
+                    <div class="ps-item-amount">$8,500.00</div>
+                    <div class="ps-item-pct">25% of total</div>
+                  </div>
+                </div>
+
+                <div class="ps-item" style="border-color: var(--bt-blue); background: var(--bt-blue-light);">
+                  <div class="ps-item-left">
+                    <div class="ps-item-name" style="display:flex;align-items:center;gap:8px;">
+                      Design Fee
+                      <span style="font-size:10px; font-weight:600; padding:2px 6px; background:var(--bt-blue); color:white; border-radius:3px;">1ST PAYMENT</span>
+                    </div>
+                    <div class="ps-item-desc">Due at design phase completion</div>
+                  </div>
+                  <div class="ps-item-right">
+                    <div class="ps-item-amount">$3,400.00</div>
+                    <div class="ps-item-pct">10% of total</div>
+                  </div>
+                </div>
+
+                <div class="ps-item">
+                  <div class="ps-item-left">
+                    <div class="ps-item-name">Progress Payment 1</div>
+                    <div class="ps-item-desc">Due at rough-in completion</div>
+                  </div>
+                  <div class="ps-item-right">
+                    <div class="ps-item-amount">$11,050.00</div>
+                    <div class="ps-item-pct">32.5% of total</div>
+                  </div>
+                </div>
+
+                <div class="ps-item">
+                  <div class="ps-item-left">
+                    <div class="ps-item-name">Final Payment</div>
+                    <div class="ps-item-desc">Due at project completion</div>
+                  </div>
+                  <div class="ps-item-right">
+                    <div class="ps-item-amount">$11,050.00</div>
+                    <div class="ps-item-pct">32.5% of total</div>
+                  </div>
+                </div>
+
+                <button class="btn-g" style="margin-top:8px">+ Add Payment Request</button>
+
+                <div class="divider"></div>
+
+                <div class="progress-bar"><div class="progress-fill" style="width:100%"></div></div>
+                <div style="display:flex; justify-content:space-between; font-size:12px; color:var(--g400); margin-top:4px;">
+                  <span>4 payment requests</span>
+                  <span>$34,000.00 / $34,000.00 allocated</span>
+                </div>
+              </div>
+            </div>
+          `;
+
+        case 'send':
+          return `
+            <div class="card" style="max-width:600px;">
+              <div class="card-header">
+                <div class="card-title">Send Proposal to Client</div>
+              </div>
+              <div class="card-body">
+                <div class="callout callout-warning">
+                  <span class="callout-icon">&#9888;</span>
+                  <div>Once sent, the client will receive an email with a link to view, approve, and pay the proposal.</div>
+                </div>
+
+                <div style="margin-bottom:16px">
+                  <label class="fl">Send To</label>
+                  <input class="fi" value="sarah.thompson@email.com" />
+                </div>
+                <div style="margin-bottom:16px">
+                  <label class="fl">CC</label>
+                  <input class="fi" placeholder="Additional email addresses..." />
+                </div>
+                <div style="margin-bottom:16px">
+                  <label class="fl">Subject</label>
+                  <input class="fi" value="Proposal: Kitchen Remodel - Thompson Residence" />
+                </div>
+                <div style="margin-bottom:16px">
+                  <label class="fl">Message</label>
+                  <textarea class="fi" rows="4">Hi Sarah,
+
+Please find attached the proposal for your kitchen remodel project. You can review the scope, payment schedule, and terms by clicking the link below.
+
+Feel free to reach out with any questions!
+
+Best regards,
+Modern Builds Team</textarea>
+                </div>
+
+                <div class="divider"></div>
+
+                <h4 style="font-size:13px; font-weight:600; color:var(--g600); margin-bottom:12px;">Proposal Preview</h4>
+                <div class="proposal-card">
+                  <div class="proposal-accent"></div>
+                  <div class="proposal-header">
+                    <div class="proposal-logo">M</div>
+                    <div>
+                      <div style="font-size:16px; font-weight:700; color:var(--bt-midnight)">Modern Builds</div>
+                      <div style="font-size:12px; color:var(--g400)">Kitchen Remodel Proposal</div>
+                    </div>
+                  </div>
+                  <div class="proposal-body">
+                    <div class="amount-display">
+                      <div class="amount-label">Proposal Total</div>
+                      <div class="amount-value">$34,000.00</div>
+                      <div class="amount-sub">Valid until April 12, 2026</div>
+                    </div>
+                    <div style="text-align:center">
+                      <button class="btn btn-p" style="width:100%; justify-content:center; padding:14px 20px; font-size:15px;">View Full Proposal &rarr;</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          `;
+
+        case 'client-action':
+          return `
+            <div class="card" style="max-width:600px;">
+              <div class="card-header">
+                <div class="card-title">Client Response</div>
+                <span class="status status-sent">Awaiting Response</span>
+              </div>
+              <div class="card-body">
+                <div class="callout callout-info">
+                  <span class="callout-icon">&#8505;</span>
+                  <div>The proposal has been sent to <strong>sarah.thompson@email.com</strong>. The client can approve or deny the proposal.</div>
+                </div>
+
+                <div style="text-align:center; padding:20px 0;">
+                  <div style="font-size:48px; margin-bottom:12px;">&#9993;</div>
+                  <div style="font-size:16px; font-weight:600; color:var(--bt-midnight); margin-bottom:4px;">Proposal Sent</div>
+                  <div style="font-size:13px; color:var(--g500);">Sent on March 12, 2026 at 2:30 PM</div>
+                </div>
+
+                <div class="divider"></div>
+
+                <h4 style="font-size:13px; font-weight:600; color:var(--g600); margin-bottom:12px;">Simulate Client Action</h4>
+
+                <div class="decision-box">
+                  <h3>What does the client do?</h3>
+                  <p style="font-size:13px; color:var(--g500); margin-bottom:4px;">Choose an action to simulate the client's response</p>
+                  <div class="decision-actions">
+                    <button class="btn btn-success" onclick="clientApprove()">&#10004; Approve Proposal</button>
+                    <button class="btn btn-danger" onclick="clientDeny()">&#10006; Deny Proposal</button>
+                  </div>
+                </div>
+
+                <div id="clientResult" style="display:none; margin-top:16px;"></div>
+              </div>
+            </div>
+          `;
+
+        case 'payment':
+          return `
+            <div class="card" style="max-width:600px;">
+              <div class="card-header">
+                <div class="card-title">Client Payment</div>
+                <span class="status status-approved">Approved</span>
+              </div>
+              <div class="card-body">
+                <div class="callout callout-success">
+                  <span class="callout-icon">&#10004;</span>
+                  <div>The client has approved and signed the proposal. The first payment is now due.</div>
+                </div>
+
+                <div class="proposal-card" style="margin-bottom:20px">
+                  <div class="proposal-accent"></div>
+                  <div class="proposal-body" style="padding:20px">
+                    <div style="display:flex; align-items:center; gap:12px; margin-bottom:16px;">
+                      <div class="proposal-logo" style="width:36px;height:36px;font-size:16px;">M</div>
+                      <div>
+                        <div style="font-size:14px; font-weight:700; color:var(--bt-midnight)">Modern Builds</div>
+                        <div style="font-size:11px; color:var(--g400)">Payment Request</div>
+                      </div>
+                    </div>
+
+                    <div style="font-size:13px; color:var(--g600); margin-bottom:12px;">Payment due for:</div>
+
+                    <div class="ps-item" style="margin-bottom:8px;">
+                      <div class="ps-item-left">
+                        <div class="ps-item-name">Deposit</div>
+                        <div class="ps-item-desc">Due upon signing</div>
+                      </div>
+                      <div class="ps-item-right">
+                        <div class="ps-item-amount">$8,500.00</div>
+                      </div>
+                    </div>
+                    <div class="ps-item">
+                      <div class="ps-item-left">
+                        <div class="ps-item-name">Design Fee</div>
+                        <div class="ps-item-desc">Due at design completion</div>
+                      </div>
+                      <div class="ps-item-right">
+                        <div class="ps-item-amount">$3,400.00</div>
+                      </div>
+                    </div>
+
+                    <div class="divider"></div>
+                    <div style="display:flex; justify-content:space-between; font-weight:700; color:var(--bt-midnight);">
+                      <span>Total Due Now</span>
+                      <span>$11,900.00</span>
+                    </div>
+
+                    <button class="btn btn-p" style="width:100%; justify-content:center; margin-top:16px; padding:14px;" onclick="simulatePayment()">
+                      Pay $11,900.00
+                    </button>
+                  </div>
+                </div>
+
+                <div id="paymentResult" style="display:none"></div>
+              </div>
+            </div>
+          `;
+
+        case 'notify':
+          return `
+            <div class="card" style="max-width:600px;">
+              <div class="card-header">
+                <div class="card-title">Builder Notification</div>
+                <span class="status status-paid">Paid</span>
+              </div>
+              <div class="card-body">
+                <div class="callout callout-success">
+                  <span class="callout-icon">&#10004;</span>
+                  <div><strong>Great news!</strong> The proposal has been approved and the first payment of $11,900.00 has been received.</div>
+                </div>
+
+                <div style="background:var(--g50); border:1px solid var(--g200); border-radius:8px; padding:20px; margin-bottom:16px;">
+                  <div style="display:flex; align-items:center; gap:12px; margin-bottom:16px;">
+                    <div style="width:40px; height:40px; border-radius:50%; background:var(--green-bg); color:var(--green); display:flex; align-items:center; justify-content:center; font-size:20px;">&#10004;</div>
+                    <div>
+                      <div style="font-size:15px; font-weight:700; color:var(--bt-midnight);">Proposal Approved & Paid</div>
+                      <div style="font-size:12px; color:var(--g500);">March 12, 2026 at 3:45 PM</div>
+                    </div>
+                  </div>
+
+                  <div class="g2">
+                    <div>
+                      <div style="font-size:11px; font-weight:600; color:var(--g400); text-transform:uppercase; margin-bottom:2px;">Client</div>
+                      <div style="font-size:14px; font-weight:500; color:var(--g800);">Sarah Thompson</div>
+                    </div>
+                    <div>
+                      <div style="font-size:11px; font-weight:600; color:var(--g400); text-transform:uppercase; margin-bottom:2px;">Job</div>
+                      <div style="font-size:14px; font-weight:500; color:var(--g800);">Thompson Kitchen Remodel</div>
+                    </div>
+                    <div>
+                      <div style="font-size:11px; font-weight:600; color:var(--g400); text-transform:uppercase; margin-bottom:2px;">Payment Received</div>
+                      <div style="font-size:14px; font-weight:700; color:var(--green);">$11,900.00</div>
+                    </div>
+                    <div>
+                      <div style="font-size:11px; font-weight:600; color:var(--g400); text-transform:uppercase; margin-bottom:2px;">Remaining Balance</div>
+                      <div style="font-size:14px; font-weight:700; color:var(--bt-midnight);">$22,100.00</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div style="text-align:center; padding:8px 0;">
+                  <p style="font-size:13px; color:var(--g500); margin-bottom:12px;">Ready to move forward? Send the payment schedule to your budget.</p>
+                </div>
+              </div>
+            </div>
+          `;
+
+        case 'budget':
+          return `
+            <div class="card" style="max-width:700px;">
+              <div class="card-header">
+                <div class="card-title">Send to Budget</div>
+                <span class="status status-budget">Ready</span>
+              </div>
+              <div class="card-body">
+                <div class="callout callout-info">
+                  <span class="callout-icon">&#8505;</span>
+                  <div>Review and confirm the payment schedule before sending to your project budget. You can edit or view the payment schedule.</div>
+                </div>
+
+                <h4 style="font-size:14px; font-weight:700; color:var(--bt-midnight); margin-bottom:12px;">Payment Schedule Summary</h4>
+
+                <table class="tbl" style="margin-bottom:16px;">
+                  <thead>
+                    <tr>
+                      <th>Payment</th>
+                      <th>Trigger</th>
+                      <th>Status</th>
+                      <th class="amt">Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td style="font-weight:500">Deposit</td>
+                      <td>Upon signing</td>
+                      <td><span class="status status-paid" style="font-size:11px; padding:2px 8px;">Paid</span></td>
+                      <td class="amt">$8,500.00</td>
+                    </tr>
+                    <tr>
+                      <td style="font-weight:500">Design Fee</td>
+                      <td>Design completion</td>
+                      <td><span class="status status-paid" style="font-size:11px; padding:2px 8px;">Paid</span></td>
+                      <td class="amt">$3,400.00</td>
+                    </tr>
+                    <tr>
+                      <td style="font-weight:500">Progress Payment 1</td>
+                      <td>Rough-in completion</td>
+                      <td><span class="status status-draft" style="font-size:11px; padding:2px 8px;">Pending</span></td>
+                      <td class="amt">$11,050.00</td>
+                    </tr>
+                    <tr>
+                      <td style="font-weight:500">Final Payment</td>
+                      <td>Project completion</td>
+                      <td><span class="status status-draft" style="font-size:11px; padding:2px 8px;">Pending</span></td>
+                      <td class="amt">$11,050.00</td>
+                    </tr>
+                  </tbody>
+                </table>
+
+                <div style="display:flex; justify-content:space-between; padding:14px 12px; background:var(--g50); border-top:2px solid var(--g200); border-radius:0 0 var(--radius) var(--radius);">
+                  <div>
+                    <div style="font-size:12px; color:var(--g500);">Total Budget</div>
+                    <div style="font-size:18px; font-weight:700; color:var(--bt-midnight);">$34,000.00</div>
+                  </div>
+                  <div style="text-align:right;">
+                    <div style="font-size:12px; color:var(--g500);">Received</div>
+                    <div style="font-size:18px; font-weight:700; color:var(--green);">$11,900.00</div>
+                  </div>
+                </div>
+
+                <div class="divider"></div>
+
+                <div style="display:flex; gap:8px;">
+                  <button class="btn btn-s" onclick="openBudgetModal()">&#9998; Edit Payment Schedule</button>
+                  <button class="btn btn-p" onclick="openBudgetModal()">Send to Budget &rarr;</button>
+                </div>
+              </div>
+            </div>
+          `;
+
+        case 'invoices':
+          return `
+            <div class="card" style="max-width:700px;">
+              <div class="card-header">
+                <div class="card-title">Mass Generate Invoices</div>
+                <span class="status status-approved">Complete</span>
+              </div>
+              <div class="card-body">
+                <div class="callout callout-success">
+                  <span class="callout-icon">&#10004;</span>
+                  <div>Budget created! Invoices have been automatically generated for each payment request in the schedule.</div>
+                </div>
+
+                <h4 style="font-size:14px; font-weight:700; color:var(--bt-midnight); margin-bottom:12px;">Generated Invoices</h4>
+
+                <table class="tbl">
+                  <thead>
+                    <tr>
+                      <th>Invoice #</th>
+                      <th>Description</th>
+                      <th>Due</th>
+                      <th>Status</th>
+                      <th class="amt">Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td style="font-weight:600; color:var(--bt-blue);">INV-2026-001</td>
+                      <td>Deposit</td>
+                      <td>Mar 12, 2026</td>
+                      <td><span class="status status-paid" style="font-size:11px; padding:2px 8px;">Paid</span></td>
+                      <td class="amt">$8,500.00</td>
+                    </tr>
+                    <tr>
+                      <td style="font-weight:600; color:var(--bt-blue);">INV-2026-002</td>
+                      <td>Design Fee</td>
+                      <td>Mar 12, 2026</td>
+                      <td><span class="status status-paid" style="font-size:11px; padding:2px 8px;">Paid</span></td>
+                      <td class="amt">$3,400.00</td>
+                    </tr>
+                    <tr>
+                      <td style="font-weight:600; color:var(--bt-blue);">INV-2026-003</td>
+                      <td>Progress Payment 1</td>
+                      <td>Apr 30, 2026</td>
+                      <td><span class="status status-draft" style="font-size:11px; padding:2px 8px;">Draft</span></td>
+                      <td class="amt">$11,050.00</td>
+                    </tr>
+                    <tr>
+                      <td style="font-weight:600; color:var(--bt-blue);">INV-2026-004</td>
+                      <td>Final Payment</td>
+                      <td>Jun 15, 2026</td>
+                      <td><span class="status status-draft" style="font-size:11px; padding:2px 8px;">Draft</span></td>
+                      <td class="amt">$11,050.00</td>
+                    </tr>
+                  </tbody>
+                </table>
+
+                <div style="display:flex; justify-content:space-between; padding:14px 12px; background:var(--g50); border-top:2px solid var(--g200); font-weight:700; color:var(--bt-midnight); font-size:14px;">
+                  <span>Total</span>
+                  <span>$34,000.00</span>
+                </div>
+
+                <div class="divider"></div>
+
+                <div style="text-align:center; padding:16px 0;">
+                  <div style="font-size:48px; margin-bottom:8px;">&#127881;</div>
+                  <div style="font-size:18px; font-weight:700; color:var(--bt-midnight); margin-bottom:4px;">Flow Complete!</div>
+                  <p style="font-size:13px; color:var(--g500); max-width:400px; margin:0 auto;">
+                    The proposal has been approved, first payment received, budget created, and all invoices generated. You can now manage individual invoices from the Financial section.
+                  </p>
+                </div>
+              </div>
+            </div>
+          `;
+      }
+    }
+
+    function renderStep() {
+      const step = STEPS[currentStep];
+      document.getElementById('mainContent').innerHTML = getStepContent(step.id);
+      renderStepper();
+      updateButtons();
+      updateStatus();
+      document.getElementById('mainContent').scrollTop = 0;
+    }
+
+    function updateButtons() {
+      document.getElementById('prevBtn').style.display = currentStep > 0 ? '' : 'none';
+      const nextBtn = document.getElementById('nextBtn');
+      if (currentStep === STEPS.length - 1) {
+        nextBtn.textContent = 'Done';
+        nextBtn.onclick = () => showToast('Flow completed! Redirecting to invoices...');
+      } else if (currentStep === 4) {
+        nextBtn.style.display = 'none';
+      } else if (currentStep === 5) {
+        nextBtn.style.display = 'none';
+      } else {
+        nextBtn.style.display = '';
+        nextBtn.innerHTML = 'Continue &rarr;';
+        nextBtn.onclick = nextStep;
+      }
+    }
+
+    function updateStatus() {
+      const el = document.getElementById('flowStatus');
+      const statusMap = {
+        0: ['Draft', 'status-draft'],
+        1: ['Draft', 'status-draft'],
+        2: ['Draft', 'status-draft'],
+        3: ['Sending', 'status-sent'],
+        4: ['Sent', 'status-sent'],
+        5: ['Approved', 'status-approved'],
+        6: ['Paid', 'status-paid'],
+        7: ['Ready for Budget', 'status-budget'],
+        8: ['Complete', 'status-approved'],
+      };
+      const [text, cls] = statusMap[currentStep] || ['Draft', 'status-draft'];
+      el.textContent = text;
+      el.className = 'status ' + cls;
+    }
+
+    function nextStep() {
+      if (currentStep < STEPS.length - 1) {
+        currentStep++;
+        renderStep();
+      }
+    }
+
+    function prevStep() {
+      if (currentStep > 0) {
+        currentStep--;
+        renderStep();
+      }
+    }
+
+    function goToStep(i) {
+      if (i <= currentStep) {
+        currentStep = i;
+        renderStep();
+      }
+    }
+
+    function clientApprove() {
+      const el = document.getElementById('clientResult');
+      el.style.display = 'block';
+      el.innerHTML = `
+        <div class="callout callout-success">
+          <span class="callout-icon">&#10004;</span>
+          <div><strong>Proposal Approved!</strong> Sarah Thompson approved and signed the proposal on March 12, 2026.</div>
+        </div>
+      `;
+      document.getElementById('nextBtn').style.display = '';
+      document.getElementById('nextBtn').innerHTML = 'Continue to Payment &rarr;';
+      document.getElementById('nextBtn').onclick = nextStep;
+      showToast('Client approved the proposal!');
+    }
+
+    function clientDeny() {
+      const el = document.getElementById('clientResult');
+      el.style.display = 'block';
+      el.innerHTML = `
+        <div class="callout" style="background:var(--red-bg); color:var(--red); border:1px solid rgba(220,38,38,0.15);">
+          <span class="callout-icon">&#10006;</span>
+          <div>
+            <strong>Proposal Denied</strong>
+            <p style="margin-top:4px; font-size:12px; opacity:0.8;">The client has denied the proposal. You can revise and resend.</p>
+          </div>
+        </div>
+        <div style="text-align:center; margin-top:12px;">
+          <button class="btn btn-s" onclick="currentStep=1; renderStep();">&#8592; Revise Proposal</button>
+        </div>
+      `;
+      showToast('Client denied the proposal');
+    }
+
+    function simulatePayment() {
+      const el = document.getElementById('paymentResult');
+      el.style.display = 'block';
+      el.innerHTML = `
+        <div class="callout callout-success">
+          <span class="callout-icon">&#10004;</span>
+          <div><strong>Payment Received!</strong> $11,900.00 has been successfully processed via credit card ending in 4242.</div>
+        </div>
+      `;
+      document.getElementById('nextBtn').style.display = '';
+      document.getElementById('nextBtn').innerHTML = 'Continue &rarr;';
+      document.getElementById('nextBtn').onclick = nextStep;
+      showToast('Payment of $11,900.00 received!');
+    }
+
+    function openBudgetModal() {
+      document.getElementById('budgetModal').classList.add('show');
+    }
+
+    function closeBudgetModal() {
+      document.getElementById('budgetModal').classList.remove('show');
+    }
+
+    function sendToBudget() {
+      closeBudgetModal();
+      showToast('Budget created successfully!');
+      setTimeout(() => { nextStep(); }, 800);
+    }
+
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      document.getElementById('toastMsg').textContent = msg;
+      t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 3000);
+    }
+
+    // Init
+    renderStep();
+  </script>
+</body>
+</html>
