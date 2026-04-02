@@ -15,10 +15,6 @@ const SelectionIcon = () => (
   </svg>
 );
 
-const CheckIcon = () => (
-  <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-);
-
 /* ─── Types ─── */
 interface SelectionChild {
   id: string;
@@ -142,41 +138,6 @@ function fmtCurrency(v: number) {
   return v < 0 ? '-' + formatted : formatted;
 }
 
-/* ─── Price Change Summary ─── */
-function PriceChangeSummary({ allowance, selectionTotal, previouslyInvoiced }: { allowance: number; selectionTotal: number; previouslyInvoiced: number }) {
-  const overage = selectionTotal - allowance;
-
-  return (
-    <div style={{ marginTop: 10, padding: '10px 12px', background: '#f8fafc', borderRadius: 6, border: '1px solid var(--g150, #eef)' }}>
-      <div style={{ display: 'flex', gap: 20, fontSize: 12 }}>
-        <div>
-          <span style={{ color: 'var(--g400)' }}>Allowance</span>
-          <div style={{ fontWeight: 600, color: 'var(--g600)' }}>${fmt(allowance)}</div>
-        </div>
-        <div>
-          <span style={{ color: 'var(--g400)' }}>Selections</span>
-          <div style={{ fontWeight: 600, color: 'var(--g700)' }}>${fmt(selectionTotal)}</div>
-        </div>
-        {previouslyInvoiced > 0 && (
-          <div>
-            <span style={{ color: 'var(--g400)' }}>Already invoiced</span>
-            <div style={{ fontWeight: 600, color: 'var(--g500)' }}>${fmt(previouslyInvoiced)}</div>
-          </div>
-        )}
-      </div>
-      <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px dashed var(--g200)', fontSize: 11, color: 'var(--g500)' }}>
-        {overage > 0 ? (
-          <span>Client selections cost <strong style={{ color: '#c2410c' }}>{fmtCurrency(overage)}</strong> more than the original allowance</span>
-        ) : overage < 0 ? (
-          <span>Client selections cost <strong style={{ color: 'var(--green)' }}>{fmtCurrency(Math.abs(overage))}</strong> less than the original allowance</span>
-        ) : (
-          <span>Client selections match the original allowance</span>
-        )}
-      </div>
-    </div>
-  );
-}
-
 /* ─── Component ─── */
 interface Props {
   open: boolean;
@@ -252,7 +213,6 @@ export default function SelectionsModalV2({ open, onClose, onAdd, jobName, added
     const isExpanded = expanded[item.id];
     const isSelected = selected[item.id];
     const childrenTotal = item.children.reduce((s, c) => s + (c.newInvoiceAmt ?? 0), 0);
-    const isFullyInvoiced = item.invoiceBalance === 0 && childrenTotal === 0;
 
     // For allowances, calculate overage bar data
     const allowanceChild = item.children.find(c => c.selection === 'Allowance');

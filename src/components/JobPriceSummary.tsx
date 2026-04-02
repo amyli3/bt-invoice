@@ -5,7 +5,6 @@ import { useState } from 'react';
 const originalContractPrice = 568078;
 const changeOrdersTotal = 1200;
 const approvedSelectionsTotal = 1360;
-const allowancesWithoutSelections = 45000;
 const revisedClientPrice = 570638;
 
 const paymentsReceived = 99000;
@@ -15,7 +14,6 @@ const remainingBalance = revisedClientPrice - paymentsReceived - creditMemos;
 const pendingSelectionsAmt = 10000;
 const pendingChangeOrders = 1000;
 const forecastedAdditional = pendingSelectionsAmt + pendingChangeOrders;
-const forecastedPrice = revisedClientPrice + forecastedAdditional;
 
 interface SelectionItem {
   name: string;
@@ -265,11 +263,8 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection 
           {allowanceGroups.map(group => {
             const approvedItems = group.items.filter(i => i.status === 'approved');
             const pendingItems = group.items.filter(i => i.status === 'pending');
-            const visibleItems = viewFilter === 'all' ? group.items : group.items.filter(i => i.status === viewFilter);
-            const groupImpact = visibleItems.reduce((s, i) => s + i.impact, 0);
+
             const isOpen = expandedGroups[group.name];
-            const remaining = group.budget - group.used;
-            const isOver = group.used > group.budget;
 
             return (
               <div key={group.name} className="jps-cat-group">
@@ -316,8 +311,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection 
 
                       {/* Selection rows */}
                       {(viewFilter !== 'pending' ? approvedItems : []).map((item, i) => {
-                        const runningUsed = approvedItems.slice(0, i + 1).reduce((s, it) => s + it.price, 0);
-                        const runningRemaining = group.budget - runningUsed;
+
                         const prevUsed = approvedItems.slice(0, i).reduce((s, it) => s + it.price, 0);
                         const prevRemaining = group.budget - prevUsed;
                         const lineImpact = prevRemaining <= 0 ? item.price : prevRemaining < item.price ? item.price - prevRemaining : 0;

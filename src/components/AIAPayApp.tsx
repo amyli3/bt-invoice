@@ -291,10 +291,8 @@ function getCostCodeViewGroups(addedIds: string[]): CostGroup[] {
 }
 
 // Helper to build adjustment lines from any estimate group
-function buildAdjLines(items: typeof ESTIMATE_LINES.kitchen, addedIds: string[], allowanceName: string, allowanceBudget: number): SOVLine[] {
+function buildAdjLines(items: typeof ESTIMATE_LINES.kitchen, addedIds: string[], allowanceName: string, _allowanceBudget: number): SOVLine[] {
   const addedItems = items.filter(item => addedIds.includes(item.selId));
-  const totalApproved = addedItems.reduce((s, item) => s + item.approved, 0);
-  const isUnderage = totalApproved <= allowanceBudget;
   return addedItems
     .map(item => {
       const delta = item.approved - item.estimate;
@@ -613,7 +611,6 @@ function LineRow({ line, pctOverride, onPctChange, showCOCols, onLineClick, onRe
   const completed = effectiveThisInvoice + line.previousInvoice + line.storedMaterials;
   const pct = pctBase > 0 ? (completed / pctBase * 100) : 0;
   const balance = pctBase - completed;
-  const hasNegative = effectiveThisInvoice < 0 || balance < 0;
   // Minimum % = what's already been invoiced — can't go below this
   const minPct = pctBase > 0 ? Math.round((line.previousInvoice + line.storedMaterials) / pctBase * 100) : 0;
 

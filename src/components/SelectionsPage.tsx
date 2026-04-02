@@ -102,14 +102,6 @@ export default function SelectionsPage({ jobOpen, onToggleJob, onOpenOption }: {
     setChecked(next);
   };
 
-  // Calculate allowance remaining
-  const getAllowanceRemaining = (group: AllowanceGroup) => {
-    const approvedTotal = group.options
-      .filter(o => o.status === 'Approved')
-      .reduce((s, o) => s + (o.approvedPrice || 0), 0);
-    return group.clientPrice - approvedTotal + (group.approvedPrice - group.clientPrice);
-  };
-
   const totalsClientPrice = mockData.reduce((s, row) => s + (isAllowance(row) ? row.clientPrice : row.clientPrice), 0);
 
   return (

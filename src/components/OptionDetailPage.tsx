@@ -10,11 +10,10 @@ interface SelectionData {
 
 interface Props {
   onBack: () => void;
-  isNew?: boolean;
   selectionData?: SelectionData | null;
 }
 
-export default function OptionDetailPage({ onBack, isNew = true, selectionData }: Props) {
+export default function OptionDetailPage({ onBack, selectionData }: Props) {
   const isViewing = !!selectionData;
   const isPending = selectionData?.status === 'pending';
   const [title, setTitle] = useState(selectionData?.name || '');
