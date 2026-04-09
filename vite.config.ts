@@ -10,7 +10,6 @@ export default defineConfig({
         main: resolve(__dirname, 'index.html'),
         'selections-invoicing': resolve(__dirname, 'selections-invoicing/index.html'),
         aia: resolve(__dirname, 'aia.html'),
-        openbook: resolve(__dirname, 'openbook.html'),
       },
     },
   },

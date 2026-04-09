@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { fmt } from '../utils';
+import { allAllowances, allSelections } from '../allowanceMockData';
 
 /* ─── Icons ─── */
 const AllowanceIcon = () => (
@@ -38,58 +39,48 @@ interface SelectionGroup {
   children: SelectionChild[];
 }
 
-/* ─── Mock Data ─── */
-const SELECTIONS_DATA: SelectionGroup[] = [
-  {
-    id: 'sg1', type: 'allowance', name: 'Cabinets',
-    revisedPrice: 34800, previouslyInvoiced: 24000, invoiceBalance: 10800,
-    children: [
-      { id: 'sg1a', lineItem: 'Cabinets', costCode: '12.20 Cabinets', selection: 'Allowance', price: 24000, newInvoiceAmt: -24000 },
-      { id: 'sg1b', lineItem: 'Custom cabinetry', costCode: '12.20 Cabinets', selection: 'Premium custom package', price: 20000, newInvoiceAmt: 20000 },
-      { id: 'sg1c', lineItem: 'Cabinet install', costCode: '12.15 Cabinet Install labor', selection: 'Premium custom package', price: 14800, newInvoiceAmt: 14800 },
-    ]
-  },
-  {
-    id: 'sg2', type: 'allowance', name: 'Light fixtures',
-    revisedPrice: 18000, previouslyInvoiced: 18000, invoiceBalance: 0,
-    children: [
-      { id: 'sg2a', lineItem: 'Lighting allowance', costCode: '11 Lighting', selection: 'Allowance', price: 18000, newInvoiceAmt: -18000 },
-      { id: 'sg2b', lineItem: 'Lighting package', costCode: '11 Lighting', selection: 'Standard lighting', price: 12000, newInvoiceAmt: 12000 },
-      { id: 'sg2c', lineItem: 'Lighting install', costCode: '11.5 Lighting install', selection: 'Standard lighting', price: 6000, newInvoiceAmt: 6000 },
-    ]
-  },
-  {
-    id: 'sg3', type: 'allowance', name: 'Kitchen tiles',
-    revisedPrice: 7200, previouslyInvoiced: 7200, invoiceBalance: 0,
-    children: [
-      { id: 'sg3a', lineItem: 'Kitchen tiles', costCode: '15.20 - Tile Materials', selection: 'Allowance', price: 7200, newInvoiceAmt: null },
-      { id: 'sg3b', lineItem: 'Kitchen tiles', costCode: '15.20 - Tile Materials', selection: 'Basic Package', price: 5400, newInvoiceAmt: null },
-    ]
-  },
-  {
-    id: 'sg6', type: 'allowance', name: 'Countertops',
-    revisedPrice: 6000, previouslyInvoiced: 8000, invoiceBalance: -2000,
-    children: [
-      { id: 'sg6a', lineItem: 'Countertops', costCode: '13.00 - Countertops', selection: 'Allowance', price: 8000, newInvoiceAmt: -8000 },
-      { id: 'sg6b', lineItem: 'Laminate countertops', costCode: '13.00 - Countertops', selection: 'Standard laminate', price: 4500, newInvoiceAmt: 4500 },
-      { id: 'sg6c', lineItem: 'Countertop install', costCode: '13.05 - Counter Labor', selection: 'Standard laminate', price: 1500, newInvoiceAmt: 1500 },
-    ]
-  },
-  {
-    id: 'sg4', type: 'selection', name: 'GE Over the Range Microwave', status: 'Approved Selection',
-    revisedPrice: 1440, previouslyInvoiced: 1440, invoiceBalance: 0,
-    children: [
-      { id: 'sg4a', lineItem: 'Microwave', costCode: '16.00 Appliances', selection: 'GE Over the Range Microwave', price: 1440, newInvoiceAmt: 0 },
-    ]
-  },
-  {
-    id: 'sg5', type: 'selection', name: 'Simzlife 45 Bottle Wine Fridge', status: 'Approved Selection',
-    revisedPrice: 360, previouslyInvoiced: 360, invoiceBalance: 0,
-    children: [
-      { id: 'sg5a', lineItem: 'Wine Fridge', costCode: '16.00 Appliances', selection: 'Simzlife 45 Bottle Wine Fridge', price: 360, newInvoiceAmt: 0 },
-    ]
-  },
-];
+/* ─── Build data from shared allowance mock data ─── */
+const SELECTIONS_DATA: SelectionGroup[] = allAllowances.map(allowance => {
+  const sels = allSelections.filter(s => allowance.selectionIds.includes(s.id));
+  const children: SelectionChild[] = [];
+
+  // Allowance reversal line
+  children.push({
+    id: `${allowance.id}-rev`,
+    lineItem: allowance.name,
+    costCode: `${allowance.costCode.code} ${allowance.costCode.label}`,
+    selection: 'Allowance',
+    price: allowance.budgetAmount,
+    newInvoiceAmt: -allowance.budgetAmount,
+  });
+
+  // Selection option lines
+  sels.forEach(sel => {
+    sel.options.forEach(opt => {
+      const clientPrice = opt.unitCost * opt.quantity * (1 + opt.markup / 100);
+      children.push({
+        id: opt.id,
+        lineItem: opt.name,
+        costCode: `${opt.costCode.code} ${opt.costCode.label}`,
+        selection: sel.name,
+        price: Math.round(clientPrice * 100) / 100,
+        newInvoiceAmt: Math.round(clientPrice * 100) / 100,
+      });
+    });
+  });
+
+  const totalSelections = children.filter(c => c.selection !== 'Allowance').reduce((s, c) => s + c.price, 0);
+
+  return {
+    id: allowance.id,
+    type: 'allowance' as const,
+    name: allowance.name.replace(' Allowance', ''),
+    revisedPrice: totalSelections,
+    previouslyInvoiced: allowance.budgetAmount,
+    invoiceBalance: totalSelections - allowance.budgetAmount,
+    children,
+  };
+});
 
 /* ─── Component ─── */
 interface Props {
@@ -97,17 +88,19 @@ interface Props {
   onClose: () => void;
   onAdd: (items: SelectionGroup[]) => void;
   jobName: string;
+  data?: SelectionGroup[];
   addedGroupIds?: string[];
 }
 
-export default function SelectionsModal({ open, onClose, onAdd, jobName, addedGroupIds = [] }: Props) {
+export default function SelectionsModal({ open, onClose, onAdd, jobName, addedGroupIds = [], data }: Props) {
+  const sourceData = data || SELECTIONS_DATA;
   const addedSet = new Set(addedGroupIds);
-  const availableData = SELECTIONS_DATA.filter(d => !addedSet.has(d.id));
+  const availableData = sourceData.filter(d => !addedSet.has(d.id));
 
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [expanded, setExpanded] = useState<Record<string, boolean>>(() => {
     const e: Record<string, boolean> = {};
-    SELECTIONS_DATA.forEach(d => { e[d.id] = true; });
+    sourceData.forEach(d => { e[d.id] = true; });
     return e;
   });
   const [includeDescs, setIncludeDescs] = useState(true);
@@ -180,7 +173,7 @@ export default function SelectionsModal({ open, onClose, onAdd, jobName, addedGr
         {/* Body */}
         <div className="est-modal-body">
           <div className="est-desc" style={{ marginBottom: 16 }}>
-            Previously invoiced allowances will be applied to approved selections for accurate budget reporting.
+            Invoice for post-contract allowance overages and selection option changes. Previously invoiced allowances will be credited against new approved selections.
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 16 }}>

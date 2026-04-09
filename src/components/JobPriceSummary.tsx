@@ -105,7 +105,7 @@ const fmtSigned = (n: number) => (n > 0 ? '+' : '') + fmt(n);
 
 /* ── Component ── */
 
-export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection }: { jobOpen?: boolean; onToggleJob?: () => void; onOpenSelection?: (sel: { name: string; category: string; price: number; allowanceName?: string; status: string }) => void }) {
+export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection, onBack }: { jobOpen?: boolean; onToggleJob?: () => void; onOpenSelection?: (sel: { name: string; category: string; price: number; allowanceName?: string; status: string }) => void; onBack?: () => void }) {
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>(() => {
     const init: Record<string, boolean> = {};
     allowanceNames.forEach(n => init[n] = true);
@@ -129,13 +129,18 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection 
         <div className="pg-accent"></div>
         <div className="pg-hdr-content">
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            {onBack && (
+              <button onClick={onBack} style={{background: 'none', border: '1px solid var(--g200)', borderRadius: 'var(--radius)', padding: '4px 8px', cursor: 'pointer', color: 'var(--g500)', fontSize: 16, display: 'flex', alignItems: 'center', lineHeight: 1}}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+              </button>
+            )}
             {!jobOpen && onToggleJob && (
               <button onClick={onToggleJob} style={{background: 'none', border: '1px solid var(--g200)', borderRadius: 'var(--radius)', padding: '4px 8px', cursor: 'pointer', color: 'var(--g500)', fontSize: 16, display: 'flex', alignItems: 'center', lineHeight: 1}}>
                 &#9776;
               </button>
             )}
             <div>
-              <div className="pg-hdr-sub">8200 Pineview Custom</div>
+              <div className="pg-hdr-sub">Johnson Residence — Full Remodel</div>
               <div className="pg-title">Job Price Summary</div>
             </div>
           </div>

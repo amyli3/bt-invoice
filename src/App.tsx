@@ -18,15 +18,33 @@ import SelectionsModalV2 from './components/SelectionsModalV2';
 import JobPriceSummary from './components/JobPriceSummary';
 import SelectionsPage from './components/SelectionsPage';
 import OptionDetailPage from './components/OptionDetailPage';
-import AIAPayApp from './components/AIAPayApp';
+import AIAPayApp, { MODAL_ALLOWANCES } from './components/AIAPayApp';
+import EstimatePage from './components/EstimatePage';
+import ClientSelections from './components/ClientSelections';
+import ClientPortal, { ClientTopNav } from './components/ClientPortal';
 import { JOBS } from './mockData';
 import { getNextId } from './mockData';
+
+type PageType = 'invoice' | 'job-price-summary' | 'selections' | 'option-detail' | 'progress-invoice' | 'client-portal' | 'client-jps' | 'estimate' | 'client-selections';
+
+const validPages: PageType[] = ['invoice', 'job-price-summary', 'selections', 'option-detail', 'progress-invoice', 'client-portal', 'client-jps', 'estimate', 'client-selections'];
+
+function getInitialPage(): PageType {
+  const hash = window.location.hash.replace('#', '');
+  if (validPages.includes(hash as PageType)) return hash as PageType;
+  return 'invoice';
+}
 
 export default function App() {
   const [invoice, setInvoice] = useState<Invoice>(defaultInvoice);
   const [jobOpen, setJobOpen] = useState(false);
   const [selectedJob, setSelectedJob] = useState(1);
-  const [activePage, setActivePage] = useState<'invoice' | 'job-price-summary' | 'selections' | 'option-detail' | 'progress-invoice'>('invoice');
+  const [activePage, _setActivePage] = useState<PageType>(getInitialPage);
+
+  const setActivePage = (page: PageType) => {
+    _setActivePage(page);
+    window.location.hash = page;
+  };
   const [selectedOption, setSelectedOption] = useState<{ name: string; category: string; price: number; allowanceName?: string; status: string } | null>(null);
   const [activeView, setActiveView] = useState<'builder' | 'preview'>('builder');
   const [previewTab, setPreviewTab] = useState<'client' | 'email'>('client');
@@ -118,12 +136,52 @@ export default function App() {
     return () => window.removeEventListener('resize', handler);
   }, []);
 
+  if (activePage === 'client-portal') {
+    return <ClientPortal onNavigate={(page) => setActivePage(page as PageType)} />;
+  }
+
+  if (activePage === 'client-jps') {
+    return (
+      <div style={{display: 'flex', flexDirection: 'column', height: '100vh'}}>
+        <ClientTopNav onNavigate={(page) => setActivePage(page as PageType)} />
+        <div className="content-area">
+          <JobPriceSummary jobOpen={false} onBack={() => setActivePage('client-portal')} onOpenSelection={(sel) => { setSelectedOption(sel); setActivePage('option-detail'); }} />
+        </div>
+      </div>
+    );
+  }
+
+  if (activePage === 'client-selections') {
+    return (
+      <div style={{display: 'flex', flexDirection: 'column', height: '100vh'}}>
+        <ClientTopNav onNavigate={(page) => setActivePage(page as PageType)} />
+        <div style={{flex: 1, overflow: 'auto'}}>
+          <ClientSelections />
+        </div>
+      </div>
+    );
+  }
+
   if (activePage === 'progress-invoice') {
     return (
       <div style={{display: 'flex', flexDirection: 'column', height: '100vh'}}>
-        <TopNav onNavigate={(page) => setActivePage(page as any)} />
+        <TopNav onNavigate={(page) => setActivePage(page as PageType)} />
         <div style={{flex: 1, overflowY: 'auto'}}>
           <AIAPayApp />
+        </div>
+      </div>
+    );
+  }
+
+  if (activePage === 'estimate') {
+    return (
+      <div style={{display: 'flex', flexDirection: 'column', height: '100vh'}}>
+        <TopNav onNavigate={(page) => setActivePage(page as PageType)} />
+        <div style={{display: 'flex', flex: 1, minHeight: 0}}>
+          <JobSidebar open={jobOpen} onToggle={() => setJobOpen(false)} selectedJob={selectedJob} onSelectJob={(id) => { setSelectedJob(id); if (isNarrow) setJobOpen(false); }} onHomeClick={() => setActivePage('client-portal')} />
+          <div className="content-area">
+            <EstimatePage jobOpen={jobOpen} onToggleJob={() => setJobOpen(true)} />
+          </div>
         </div>
       </div>
     );
@@ -132,7 +190,7 @@ export default function App() {
   if (activePage === 'option-detail') {
     return (
       <div style={{display: 'flex', flexDirection: 'column', height: '100vh'}}>
-        <TopNav onNavigate={(page) => setActivePage(page as any)} />
+        <TopNav onNavigate={(page) => setActivePage(page as PageType)} />
         <div style={{display: 'flex', flex: 1, minHeight: 0}}>
           <div className="content-area">
             <OptionDetailPage onBack={() => { setActivePage(selectedOption ? 'job-price-summary' : 'selections'); setSelectedOption(null); }} selectionData={selectedOption} />
@@ -145,11 +203,11 @@ export default function App() {
   if (activePage === 'selections') {
     return (
       <div style={{display: 'flex', flexDirection: 'column', height: '100vh'}}>
-        <TopNav onNavigate={(page) => setActivePage(page as any)} />
+        <TopNav onNavigate={(page) => setActivePage(page as PageType)} />
         <div style={{display: 'flex', flex: 1, minHeight: 0}}>
-          <JobSidebar open={jobOpen} onToggle={() => setJobOpen(false)} selectedJob={selectedJob} onSelectJob={(id) => { setSelectedJob(id); if (isNarrow) setJobOpen(false); }} />
+          <JobSidebar open={jobOpen} onToggle={() => setJobOpen(false)} selectedJob={selectedJob} onSelectJob={(id) => { setSelectedJob(id); if (isNarrow) setJobOpen(false); }} onHomeClick={() => setActivePage('client-portal')} />
           <div className="content-area">
-            <SelectionsPage jobOpen={jobOpen} onToggleJob={() => setJobOpen(true)} onOpenOption={() => setActivePage('option-detail')} />
+            <SelectionsPage jobOpen={jobOpen} onToggleJob={() => setJobOpen(true)} onOpenOption={(sel) => { if (sel) setSelectedOption(sel); setActivePage('option-detail'); }} />
           </div>
         </div>
       </div>
@@ -159,9 +217,9 @@ export default function App() {
   if (activePage === 'job-price-summary') {
     return (
       <div style={{display: 'flex', flexDirection: 'column', height: '100vh'}}>
-        <TopNav onNavigate={(page) => setActivePage(page as any)} />
+        <TopNav onNavigate={(page) => setActivePage(page as PageType)} />
         <div style={{display: 'flex', flex: 1, minHeight: 0}}>
-          <JobSidebar open={jobOpen} onToggle={() => setJobOpen(false)} selectedJob={selectedJob} onSelectJob={(id) => { setSelectedJob(id); if (isNarrow) setJobOpen(false); }} />
+          <JobSidebar open={jobOpen} onToggle={() => setJobOpen(false)} selectedJob={selectedJob} onSelectJob={(id) => { setSelectedJob(id); if (isNarrow) setJobOpen(false); }} onHomeClick={() => setActivePage('client-portal')} />
           <div className="content-area">
             <JobPriceSummary jobOpen={jobOpen} onToggleJob={() => setJobOpen(true)} onOpenSelection={(sel) => { setSelectedOption(sel); setActivePage('option-detail'); }} />
           </div>
@@ -172,9 +230,9 @@ export default function App() {
 
   return (
     <div style={{display: 'flex', flexDirection: 'column', height: '100vh'}}>
-      <TopNav onNavigate={(page) => setActivePage(page as any)} />
+      <TopNav onNavigate={(page) => setActivePage(page as PageType)} />
       <div style={{display: 'flex', flex: 1, minHeight: 0}}>
-        <JobSidebar open={jobOpen} onToggle={() => setJobOpen(false)} selectedJob={selectedJob} onSelectJob={(id) => { setSelectedJob(id); if (isNarrow) setJobOpen(false); }} />
+        <JobSidebar open={jobOpen} onToggle={() => setJobOpen(false)} selectedJob={selectedJob} onSelectJob={(id) => { setSelectedJob(id); if (isNarrow) setJobOpen(false); }} onHomeClick={() => setActivePage('client-portal')} />
         <div className="content-area">
           <PageHeader invoice={invoice} jobOpen={jobOpen} onToggleJob={() => setJobOpen(true)} />
 
@@ -231,6 +289,21 @@ export default function App() {
         onAdd={handleAddFromSelections}
         jobName={currentJob?.name || 'Job name'}
         addedGroupIds={invoice.lineItems.filter(li => li.relatedItem?.groupId).map(li => li.relatedItem!.groupId)}
+        data={MODAL_ALLOWANCES.map(ma => {
+          const selectionsTotal = ma.selections.reduce((s, sel) => s + sel.approvedPrice, 0);
+          return {
+            id: ma.id,
+            type: 'allowance' as const,
+            name: ma.name,
+            revisedPrice: selectionsTotal,
+            previouslyInvoiced: ma.previouslyInvoiced,
+            invoiceBalance: selectionsTotal - ma.previouslyInvoiced,
+            children: [
+              { id: `${ma.id}-rev`, lineItem: ma.name, costCode: ma.costCode, selection: 'Allowance', price: ma.budgetAmount, newInvoiceAmt: -ma.budgetAmount },
+              ...ma.selections.map(sel => ({ id: sel.id, lineItem: sel.name, costCode: `${sel.costCode} - ${sel.costType}`, selection: sel.name, price: sel.approvedPrice, newInvoiceAmt: sel.approvedPrice })),
+            ],
+          };
+        })}
       />
       <SelectionsModalV2
         open={selV2ModalOpen}

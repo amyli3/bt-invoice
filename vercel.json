@@ -1,0 +1,6 @@
+{
+  "rewrites": [
+    { "source": "/bt-invoice", "destination": "/index.html" },
+    { "source": "/bt-invoice/(.*)", "destination": "/index.html" }
+  ]
+}

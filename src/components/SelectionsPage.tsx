@@ -75,7 +75,7 @@ const ApproveIcon = () => (
   </svg>
 );
 
-export default function SelectionsPage({ jobOpen, onToggleJob, onOpenOption }: { jobOpen?: boolean; onToggleJob?: () => void; onOpenOption?: () => void }) {
+export default function SelectionsPage({ jobOpen, onToggleJob, onOpenOption }: { jobOpen?: boolean; onToggleJob?: () => void; onOpenOption?: (sel?: { name: string; category: string; price: number; status: string }) => void }) {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({ a1: true, a2: true });
   const [checked, setChecked] = useState<Record<string, boolean>>(() => {
     const init: Record<string, boolean> = {};
@@ -121,7 +121,7 @@ export default function SelectionsPage({ jobOpen, onToggleJob, onOpenOption }: {
             </div>
           </div>
           <div className="pg-hdr-right">
-            <button className="btn btn-p" style={{ gap: 4 }} onClick={onOpenOption}>
+            <button className="btn btn-p" style={{ gap: 4 }} onClick={() => onOpenOption?.()}>
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 2V12M2 7H12" stroke="white" strokeWidth="1.5" strokeLinecap="round"/></svg>
               Option
             </button>
@@ -171,7 +171,7 @@ export default function SelectionsPage({ jobOpen, onToggleJob, onOpenOption }: {
                     <div className="sp-col-approved"><strong>{fmt(row.approvedPrice)}</strong></div>
                     <div className="sp-col-status"></div>
                     <div className="sp-col-actions">
-                      <button className="sp-action-btn" title="Add option" onClick={onOpenOption}><svg width="24" height="24" viewBox="0 0 36 36" fill="none"><path d="M18.625 11.125C18.625 10.7798 18.3452 10.5 18 10.5C17.6548 10.5 17.375 10.7798 17.375 11.125V17.375H11.125C10.7798 17.375 10.5 17.6548 10.5 18C10.5 18.3452 10.7798 18.625 11.125 18.625H17.375V24.875C17.375 25.2202 17.6548 25.5 18 25.5C18.3452 25.5 18.625 25.2202 18.625 24.875V18.625H24.875C25.2202 18.625 25.5 18.3452 25.5 18C25.5 17.6548 25.2202 17.375 24.875 17.375H18.625V11.125Z" fill="#004FD6"/></svg></button>
+                      <button className="sp-action-btn" title="Add option" onClick={() => onOpenOption?.()}><svg width="24" height="24" viewBox="0 0 36 36" fill="none"><path d="M18.625 11.125C18.625 10.7798 18.3452 10.5 18 10.5C17.6548 10.5 17.375 10.7798 17.375 11.125V17.375H11.125C10.7798 17.375 10.5 17.6548 10.5 18C10.5 18.3452 10.7798 18.625 11.125 18.625H17.375V24.875C17.375 25.2202 17.6548 25.5 18 25.5C18.3452 25.5 18.625 25.2202 18.625 24.875V18.625H24.875C25.2202 18.625 25.5 18.3452 25.5 18C25.5 17.6548 25.2202 17.375 24.875 17.375H18.625V11.125Z" fill="#004FD6"/></svg></button>
                     </div>
                   </div>
 
@@ -185,7 +185,7 @@ export default function SelectionsPage({ jobOpen, onToggleJob, onOpenOption }: {
                           </div>
                           <div className="sp-col-title sp-child-indent">
                             <SelectionIcon />
-                            <a href="#" className="sp-link">{opt.title}</a>
+                            <a href="#" className="sp-link" onClick={(e) => { e.preventDefault(); onOpenOption?.({ name: opt.title, category: '', price: opt.clientPrice, status: opt.status.toLowerCase() }); }}>{opt.title}</a>
                           </div>
                           <div className="sp-col-desc">{opt.description}</div>
                           <div className="sp-col-price">{fmt(opt.clientPrice)}</div>
@@ -227,7 +227,7 @@ export default function SelectionsPage({ jobOpen, onToggleJob, onOpenOption }: {
                 </div>
                 <div className="sp-col-title">
                   <SelectionIcon />
-                  <a href="#" className="sp-link">{row.title}</a>
+                  <a href="#" className="sp-link" onClick={(e) => { e.preventDefault(); onOpenOption?.({ name: (row as SelectionOption).title, category: '', price: (row as SelectionOption).clientPrice, status: (row as SelectionOption).status.toLowerCase() }); }}>{(row as SelectionOption).title}</a>
                 </div>
                 <div className="sp-col-desc">{row.description}</div>
                 <div className="sp-col-price">{fmt(row.clientPrice)}</div>
@@ -260,6 +260,7 @@ export default function SelectionsPage({ jobOpen, onToggleJob, onOpenOption }: {
           </div>
         </div>
       </div>
+
     </div>
   );
 }

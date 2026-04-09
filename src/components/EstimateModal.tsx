@@ -43,9 +43,6 @@ const ESTIMATE_DATA: EstimateItem[] = [
   { id: 'li2', type: 'line', name: 'Drywall sheets (4x8)', costCode: '04.20 - Drywall', costType: 'Materials', price: 3200, previouslyInvoicedPct: 25 },
   { id: 'li3', type: 'line', name: 'Plumbing rough-in', costCode: '06.15 - Plumbing', costType: 'Subcontractor', price: 4750, previouslyInvoicedPct: 80 },
   { id: 'li4', type: 'line', name: 'Exterior paint', costCode: '09.30 - Painting', costType: 'Materials', price: 2100, previouslyInvoicedPct: 0 },
-  // ── Selections ──
-  { id: 'g4', type: 'selection', name: 'Bedroom floor', costCode: '14.10 - Flooring', costType: 'Materials', status: 'Approved selection', clientPrice: 500, previouslyInvoicedPct: 0, children: [] },
-  { id: 'g5', type: 'selection', name: 'Custom bed frame', costCode: '18.00 - Furnishings', costType: 'Materials', status: 'Approved selection', clientPrice: 500, previouslyInvoicedPct: 50, children: [] },
   // ── Allowances ──
   {
     id: 'g1', type: 'allowance', name: 'Cabinets', costCode: '12.20 - Cabinets', costType: 'Materials', clientPrice: 10000, previouslyInvoicedPct: 40,
@@ -158,7 +155,6 @@ export default function EstimateModal({ open, onClose, onAdd, jobName }: Props) 
 
   // Group by type for display
   const lines = filtered.filter(d => d.type === 'line');
-  const selections = filtered.filter(d => d.type === 'selection');
   const allowances = filtered.filter(d => d.type === 'allowance');
 
   const handleAdd = () => {
@@ -273,7 +269,7 @@ export default function EstimateModal({ open, onClose, onAdd, jobName }: Props) 
         {/* Body */}
         <div className="est-modal-body">
           <div className="est-desc">
-            Choose estimate line items, pre-contract allowances, and selection options, then set the percentage to invoice for each.
+            Choose estimate line items and pre-contract allowances, then set the percentage to invoice for each.
           </div>
 
           <label className="est-include-check" onClick={() => setIncludeDescs(!includeDescs)}>
@@ -316,7 +312,6 @@ export default function EstimateModal({ open, onClose, onAdd, jobName }: Props) 
               {/* Grouped sections */}
               {renderSection('Estimate line items', lines)}
               {renderSection('Allowances', allowances.filter(a => a.type === 'allowance' && !(a as EstimateGroup).children?.length))}
-              {renderSection('Selections', selections)}
               {renderSection('Allowances with selections', allowances.filter(a => a.type === 'allowance' && (a as EstimateGroup).children?.length > 0))}
             </div>
           </div>

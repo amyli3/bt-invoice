@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import ReactDOM from 'react-dom';
+import SelectionsModal from './SelectionsModal';
 
 const fmt = (n: number) =>
   n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -63,7 +64,7 @@ const ESTIMATE_LINES = {
 
 // ─── "Add from Selections" modal data ─────────────────────────────
 
-interface ModalAllowance {
+export interface ModalAllowance {
   id: string;
   name: string;
   costCode: string;
@@ -82,7 +83,7 @@ interface ModalSelection {
   status: 'approved' | 'invoiced';
 }
 
-const MODAL_ALLOWANCES: ModalAllowance[] = [
+export const MODAL_ALLOWANCES: ModalAllowance[] = [
   {
     id: 'ma-1',
     name: 'Kitchen Allowance',
@@ -249,8 +250,8 @@ function getCostCodeViewGroups(addedIds: string[]): CostGroup[] {
   const drywallSelectionLines: SOVLine[] = addedDrywallCO.map(item => ({
     id: `child-${item.id}`,
     description: `${item.selectionCode} - ${item.desc.replace(/^\d+ - /, '')}`,
-    budget: item.estimate,
-    coAdjustment: item.approved - item.estimate,
+    budget: 0,
+    coAdjustment: item.approved,
     previousInvoice: 0,
     thisInvoice: item.approved,
     storedMaterials: 0,
@@ -261,7 +262,7 @@ function getCostCodeViewGroups(addedIds: string[]): CostGroup[] {
   est.drywall.lines = [{
     id: 'drywall-allowance',
     description: '5003 - Lighting Allowance',
-    budget: 11000,
+    budget: addedDrywallCO.length > 0 ? 0 : 11000,
     coAdjustment: addedDrywallCO.length > 0 ? -11000 : 0,
     previousInvoice: 11000,
     thisInvoice: addedDrywallCO.length > 0 ? -11000 : 0,
@@ -269,6 +270,8 @@ function getCostCodeViewGroups(addedIds: string[]): CostGroup[] {
     retainage: 0,
     isAllowance: true,
     isFromSelection: addedDrywallCO.length > 0,
+    disablePct: addedDrywallCO.length > 0,
+    hideBalance: addedDrywallCO.length > 0,
   } as SOVLine, ...drywallSelectionLines];
 
   // Plumbing: never previously invoiced, same cost code — invoice full selection amounts
@@ -360,6 +363,7 @@ function getSelAdjGroups(addedIds: string[]): CostGroup[] {
 
   // Drywall: allowance was already invoiced ($11,000) in a prior application.
   // Reverse the approved amount of each selection, but cap at the allowance budget.
+  // Grid shows $0 budget for the allowance row when selections are added.
   const addedDrywallItems = ESTIMATE_LINES.drywall.filter(i => addedIds.includes(i.selId));
   const drywallApprovedSum = addedDrywallItems.reduce((s, i) => s + i.approved, 0);
   const drywallReversal = Math.min(drywallApprovedSum, 11000);
@@ -367,7 +371,7 @@ function getSelAdjGroups(addedIds: string[]): CostGroup[] {
   est.drywall.lines = [{
     id: 'drywall-allowance',
     description: '5003 - Lighting Allowance',
-    budget: addedDrywallItems.length > 0 ? -11000 : 11000,
+    budget: addedDrywallItems.length > 0 ? 0 : 11000,
     previousInvoice: 11000,
     thisInvoice: drywallReversal > 0 ? -drywallReversal : 0,
     storedMaterials: 0,
@@ -556,7 +560,13 @@ function GroupRow({ group, expanded, onToggle, showCOCols }: { group: CostGroup;
   const groupRevised = t.budget + groupCO;
   const pctBase = showCOCols ? groupRevised : t.budget;
   const pct = pctBase > 0 ? (t.completed / pctBase * 100) : 0;
-  const balance = showCOCols ? groupRevised - t.completed : t.balance;
+  const balance = showCOCols
+    ? group.lines.reduce((s, l) => {
+        if (l.hideBalance) return s;
+        const revised = l.budget + (l.coAdjustment || 0);
+        return s + (revised - lineCompleted(l));
+      }, 0)
+    : t.balance;
   return (
     <tr
       style={{ background: '#f8fafc', cursor: 'pointer', borderBottom: '1px solid #e2e8f0' }}
@@ -577,14 +587,14 @@ function GroupRow({ group, expanded, onToggle, showCOCols }: { group: CostGroup;
         </span>
       </td>
       <td style={numCellStyle}><strong>${fmt(t.budget)}</strong></td>
-      {showCOCols && <td style={{ ...numCellStyle, background: groupCO !== 0 ? '#eff6ff' : undefined, color: groupCO !== 0 ? '#1d4ed8' : '#94a3b8' }}><strong>{groupCO !== 0 ? `${groupCO > 0 ? '+' : ''}$${fmt(groupCO)}` : '—'}</strong></td>}
-      {showCOCols && <td style={{ ...numCellStyle, background: groupCO !== 0 ? '#eff6ff' : undefined }}><strong>${fmt(groupRevised)}</strong></td>}
+      {showCOCols && <td style={numCellStyle}><strong>{groupCO !== 0 ? `${groupCO > 0 ? '+' : ''}$${fmt(groupCO)}` : '—'}</strong></td>}
+      {showCOCols && <td style={numCellStyle}><strong>${fmt(groupRevised)}</strong></td>}
       <td style={numCellStyle}><strong>${fmt(t.previousInvoice)}</strong></td>
       <td style={numCellStyle}><strong>${fmt(t.thisInvoice)}</strong></td>
       <td style={numCellStyle}><strong>${fmt(t.storedMaterials)}</strong></td>
       <td style={numCellStyle}><strong>${fmt(t.completed)}</strong></td>
       <td style={{ ...numCellStyle, textAlign: 'center' }}><strong>{pctBase > 0 ? `${pct.toFixed(0)}%` : '—'}</strong></td>
-      <td style={numCellStyle}><strong>${fmt(balance)}</strong></td>
+      <td style={numCellStyle}><strong>{balance < -0.01 ? `-$${fmt(Math.abs(balance))}` : `$${fmt(balance)}`}</strong></td>
       <td style={numCellStyle}><strong>${fmt(t.retainage)}</strong></td>
       <td style={{ ...pinnedColStyle, background: '#f8fafc' }} />
     </tr>
@@ -622,7 +632,7 @@ function LineRow({ line, pctOverride, onPctChange, showCOCols, onLineClick, onRe
 
   return (
     <>
-      <tr style={{
+      <tr className="aia-sov-row" style={{
         borderBottom: '1px solid #f1f5f9',
         background: line.hasError ? '#fef2f2' : line.costCodeMismatch ? '#fff7ed' : line.highlight ? '#fffbeb' : line.isFromSelection ? '#f0fdf4' : 'white',
       }}>
@@ -661,19 +671,18 @@ function LineRow({ line, pctOverride, onPctChange, showCOCols, onLineClick, onRe
         </td>
         <td style={numCellStyle}>${fmt(line.budget)}</td>
         {showCOCols && (
-          <td style={{ ...numCellStyle, background: coAdj !== 0 ? '#eff6ff' : undefined, color: coAdj > 0 ? '#1d4ed8' : coAdj < 0 ? '#dc2626' : '#94a3b8' }}>
+          <td style={numCellStyle}>
             {coAdj !== 0 ? `${coAdj > 0 ? '+' : ''}$${fmt(coAdj)}` : '—'}
           </td>
         )}
         {showCOCols && (
-          <td style={{ ...numCellStyle, background: coAdj !== 0 ? '#eff6ff' : undefined, fontWeight: coAdj !== 0 ? 600 : 400 }}>
+          <td style={{ ...numCellStyle, fontWeight: coAdj !== 0 ? 600 : 400 }}>
             ${fmt(revisedBudget)}
           </td>
         )}
         <td style={numCellStyle}>${fmt(line.previousInvoice)}</td>
         <td style={{
           ...numCellStyle,
-          color: effectiveThisInvoice < 0 ? '#dc2626' : undefined,
         }}>
           {effectiveThisInvoice < 0 ? `-$${fmt(Math.abs(effectiveThisInvoice))}` : `$${fmt(effectiveThisInvoice)}`}
         </td>
@@ -711,19 +720,21 @@ function LineRow({ line, pctOverride, onPctChange, showCOCols, onLineClick, onRe
             </span>
           )}
         </td>
-        <td style={{ ...numCellStyle, color: (balance < -0.01 && !line.hideBalance) ? '#dc2626' : undefined, fontWeight: (balance < -0.01 && !line.hideBalance) ? 600 : 400 }}>
+        <td style={numCellStyle}>
           {line.hideBalance ? '$0.00' : (balance < -0.01) ? `-$${fmt(Math.abs(balance))}` : `$${fmt(Math.abs(balance))}`}
         </td>
         <td style={numCellStyle}>${fmt(line.retainage)}</td>
-        <td style={{ ...pinnedColStyle, background: line.isFromSelection ? '#f0fdf4' : 'white' }}>
+        <td style={{ ...pinnedColStyle, background: 'white' }}>
           {line.isFromSelection && !line.isAllowance && onRemove && (
             <button
+              className="aia-row-delete"
               onClick={(e) => { e.stopPropagation(); onRemove(line.id); }}
               title="Remove from invoice"
               style={{
                 width: 30, height: 30, borderRadius: 6, border: '1px solid #e2e8f0',
                 background: '#fef2f2', cursor: 'pointer', display: 'flex',
                 alignItems: 'center', justifyContent: 'center', padding: 0,
+                opacity: 0, transition: 'opacity 0.15s',
               }}
               onMouseEnter={e => { e.currentTarget.style.background = '#fee2e2'; e.currentTarget.style.borderColor = '#f87171'; }}
               onMouseLeave={e => { e.currentTarget.style.background = '#fef2f2'; e.currentTarget.style.borderColor = '#e2e8f0'; }}
@@ -785,7 +796,18 @@ export default function AIAPayApp() {
 
   // "Add from" modal state
   const [showAddFromModal, setShowAddFromModal] = useState(false);
+  const [showSelectionsModal, setShowSelectionsModal] = useState(false);
   const [addFromDropdownOpen, setAddFromDropdownOpen] = useState(false);
+  const addFromDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!addFromDropdownOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (addFromDropdownRef.current && !addFromDropdownRef.current.contains(e.target as Node)) setAddFromDropdownOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [addFromDropdownOpen]);
   const [modalChecked, setModalChecked] = useState<Record<string, boolean>>({});
   const [addedSelectionIds, setAddedSelectionIds] = useState<string[]>([]);
 
@@ -936,50 +958,19 @@ export default function AIAPayApp() {
                 <option value="estimate">Group by Estimate</option>
                 <option value="costcode">Group by cost code</option>
               </select>
-              <div style={{ position: 'relative' }}>
-                <button
-                  onClick={() => setAddFromDropdownOpen(!addFromDropdownOpen)}
-                  style={{ fontSize: 12, padding: '5px 12px', border: '1px solid #e2e8f0', borderRadius: 6, background: 'white', cursor: 'pointer', color: '#334155', display: 'flex', alignItems: 'center', gap: 4 }}
-                >
-                  Add from <svg width="10" height="10" viewBox="0 0 10 10"><path d="M2.5 4L5 6.5L7.5 4" stroke="#64748b" strokeWidth="1.2" fill="none" strokeLinecap="round"/></svg>
+              <div style={{ position: 'relative' }} ref={addFromDropdownRef}>
+                <button className="btn btn-s" style={{ fontSize: 13, padding: '6px 14px' }} onClick={() => setAddFromDropdownOpen(!addFromDropdownOpen)}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+                  Add from
+                  <svg width="12" height="12" viewBox="0 0 12 8" fill="none" style={{ marginLeft: 2 }}>
+                    <path d="M1 1.5L6 6.5L11 1.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
                 </button>
                 {addFromDropdownOpen && (
-                  <div style={{
-                    position: 'absolute', top: '100%', right: 0, marginTop: 4,
-                    background: 'white', border: '1px solid #e2e8f0', borderRadius: 8,
-                    boxShadow: '0 4px 16px rgba(0,0,0,0.12)', zIndex: 100, minWidth: 220,
-                    overflow: 'hidden',
-                  }}>
-                    <button
-                      onClick={() => { setShowAddFromModal(true); setAddFromDropdownOpen(false); }}
-                      style={{
-                        width: '100%', padding: '10px 14px', fontSize: 12, border: 'none', background: 'white',
-                        cursor: 'pointer', textAlign: 'left', color: '#334155', display: 'flex', alignItems: 'center', gap: 8,
-                      }}
-                      onMouseEnter={e => (e.currentTarget.style.background = '#f8fafc')}
-                      onMouseLeave={e => (e.currentTarget.style.background = 'white')}
-                    >
-                      <span style={{ width: 24, height: 24, borderRadius: 6, background: '#f3e8ff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13 }}>
-                        <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 3v8M3 7h8" stroke="#7c3aed" strokeWidth="1.5" strokeLinecap="round"/></svg>
-                      </span>
-                      <div>
-                        <div style={{ fontWeight: 500 }}>Selections &amp; Allowances</div>
-                        <div style={{ fontSize: 11, color: '#94a3b8' }}>Add approved selections to invoice</div>
-                      </div>
-                    </button>
-                    <div style={{ height: 1, background: '#e2e8f0' }} />
-                    <button
-                      style={{ width: '100%', padding: '10px 14px', fontSize: 12, border: 'none', background: 'white', cursor: 'pointer', textAlign: 'left', color: '#94a3b8' }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span style={{ width: 24, height: 24, borderRadius: 6, background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, color: '#94a3b8' }}>
-                          <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="2" y="3" width="10" height="8" rx="1" stroke="#94a3b8" strokeWidth="1.2"/><path d="M2 6h10" stroke="#94a3b8" strokeWidth="1.2"/></svg>
-                        </span>
-                        <div>
-                          <div style={{ fontWeight: 500 }}>Change Orders</div>
-                          <div style={{ fontSize: 11 }}>Add approved change orders</div>
-                        </div>
-                      </div>
+                  <div className="add-from-dropdown">
+                    <button className="add-from-option" onClick={() => { setAddFromDropdownOpen(false); setShowSelectionsModal(true); }}>
+                      <span style={{ fontWeight: 500 }}>Add from selections</span>
+                      <span style={{ fontSize: 11, color: 'var(--g400)' }}>Post-contract overages &amp; option changes</span>
                     </button>
                   </div>
                 )}
@@ -993,8 +984,8 @@ export default function AIAPayApp() {
                     <tr style={{ borderBottom: '1px solid #e2e8f0' }}>
                       <th style={{ ...headerCellStyle, textAlign: 'left', minWidth: 240 }}>Description</th>
                       <th style={headerCellStyle}>{showCOCols ? 'Scheduled value' : 'Budget'}</th>
-                      {showCOCols && <th style={{ ...headerCellStyle, background: '#eff6ff', color: '#1d4ed8' }}>Approved changes</th>}
-                      {showCOCols && <th style={{ ...headerCellStyle, background: '#eff6ff', color: '#1d4ed8' }}>Revised value</th>}
+                      {showCOCols && <th style={{ ...headerCellStyle }}>Approved changes</th>}
+                      {showCOCols && <th style={{ ...headerCellStyle }}>Revised value</th>}
                       <th style={headerCellStyle}>Previous invoice</th>
                       <th style={headerCellStyle}>This invoice</th>
                       <th style={headerCellStyle}>Stored materials</th>
@@ -1031,8 +1022,8 @@ export default function AIAPayApp() {
                         <tr style={{ background: '#f0f4ff', borderTop: '2px solid #cbd5e1' }}>
                           <td style={{ ...cellStyle, fontWeight: 700, paddingLeft: 12, color: '#0f172a' }}>Total:</td>
                           <td style={{ ...numCellStyle, fontWeight: 700 }}>${fmt(totals.budget)}</td>
-                          {showCOCols && <td style={{ ...numCellStyle, fontWeight: 700, background: '#eff6ff', color: grandCO !== 0 ? '#1d4ed8' : '#94a3b8' }}>{grandCO !== 0 ? `${grandCO > 0 ? '+' : ''}$${fmt(grandCO)}` : '—'}</td>}
-                          {showCOCols && <td style={{ ...numCellStyle, fontWeight: 700, background: '#eff6ff' }}>${fmt(grandRevised)}</td>}
+                          {showCOCols && <td style={{ ...numCellStyle, fontWeight: 700 }}>{grandCO !== 0 ? `${grandCO > 0 ? '+' : ''}$${fmt(grandCO)}` : '—'}</td>}
+                          {showCOCols && <td style={{ ...numCellStyle, fontWeight: 700 }}>${fmt(grandRevised)}</td>}
                           <td style={{ ...numCellStyle, fontWeight: 700 }}>${fmt(totals.previousInvoice)}</td>
                           <td style={{
                             ...numCellStyle, fontWeight: 700,
@@ -1615,6 +1606,58 @@ export default function AIAPayApp() {
           onClose={() => setShowClientPreview(false)}
         />
       )}
+
+      {/* Selections Modal (shared component with progress invoice data) */}
+      <SelectionsModal
+        open={showSelectionsModal}
+        onClose={() => setShowSelectionsModal(false)}
+        data={MODAL_ALLOWANCES.map(ma => {
+          const selectionsTotal = ma.selections.reduce((s, sel) => s + sel.approvedPrice, 0);
+          return {
+            id: ma.id,
+            type: 'allowance' as const,
+            name: ma.name,
+            revisedPrice: selectionsTotal,
+            previouslyInvoiced: ma.previouslyInvoiced,
+            invoiceBalance: selectionsTotal - ma.previouslyInvoiced,
+            children: [
+              {
+                id: `${ma.id}-rev`,
+                lineItem: ma.name,
+                costCode: ma.costCode,
+                selection: 'Allowance',
+                price: ma.budgetAmount,
+                newInvoiceAmt: -ma.budgetAmount,
+              },
+              ...ma.selections.map(sel => ({
+                id: sel.id,
+                lineItem: sel.name,
+                costCode: `${sel.costCode} - ${sel.costType}`,
+                selection: sel.name,
+                price: sel.approvedPrice,
+                newInvoiceAmt: sel.approvedPrice,
+              })),
+            ],
+          };
+        })}
+        onAdd={(items) => {
+          const newIds: string[] = [];
+          items.forEach((group: any) => {
+            if (group.children && group.children.length > 0) {
+              group.children.forEach((child: any) => {
+                if (child.selection !== 'Allowance' && child.id) {
+                  newIds.push(child.id);
+                }
+              });
+            }
+          });
+          if (newIds.length > 0) {
+            setAddedSelectionIds(prev => [...prev, ...newIds.filter(id => !prev.includes(id))]);
+          }
+        }}
+        jobName="Johnson Residence — Full Remodel"
+        addedGroupIds={addedSelectionIds}
+      />
     </div>
   );
 }

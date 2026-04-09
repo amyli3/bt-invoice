@@ -4,7 +4,7 @@ import { COST_TYPES, getNextId } from '../mockData';
 import { fmt, parseTaxRate } from '../utils';
 import ColumnToggle from './ColumnToggle';
 
-function AddFromDropdown({ onOpenEstimate, onOpenSelections, onOpenSelectionsV2 }: { onOpenEstimate?: () => void; onOpenSelections?: () => void; onOpenSelectionsV2?: () => void }) {
+function AddFromDropdown({ onOpenEstimate, onOpenSelections }: { onOpenEstimate?: () => void; onOpenSelections?: () => void; onOpenSelectionsV2?: () => void }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -35,11 +35,6 @@ function AddFromDropdown({ onOpenEstimate, onOpenSelections, onOpenSelectionsV2 
           <button className="add-from-option" onClick={() => { setOpen(false); onOpenSelections?.(); }}>
             <span style={{ fontWeight: 500 }}>Add from selections</span>
             <span style={{ fontSize: 11, color: 'var(--g400)' }}>Post-contract overages &amp; option changes</span>
-          </button>
-          <div style={{ borderTop: '1px solid var(--g200)', margin: '4px 0' }} />
-          <button className="add-from-option" onClick={() => { setOpen(false); onOpenSelectionsV2?.(); }}>
-            <span style={{ fontWeight: 500, color: 'var(--bt-blue)' }}>Add from selections (V2)</span>
-            <span style={{ fontSize: 11, color: 'var(--g400)' }}>Redesigned — for review</span>
           </button>
         </div>
       )}
@@ -117,7 +112,16 @@ interface Props {
 export default function LineItems({ invoice, onChange, vis, onVisChange, onOpenEstimate, onOpenSelections, onOpenSelectionsV2 }: Props) {
   const add = () => onChange({...invoice, lineItems: [...invoice.lineItems, { id: getNextId(), description: '', costCode: '', costType: 'Material', unitCost: 0, quantity: 1, unit: '--', markup: 0 }]});
   const upd = (i: number, item: LineItem) => { const l = [...invoice.lineItems]; l[i] = item; onChange({...invoice, lineItems: l}); };
-  const rem = (i: number) => onChange({...invoice, lineItems: invoice.lineItems.filter((_, idx) => idx !== i)});
+  const rem = (i: number) => {
+    const item = invoice.lineItems[i];
+    const groupId = item.relatedItem?.groupId;
+    if (groupId) {
+      // Remove all items from the same allowance/selection group
+      onChange({...invoice, lineItems: invoice.lineItems.filter(li => li.relatedItem?.groupId !== groupId)});
+    } else {
+      onChange({...invoice, lineItems: invoice.lineItems.filter((_, idx) => idx !== i)});
+    }
+  };
   const tbc = invoice.lineItems.reduce((s, i) => s + i.unitCost * i.quantity, 0);
   const tcp = invoice.lineItems.reduce((s, i) => s + i.unitCost * i.quantity * (1 + i.markup / 100), 0);
   const taxRate = parseTaxRate(invoice.taxType);

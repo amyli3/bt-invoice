@@ -8,17 +8,20 @@ export default function TopNav({ onNavigate }: TopNavProps) {
   const [jobsOpen, setJobsOpen] = useState(false);
   const [pmOpen, setPmOpen] = useState(false);
   const [financialOpen, setFinancialOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
   const jobsRef = useRef<HTMLDivElement>(null);
   const pmRef = useRef<HTMLDivElement>(null);
   const financialRef = useRef<HTMLDivElement>(null);
+  const profileRef = useRef<HTMLDivElement>(null);
 
-  const closeAll = () => { setJobsOpen(false); setPmOpen(false); setFinancialOpen(false); };
+  const closeAll = () => { setJobsOpen(false); setPmOpen(false); setFinancialOpen(false); setProfileOpen(false); };
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (jobsRef.current && !jobsRef.current.contains(e.target as Node)) setJobsOpen(false);
       if (pmRef.current && !pmRef.current.contains(e.target as Node)) setPmOpen(false);
       if (financialRef.current && !financialRef.current.contains(e.target as Node)) setFinancialOpen(false);
+      if (profileRef.current && !profileRef.current.contains(e.target as Node)) setProfileOpen(false);
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
@@ -57,7 +60,7 @@ export default function TopNav({ onNavigate }: TopNavProps) {
             <div className="topnav-dropdown">
               <button className="topnav-dropdown-item" onClick={() => { setFinancialOpen(false); onNavigate?.('invoice'); }}>Invoice</button>
               <button className="topnav-dropdown-item" onClick={() => { setFinancialOpen(false); onNavigate?.('progress-invoice'); }}>Progress Invoice</button>
-              <button className="topnav-dropdown-item" onClick={() => { setFinancialOpen(false); }}>Estimate</button>
+              <button className="topnav-dropdown-item" onClick={() => { setFinancialOpen(false); onNavigate?.('estimate'); }}>Estimate</button>
             </div>
           )}
         </div>
@@ -82,9 +85,20 @@ export default function TopNav({ onNavigate }: TopNavProps) {
         <button className="topnav-icon-btn" title="Help">
           <svg width="17" height="17" viewBox="0 0 17 17" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M8.125 0C12.6123 0 16.25 3.63769 16.25 8.125C16.25 12.6123 12.6123 16.25 8.125 16.25C3.63769 16.25 0 12.6123 0 8.125C0 3.63769 3.63769 0 8.125 0ZM8.125 1.25C4.32804 1.25 1.25 4.32804 1.25 8.125C1.25 11.922 4.32804 15 8.125 15C11.922 15 15 11.922 15 8.125C15 4.32804 11.922 1.25 8.125 1.25ZM8.125 11.25C8.64277 11.25 9.0625 11.6697 9.0625 12.1875C9.0625 12.7053 8.64277 13.125 8.125 13.125C7.60723 13.125 7.1875 12.7053 7.1875 12.1875C7.1875 11.6697 7.60723 11.25 8.125 11.25ZM8.125 3.75C9.67817 3.75002 10.9373 5.00937 10.9375 6.5625C10.9375 7.84787 10.0751 8.93187 8.89746 9.26758L8.74902 9.30469L8.75 9.375C8.75 9.69539 8.50889 9.95981 8.19824 9.99609L8.125 10C7.80448 10 7.54001 9.75908 7.50391 9.44824L7.5 9.375V8.75C7.50019 8.40498 7.77994 8.125 8.125 8.125C8.98793 8.12498 9.6875 7.42543 9.6875 6.5625C9.68731 5.69973 8.98781 5.00002 8.125 5C7.29662 5 6.6184 5.64497 6.56543 6.45996L6.5625 6.5625C6.5625 6.90766 6.28266 7.18748 5.9375 7.1875C5.59232 7.1875 5.3125 6.90768 5.3125 6.5625C5.31269 5.00936 6.57182 3.75 8.125 3.75Z" fill="white"/></svg>
         </button>
-        <button className="topnav-icon-btn" title="Profile">
-          <span className="topnav-avatar">MR</span>
-        </button>
+        <div className="topnav-dropdown-wrap" ref={profileRef}>
+          <button className="topnav-icon-btn" title="Profile" onClick={() => { setProfileOpen(!profileOpen); setJobsOpen(false); setPmOpen(false); setFinancialOpen(false); }}>
+            <span className="topnav-avatar">MR</span>
+          </button>
+          {profileOpen && (
+            <div className="topnav-dropdown" style={{right: 0, left: 'auto', minWidth: 200}}>
+              <div style={{padding: '10px 14px', borderBottom: '1px solid var(--g200)'}}>
+                <div style={{fontWeight: 600, fontSize: 13, color: 'var(--g800)'}}>Mike Rodriguez</div>
+                <div style={{fontSize: 12, color: 'var(--g400)'}}>Builder</div>
+              </div>
+              <button className="topnav-dropdown-item" onClick={() => { setProfileOpen(false); onNavigate?.('client-portal'); }}>Switch to client view</button>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

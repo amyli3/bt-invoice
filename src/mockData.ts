@@ -23,14 +23,13 @@ export const CLIENT_COLUMNS = [
 ];
 
 export const JOBS: Job[] = [
-  { id: 1, name: 'Amy Roof (BWF)', addr: '', group: 'open' },
-  { id: 2, name: 'Homeowner Name', addr: '5456 Main St\nSpringfield, IL 62036', group: 'open' },
+  { id: 1, name: 'Johnson Residence — Full Remodel', addr: '5678 Maple St\nOmaha, NE 68114', group: 'open' },
+  { id: 2, name: 'Martinez Kitchen & Bath', addr: '2301 Elm Ave\nLincoln, NE 68502', group: 'open' },
   { id: 3, name: 'All 66 Open Jobs', addr: '', group: 'all' },
-  { id: 4, name: '11 BT Brownstone', addr: '', group: 'all' },
-  { id: 5, name: 'Options Test', addr: '', group: 'all' },
-  { id: 6, name: '1234 S Main St — Kitchen Re...', addr: '', group: 'all', tag: 'QB' },
-  { id: 7, name: 'Amy - selections test Job', addr: '', group: 'all' },
-  { id: 8, name: 'Amy BWF Job', addr: '', group: 'all' },
+  { id: 4, name: 'Patel New Construction', addr: '410 Cedar Ln\nPapillion, NE 68046', group: 'all' },
+  { id: 5, name: 'Thompson Basement Finish', addr: '8920 Oak Dr\nBellevue, NE 68005', group: 'all' },
+  { id: 7, name: 'Davis Deck & Patio Addition', addr: '762 Birch Ct\nGretna, NE 68028', group: 'all' },
+  { id: 8, name: 'Nguyen Master Suite Remodel', addr: '3105 Walnut Blvd\nOmaha, NE 68132', group: 'all' },
 ];
 
 export const defaultInvoice: Invoice = {
