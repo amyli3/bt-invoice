@@ -977,7 +977,7 @@ export default function ClientSelections() {
               // Use original status for grouping so cards don't jump while making choices
               const overdue = filtered.filter(g => g.status === 'overdue');
               const dueSoon = filtered.filter(g => g.status === 'action_needed');
-              const notStarted = filtered.filter(g => g.status === 'pending' || g.status === 'in_progress');
+              const notStarted = filtered.filter(g => g.status === 'pending');
               const approved = filtered.filter(g => g.status === 'approved');
               return (
                 <>
