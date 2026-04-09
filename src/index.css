@@ -1900,7 +1900,7 @@ table { width: 100%; border-collapse: collapse; }
 
 /* Sticky footer */
 .cs-sticky-footer { position: sticky; bottom: 0; left: 0; right: 0; background: #fff; border-top: 1px solid #EAEEF5; padding: 12px 32px; box-shadow: 0 -4px 12px rgba(0,0,0,0.06); z-index: 10; }
-.cs-sticky-inner { max-width: 880px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.cs-sticky-inner { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .cs-sticky-info { font-size: 14px; color: #4E555F; }
 .cs-sticky-info strong { color: #202227; }
 
