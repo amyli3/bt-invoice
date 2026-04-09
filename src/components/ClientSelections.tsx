@@ -22,7 +22,7 @@ const selectionGroups = [
     id: 'sel-2', name: 'Main floor flooring', allowance: 0, dueDate: '2026-04-05', status: 'overdue' as const,
     description: 'Select your flooring for the living room, hallway, and dining area. 800 sq ft total.',
     options: [
-      { id: 'o5', name: 'Shaw Natural Classics — White Oak', vendor: 'Shaw Floors', price: 5800, image: 'https://shawfloors.widen.net/content/maw31txwtx/jpeg/sw774_01147_main', selected: true, group: 'Flooring', tier: 'upgrade' as const },
+      { id: 'o5', name: 'Shaw Natural Classics — White Oak', vendor: 'Shaw Floors', price: 5800, image: 'https://shawfloors.widen.net/content/maw31txwtx/jpeg/sw774_01147_main', selected: false, group: 'Flooring', tier: 'upgrade' as const },
       { id: 'o6', name: 'Lifeproof Vinyl Plank — Dusk Cherry', vendor: 'Lifeproof', price: 3200, image: 'https://images.thdstatic.com/productImages/eb9b442d-4536-470d-81e4-f1bea67caf9d/svn/dusk-cherry-lifeproof-vinyl-plank-flooring-i06204lp-64_600.jpg', selected: false, group: 'Flooring', tier: 'base' as const },
       { id: 'o6b', name: 'TrafficMaster Laminate — Lakeshore Pecan', vendor: 'TrafficMaster', price: 2400, image: 'https://images.thdstatic.com/productImages/a08ca173-0a82-4dbe-90fb-7bdd3e8309a7/svn/lakeshore-pecan-stone-trafficmaster-laminate-wood-flooring-50560-77_600.jpg', selected: false, group: 'Flooring', tier: 'base' as const },
       { id: 'o6c', name: 'Bruce Solid Hardwood — Butterscotch Oak', vendor: 'Bruce', price: 5800, image: 'https://images.thdstatic.com/productImages/c29747ad-e373-456b-8cdd-fc380f7fd554/svn/butterscotch-bruce-solid-hardwood-ahs626-64_1000.jpg', selected: false, group: 'Flooring', tier: 'upgrade' as const },
@@ -68,10 +68,10 @@ const fmt = (n: number) => n.toLocaleString('en-US', { minimumFractionDigits: 2,
 
 function daysUntil(dateStr: string) {
   const diff = Math.ceil((new Date(dateStr).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
-  if (diff < 0) return `${Math.abs(diff)} days overdue`;
+  if (diff < 0) return `${Math.abs(diff)} days overdue — overdue choices can delay project completion and may increase costs`;
   if (diff === 0) return 'Due today';
   if (diff === 1) return 'Due tomorrow';
-  return `${diff} days left`;
+  return `${diff} days`;
 }
 
 function formatDate(dateStr: string) {
@@ -93,12 +93,12 @@ function SwipeMode({ group, onDone, onToggle, onViewImage }: {
   const opt = group.options[idx];
   const isLast = idx >= group.options.length;
 
-  const [, setSkipped] = useState<Set<string>>(new Set());
+  const [, setDeclined] = useState<Set<string>>(new Set());
 
   const handleAction = useCallback((action: 'add' | 'decline' | 'skip') => {
     if (!opt) return;
     if (action === 'skip') {
-      setSkipped(prev => new Set(prev).add(opt.id));
+      setDeclined(prev => new Set(prev).add(opt.id));
     }
     setSwipeDir(action === 'add' ? 'right' : 'left');
     setHistory(prev => [...prev, { optId: opt.id, action }]);
@@ -158,7 +158,7 @@ function SwipeMode({ group, onDone, onToggle, onViewImage }: {
           </div>
 
           <div className="sw-review-actions">
-            <button className="bds-button bds-button-primary" onClick={onDone}>Submit selections</button>
+            <button className="bds-button bds-button-primary" onClick={onDone}>Submit choices</button>
             <button className="bds-button bds-button-tertiary" onClick={onDone}>Save and go back</button>
           </div>
         </div>
@@ -217,7 +217,7 @@ function SwipeMode({ group, onDone, onToggle, onViewImage }: {
         {/* Action buttons */}
         <div className="sw-actions">
           <div className="sw-action-col">
-            <button className="sw-btn sw-btn-decline" onClick={() => handleAction('decline')} title="Decline">
+            <button className="sw-btn sw-btn-decline" onClick={() => handleAction('decline')} title="Skip">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
             </button>
             <span className="sw-action-label sw-hint-decline">Decline</span>
@@ -240,7 +240,7 @@ function SwipeMode({ group, onDone, onToggle, onViewImage }: {
             <button className="sw-btn sw-btn-add" onClick={() => handleAction('add')} title="Add to selections">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
             </button>
-            <span className="sw-action-label sw-hint-add">Select</span>
+            <span className="sw-action-label sw-hint-add">Choose</span>
           </div>
         </div>
       </div>
@@ -249,7 +249,16 @@ function SwipeMode({ group, onDone, onToggle, onViewImage }: {
 }
 
 /* ── Main Component ── */
+type Persona = 'spec' | 'custom';
+const personaConfig: Record<Persona, { label: string; jobName: string; heroTitle: string; heroDesc: string; showAllowance: boolean; showTiers: boolean; showDelta: boolean; pricingLabel: string }> = {
+  custom: { label: 'Custom / Remodel', jobName: 'Johnson Residence — Full Remodel', heroTitle: 'Your selections', heroDesc: 'Review and approve materials and finishes for your project. Pricing is shown per item.', showAllowance: true, showTiers: false, showDelta: false, pricingLabel: 'Approved price' },
+  spec: { label: 'Spec / Production', jobName: 'Lot 14 — Oakwood Estates', heroTitle: 'Your selections', heroDesc: 'Choose your finishes, fixtures, and materials. Your allowance budget is shown for each category.', showAllowance: true, showTiers: false, showDelta: true, pricingLabel: 'Additional cost' },
+};
+
 export default function ClientSelections() {
+  const [persona, setPersona] = useState<Persona>('custom');
+  const pc = personaConfig[persona];
+  const [viewMode, setViewMode] = useState<'grid' | 'compact'>('compact');
   const [expandedId] = useState<string | null>(null);
   const [selections, setSelections] = useState(selectionGroups);
   const [filter, setFilter] = useState<'all' | 'action' | 'approved'>('all');
@@ -265,6 +274,7 @@ export default function ClientSelections() {
   const [submittedGroups, setSubmittedGroups] = useState<Set<string>>(new Set());
   const [declinedOptions, setDeclinedOptions] = useState<Set<string>>(new Set());
   const [cardImgIndex, setCardImgIndex] = useState<Record<string, number>>({});
+  const [showDeclined, setShowDeclined] = useState<Set<string>>(new Set());
   const [, setRequestedGroups] = useState<Set<string>>(new Set());
   const [requests, setRequests] = useState<{groupId: string; text: string; link: string; image: string | null; autoApprove: boolean; date: string}[]>([]);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
@@ -365,9 +375,14 @@ export default function ClientSelections() {
     return cost;
   };
 
+  const getSelectedTotal = (group: typeof selectionGroups[0]) => {
+    return group.options.filter(o => o.selected).reduce((s, o) => s + o.price, 0);
+  };
+
   const totalAllowance = selections.reduce((s, g) => s + g.allowance, 0);
-  const totalSelected = selections.reduce((s, g) => s + getUpgradeCost(g), 0);
-  const totalRemaining = totalAllowance - totalSelected;
+  const totalUpgradeCost = selections.reduce((s, g) => s + getUpgradeCost(g), 0);
+  const totalSelectedPrice = selections.reduce((s, g) => s + getSelectedTotal(g), 0);
+  const totalRemaining = totalAllowance - totalSelectedPrice;
   const getDynamicStatus = (group: typeof selectionGroups[0]) => {
     if (group.status === 'approved') return 'approved';
     const optGroups = new Set(group.options.map(o => (o as any).group || o.id));
@@ -392,15 +407,19 @@ export default function ClientSelections() {
   );
 
   const handleSubmitAll = () => {
-    const newSubmitted = new Set(submittedGroups);
-    pendingSubmit.forEach(g => newSubmitted.add(g.id));
-    setSubmittedGroups(newSubmitted);
-    showToast('All selections submitted — your builder has been notified.');
+    setSelections(prev => prev.map(g => {
+      if (pendingSubmit.some(p => p.id === g.id)) {
+        return { ...g, status: 'approved' as const };
+      }
+      return g;
+    }));
+    showToast('Selections submitted.');
   };
 
   const sorted = [...selections].sort((a, b) => {
-    const order: Record<string, number> = { overdue: 0, action_needed: 1, in_progress: 2, pending: 3, ready: 4, approved: 5 };
-    return (order[getDynamicStatus(a)] ?? 3) - (order[getDynamicStatus(b)] ?? 3);
+    const aApproved = a.status === 'approved' ? 1 : 0;
+    const bApproved = b.status === 'approved' ? 1 : 0;
+    return aApproved - bApproved;
   });
 
   const filtered = filter === 'all' ? sorted
@@ -562,38 +581,69 @@ export default function ClientSelections() {
         );
       })()}
 
+      {/* Persona toggle */}
+      <div className="cs-persona-bar">
+        <span className="cs-persona-label">Persona:</span>
+        {(Object.keys(personaConfig) as Persona[]).map(p => (
+          <button key={p} className={`cs-persona-btn ${persona === p ? 'cs-persona-active' : ''}`} onClick={() => setPersona(p)}>{personaConfig[p].label}</button>
+        ))}
+      </div>
+
       <div className="cs-page">
         {/* Hero */}
         <div className="cs-hero">
-          <div className="cs-hero-sub">Johnson Residence — Full Remodel</div>
-          <h1 className="cs-hero-title">Your selections</h1>
-          <p className="cs-hero-desc">Choose your finishes, fixtures, and materials. Your allowance budget is shown for each category.</p>
+          <div className="cs-hero-sub">{pc.jobName}</div>
+          <h1 className="cs-hero-title">{pc.heroTitle}</h1>
+          <p className="cs-hero-desc">{pc.heroDesc}</p>
         </div>
 
         {/* Budget stats */}
         <div className="cs-hero-stats">
-          <div className="cs-stat">
-            <div className="cs-stat-value">${fmt(totalAllowance)}</div>
-            <div className="cs-stat-label">Allowance</div>
-          </div>
-          <div className="cs-stat-divider" />
-          <div className="cs-stat">
-            <div className="cs-stat-value">${fmt(totalSelected)}</div>
-            <div className="cs-stat-label">Selection choice cost</div>
-          </div>
-          <div className="cs-stat-divider" />
-          <div className="cs-stat">
-            <div className={`cs-stat-value ${totalRemaining < 0 ? 'cs-over' : 'cs-under'}`}>{totalRemaining < 0 ? '-' : ''}${fmt(Math.abs(totalRemaining))}</div>
-            <div className="cs-stat-label">{totalRemaining >= 0 ? 'Remaining' : 'Over budget'}</div>
-          </div>
-          <div className="cs-stat-divider" />
-          <div className="cs-stat">
-            <div className="cs-stat-value">{completedCount}/{selections.length}</div>
-            <div className="cs-stat-label">Completed</div>
-          </div>
+          {pc.showDelta ? (
+            /* Spec: allowance + additional cost + completed */
+            <>
+              <div className="cs-stat">
+                <div className="cs-stat-value">$0.00</div>
+                <div className="cs-stat-label">Allowance</div>
+              </div>
+              <div className="cs-stat-divider" />
+              <div className="cs-stat">
+                <div className={`cs-stat-value ${totalUpgradeCost > 0 ? 'cs-over' : ''}`}>${fmt(totalUpgradeCost)}</div>
+                <div className="cs-stat-label">Additional cost</div>
+              </div>
+              <div className="cs-stat-divider" />
+              <div className="cs-stat">
+                <div className="cs-stat-value">{completedCount}/{selections.length}</div>
+                <div className="cs-stat-label">Completed</div>
+              </div>
+            </>
+          ) : (
+            /* Custom/Remodel: allowance, price, remaining, completed */
+            <>
+              <div className="cs-stat">
+                <div className="cs-stat-value">${fmt(totalAllowance)}</div>
+                <div className="cs-stat-label">Allowance</div>
+              </div>
+              <div className="cs-stat-divider" />
+              <div className="cs-stat">
+                <div className="cs-stat-value">${fmt(totalSelectedPrice)}</div>
+                <div className="cs-stat-label">{pc.pricingLabel}</div>
+              </div>
+              <div className="cs-stat-divider" />
+              <div className="cs-stat">
+                <div className={`cs-stat-value ${totalRemaining < 0 ? 'cs-over' : 'cs-under'}`}>{totalRemaining < 0 ? '-' : ''}${fmt(Math.abs(totalRemaining))}</div>
+                <div className="cs-stat-label">Allowance remaining</div>
+              </div>
+              <div className="cs-stat-divider" />
+              <div className="cs-stat">
+                <div className="cs-stat-value">{completedCount}/{selections.length}</div>
+                <div className="cs-stat-label">Completed</div>
+              </div>
+            </>
+          )}
         </div>
 
-        {actionCount > 0 && (
+        {false && actionCount > 0 && (
           <div className="cs-alert">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="#854D00" strokeWidth="2"/><line x1="12" y1="8" x2="12" y2="12" stroke="#854D00" strokeWidth="2" strokeLinecap="round"/><circle cx="12" cy="16" r="1" fill="#854D00"/></svg>
             <span>{actionCount} selection{actionCount > 1 ? 's' : ''} need{actionCount === 1 ? 's' : ''} your attention — your builder is waiting on your choices.</span>
@@ -601,14 +651,26 @@ export default function ClientSelections() {
         )}
 
         <div className="cs-filters">
-          <button className={`cs-filter-btn ${filter === 'all' ? 'cs-filter-active' : ''}`} onClick={() => setFilter('all')}>All ({selections.length})</button>
-          <button className={`cs-filter-btn ${filter === 'action' ? 'cs-filter-active' : ''}`} onClick={() => setFilter('action')}>Needs attention ({actionCount})</button>
-          <button className={`cs-filter-btn ${filter === 'approved' ? 'cs-filter-active' : ''}`} onClick={() => setFilter('approved')}>Completed ({completedCount})</button>
+          <div className="cs-filter-left">
+            <button className={`cs-filter-btn ${filter === 'all' ? 'cs-filter-active' : ''}`} onClick={() => setFilter('all')}>All ({selections.length})</button>
+            <button className={`cs-filter-btn ${filter === 'action' ? 'cs-filter-active' : ''}`} onClick={() => setFilter('action')}>Needs attention ({actionCount})</button>
+            <button className={`cs-filter-btn ${filter === 'approved' ? 'cs-filter-active' : ''}`} onClick={() => setFilter('approved')}>Completed ({completedCount})</button>
+          </div>
+          <div className="cs-view-toggle">
+            <button className={`cs-view-btn ${viewMode === 'compact' ? 'cs-view-active' : ''}`} onClick={() => setViewMode('compact')} title="Compact list">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+            </button>
+            <button className={`cs-view-btn ${viewMode === 'grid' ? 'cs-view-active' : ''}`} onClick={() => setViewMode('grid')} title="Card grid">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+            </button>
+          </div>
         </div>
 
         <div className="cs-cards">
-          {filtered.map(group => {
-            const selectedTotal = getUpgradeCost(group);
+          {(() => {
+            const renderCard = (group: typeof selections[0]) => {
+            const upgradeCost = getUpgradeCost(group);
+            const selectedTotal = getSelectedTotal(group);
             const diff = group.allowance - selectedTotal;
             void expandedId; // keep state for swipe mode
             const dynamicStatus = getDynamicStatus(group);
@@ -629,14 +691,27 @@ export default function ClientSelections() {
                     <span className="cs-status-dot" style={{ background: sc.color }} />
                     <h3 className="cs-section-name">{group.name}</h3>
                     <span className="cs-status-badge" style={{ background: sc.bg, color: sc.color }}>{sc.label}</span>
-                    <span className="cs-section-meta">{madeChoices} of {totalChoices} selected &middot; {formatDate(group.dueDate)} &middot; {dueDays}</span>
+                    <span className="cs-section-meta">{madeChoices} of {totalChoices} choices made &middot; Due {formatDate(group.dueDate)} ({dueDays})</span>
                   </div>
                   <div className="cs-section-right">
-                    <span className="cs-section-allowance">Allowance: ${fmt(group.allowance)}</span>
-                    {diff >= 0 ? (
-                      <span className="cs-section-remaining cs-under">Remaining: ${fmt(diff)}</span>
+                    {pc.showDelta ? (
+                      /* Spec: show allowance $0 + additional cost */
+                      <>
+                        <span className="cs-section-allowance">Allowance: $0.00</span>
+                        {upgradeCost > 0 && (
+                          <span className="cs-section-remaining cs-over">Additional cost: ${fmt(upgradeCost)}</span>
+                        )}
+                      </>
                     ) : (
-                      <span className="cs-section-remaining cs-over">Over: -${fmt(Math.abs(diff))}</span>
+                      /* Custom/Remodel: show allowance and remaining */
+                      <>
+                        <span className="cs-section-allowance">Allowance: ${fmt(group.allowance)}</span>
+                        {diff >= 0 ? (
+                          <span className="cs-section-remaining cs-under">Remaining: ${fmt(diff)}</span>
+                        ) : (
+                          <span className="cs-section-remaining cs-over">Over: -${fmt(Math.abs(diff))}</span>
+                        )}
+                      </>
                     )}
                   </div>
                 </div>
@@ -653,103 +728,171 @@ export default function ClientSelections() {
                       });
                       return Array.from(optGroupMap.entries()).map(([gName, unsortedOpts]) => {
                         const opts = [...unsortedOpts].sort((a, b) => {
+                          if (group.status === 'approved') {
+                            // Chosen first, then unchosen, then declined
+                            const aStatus = a.selected ? 0 : declinedOptions.has(a.id) ? 2 : 1;
+                            const bStatus = b.selected ? 0 : declinedOptions.has(b.id) ? 2 : 1;
+                            if (aStatus !== bStatus) return aStatus - bStatus;
+                          }
+                          // Within same status, base before upgrade
                           const tierOrder = { base: 0, upgrade: 1 };
                           const aTier = (a as any).tier || 'upgrade';
                           const bTier = (b as any).tier || 'upgrade';
                           return (tierOrder[aTier as keyof typeof tierOrder] ?? 1) - (tierOrder[bTier as keyof typeof tierOrder] ?? 1);
                         });
                         const isMultiChoice = opts.length > 1;
+                        const isApproved = group.status === 'approved';
+                        const declinedKey = `${group.id}-${gName}`;
+                        const isDeclinedExpanded = showDeclined.has(declinedKey);
+                        const chosenOpts = isApproved && !isDeclinedExpanded ? opts.filter(o => o.selected) : opts;
+                        const hiddenCount = isApproved ? opts.filter(o => !o.selected).length : 0;
+                        // Note: sort already places chosen above declined when approved
                         return (
                           <div key={gName} className="cs-opt-group">
                             {isMultiChoice && (
                               <div className="cs-opt-group-header">
                                 <span className="cs-opt-group-name">{gName}</span>
-                                <span className="cs-opt-group-hint">Choose one</span>
+                                {group.status !== 'approved' && <span className="cs-opt-group-hint">Choose one</span>}
                               </div>
                             )}
-                            <div className="cs-shop-grid">
-                              {opts.map(opt => {
-                                const isDeclined = declinedOptions.has(opt.id);
-                                const baseOpt = opts.find(o => (o as any).tier === 'base');
-                                const delta = baseOpt && (opt as any).tier === 'upgrade' ? opt.price - baseOpt.price : 0;
-                                return (
-                                  <div key={opt.id} className={`cs-shop-card ${opt.selected ? 'cs-shop-card-selected' : ''} ${isDeclined ? 'cs-shop-card-declined' : ''}`}>
-                                    {/* Large image with carousel */}
-                                    {(() => {
-                                      const images = (opt as any).images || (opt.image ? [opt.image] : []);
-                                      const imgIdx = cardImgIndex[opt.id] || 0;
-                                      const currentImg = images[imgIdx] || opt.image;
-                                      const hasMultiple = images.length > 1;
-                                      return (
-                                        <div
-                                          className="cs-shop-img"
-                                          style={{ backgroundImage: currentImg ? `url(${currentImg})` : undefined, opacity: isDeclined ? 0.4 : 1 }}
-                                          onClick={() => currentImg && setLightboxImg({images, name: opt.name, index: imgIdx, url: (opt as any).url})}
-                                        >
-                                          {!currentImg && <div className="cs-shop-img-empty"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#C7D0D9" strokeWidth="1"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg></div>}
-                                          {opt.selected && <div className="cs-shop-badge-selected"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M5 13l4 4L19 7" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg></div>}
-                                          {isDeclined && <div className="cs-shop-badge-declined"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></div>}
-                                          {hasMultiple && imgIdx > 0 && (
-                                            <button className="cs-shop-arrow cs-shop-arrow-left" onClick={(e) => { e.stopPropagation(); setCardImgIndex(prev => ({...prev, [opt.id]: imgIdx - 1})); }}>
-                                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-                                            </button>
-                                          )}
-                                          {hasMultiple && imgIdx < images.length - 1 && (
-                                            <button className="cs-shop-arrow cs-shop-arrow-right" onClick={(e) => { e.stopPropagation(); setCardImgIndex(prev => ({...prev, [opt.id]: imgIdx + 1})); }}>
-                                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
-                                            </button>
-                                          )}
-                                          {hasMultiple && (
-                                            <div className="cs-shop-dots">
-                                              {images.map((_: string, i: number) => (
-                                                <span key={i} className={`cs-shop-dot ${i === imgIdx ? 'cs-shop-dot-active' : ''}`} onClick={(e) => { e.stopPropagation(); setCardImgIndex(prev => ({...prev, [opt.id]: i})); }} />
-                                              ))}
-                                            </div>
-                                          )}
+                            {viewMode === 'compact' ? (
+                              /* ── Compact row view (like builder side) ── */
+                              <div className="cs-compact-list">
+                                {chosenOpts.map(opt => {
+                                  const isDeclined = declinedOptions.has(opt.id);
+                                  const baseOpt = opts.find(o => (o as any).tier === 'base');
+                                  const delta = baseOpt && (opt as any).tier === 'upgrade' ? opt.price - baseOpt.price : 0;
+                                  const statusLabel = opt.selected ? 'Chosen' : isDeclined ? 'Declined' : '';
+                                  const statusCls = opt.selected ? 'cs-row-status-approved' : isDeclined ? 'cs-row-status-declined' : '';
+                                  return (
+                                    <div key={opt.id} className={`cs-compact-row ${opt.selected ? 'cs-compact-row-selected' : ''} ${isDeclined ? 'cs-compact-row-declined' : ''}`}>
+                                      <div className="cs-compact-thumb" style={{ backgroundImage: opt.image ? `url(${opt.image})` : undefined }} onClick={() => opt.image && setLightboxImg({images: (opt as any).images || [opt.image], name: opt.name, index: 0, url: (opt as any).url})} />
+                                      <div className="cs-compact-info">
+                                        <div className="cs-compact-name-row">
+                                          <span className="cs-compact-name" style={{ textDecoration: isDeclined ? 'line-through' : 'none', opacity: isDeclined ? 0.5 : 1 }}>{opt.name}</span>
+                                          {statusLabel && <span className={`cs-compact-status ${statusCls}`}>{statusLabel}</span>}
                                         </div>
-                                      );
-                                    })()}
-                                    {/* Info below image */}
-                                    <div className="cs-shop-info" style={{ opacity: isDeclined ? 0.5 : 1 }}>
-                                      <div className="cs-shop-name-row">
-                                        <span className="cs-shop-name" style={{ textDecoration: isDeclined ? 'line-through' : 'none' }}>{opt.name}</span>
-                                        {opt.selected && <span className="cs-shop-approved-badge">Selected</span>}
-                                        {isDeclined && <span className="cs-shop-declined-badge">Declined</span>}
+                                        {opt.vendor && <span className="cs-compact-vendor">{opt.vendor}</span>}
                                       </div>
-                                      <div className="cs-shop-price-row">
-                                        {(opt as any).tier === 'base' ? (
-                                          <>
-                                            <span className="cs-tier-badge cs-tier-base">Included</span>
-                                            <span className="cs-shop-price cs-preview-price-included">$0</span>
-                                          </>
-                                        ) : (opt as any).tier === 'upgrade' ? (
-                                          <>
-                                            <span className="cs-tier-badge cs-tier-upgrade">Upgrade</span>
-                                            <span className="cs-shop-price">${fmt(delta)}</span>
-                                          </>
-                                        ) : (
-                                          <span className="cs-shop-price">${fmt(opt.price)}</span>
-                                        )}
+                                      <div className="cs-compact-price">
+                                        {pc.showTiers ? (
+                                          (opt as any).tier === 'base' ? (
+                                            <><span className="cs-tier-badge cs-tier-base">Included</span><span className="cs-preview-price-included">$0</span></>
+                                          ) : (opt as any).tier === 'upgrade' ? (
+                                            <><span className="cs-tier-badge cs-tier-upgrade">Upgrade</span><span>${fmt(delta)}</span></>
+                                          ) : <span>${fmt(opt.price)}</span>
+                                        ) : pc.showDelta ? (
+                                          (opt as any).tier === 'base' ? <span className="cs-preview-price-included">$0</span>
+                                          : <span>${fmt(delta)}</span>
+                                        ) : <span>${fmt(opt.price)}</span>}
                                       </div>
-                                      {group.status !== 'approved' && (
-                                        <div className="cs-shop-actions">
-                                          {isDeclined ? (
-                                            <button className="bds-button bds-button-secondary cs-prev-btn-sm" onClick={() => undeclineOption(opt.id)}>Undo</button>
+                                      <div className="cs-compact-actions">
+                                        {group.status !== 'approved' && (
+                                          isDeclined ? (
+                                            <button className="cs-icon-btn cs-icon-btn-undo" onClick={() => undeclineOption(opt.id)} title="Undo">
+                                              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+                                            </button>
                                           ) : opt.selected ? (
-                                            <button className="bds-button bds-button-secondary cs-prev-btn-sm" onClick={() => toggleOption(group.id, opt.id)}>Undo</button>
+                                            <button className="cs-icon-btn cs-icon-btn-undo" onClick={() => toggleOption(group.id, opt.id)} title="Undo">
+                                              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+                                            </button>
                                           ) : (
                                             <>
-                                              <button className="bds-button bds-button-secondary cs-prev-btn-sm" onClick={() => declineOption(opt.id, group.id)}>Decline</button>
-                                              <button className="bds-button bds-button-primary cs-prev-btn-sm" onClick={() => toggleOption(group.id, opt.id)}>Select</button>
+                                              <button className="cs-icon-btn cs-icon-btn-decline" onClick={() => declineOption(opt.id, group.id)} title="Skip">
+                                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                                              </button>
+                                              <button className="cs-icon-btn cs-icon-btn-approve" onClick={() => toggleOption(group.id, opt.id)} title="Choose">
+                                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+                                              </button>
                                             </>
-                                          )}
-                                        </div>
-                                      )}
+                                          )
+                                        )}
+                                      </div>
                                     </div>
-                                  </div>
-                                );
-                              })}
-                            </div>
+                                  );
+                                })}
+                              </div>
+                            ) : (
+                              /* ── Card views: grid (original) or list (big picture) ── */
+                              <div className={viewMode === 'grid' ? 'cs-shop-grid' : 'cs-shop-list'}>
+                                {chosenOpts.map(opt => {
+                                  const isDeclined = declinedOptions.has(opt.id);
+                                  const baseOpt = opts.find(o => (o as any).tier === 'base');
+                                  const delta = baseOpt && (opt as any).tier === 'upgrade' ? opt.price - baseOpt.price : 0;
+                                  return (
+                                    <div key={opt.id} className={`cs-shop-card ${opt.selected ? 'cs-shop-card-selected' : ''} ${isDeclined ? 'cs-shop-card-declined' : ''}`}>
+                                      {(() => {
+                                        const images = (opt as any).images || (opt.image ? [opt.image] : []);
+                                        const imgIdx = cardImgIndex[opt.id] || 0;
+                                        const currentImg = images[imgIdx] || opt.image;
+                                        const hasMultiple = images.length > 1;
+                                        return (
+                                          <div
+                                            className="cs-shop-img"
+                                            style={{ backgroundImage: currentImg ? `url(${currentImg})` : undefined, opacity: isDeclined ? 0.4 : 1 }}
+                                            onClick={() => currentImg && setLightboxImg({images, name: opt.name, index: imgIdx, url: (opt as any).url})}
+                                          >
+                                            {!currentImg && <div className="cs-shop-img-empty"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#C7D0D9" strokeWidth="1"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg></div>}
+                                            {opt.selected && <div className="cs-shop-badge-selected"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M5 13l4 4L19 7" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg></div>}
+                                            {isDeclined && <div className="cs-shop-badge-declined"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></div>}
+                                            {hasMultiple && imgIdx > 0 && (
+                                              <button className="cs-shop-arrow cs-shop-arrow-left" onClick={(e) => { e.stopPropagation(); setCardImgIndex(prev => ({...prev, [opt.id]: imgIdx - 1})); }}>
+                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+                                              </button>
+                                            )}
+                                            {hasMultiple && imgIdx < images.length - 1 && (
+                                              <button className="cs-shop-arrow cs-shop-arrow-right" onClick={(e) => { e.stopPropagation(); setCardImgIndex(prev => ({...prev, [opt.id]: imgIdx + 1})); }}>
+                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+                                              </button>
+                                            )}
+                                            {hasMultiple && (
+                                              <div className="cs-shop-dots">
+                                                {images.map((_: string, i: number) => (
+                                                  <span key={i} className={`cs-shop-dot ${i === imgIdx ? 'cs-shop-dot-active' : ''}`} onClick={(e) => { e.stopPropagation(); setCardImgIndex(prev => ({...prev, [opt.id]: i})); }} />
+                                                ))}
+                                              </div>
+                                            )}
+                                          </div>
+                                        );
+                                      })()}
+                                      <div className="cs-shop-info" style={{ opacity: isDeclined ? 0.5 : 1 }}>
+                                        <div className="cs-shop-name-row">
+                                          <span className="cs-shop-name" style={{ textDecoration: isDeclined ? 'line-through' : 'none' }}>{opt.name}</span>
+                                          {opt.selected && <span className="cs-shop-approved-badge">Chosen</span>}
+                                          {isDeclined && <span className="cs-shop-declined-badge">Declined</span>}
+                                        </div>
+                                        <div className="cs-shop-price-row">
+                                          {pc.showTiers ? (
+                                            (opt as any).tier === 'base' ? (
+                                              <><span className="cs-tier-badge cs-tier-base">Included</span><span className="cs-shop-price cs-preview-price-included">$0</span></>
+                                            ) : (opt as any).tier === 'upgrade' ? (
+                                              <><span className="cs-tier-badge cs-tier-upgrade">Upgrade</span><span className="cs-shop-price">${fmt(delta)}</span></>
+                                            ) : <span className="cs-shop-price">${fmt(opt.price)}</span>
+                                          ) : pc.showDelta ? (
+                                            (opt as any).tier === 'base' ? <span className="cs-shop-price cs-preview-price-included">$0</span>
+                                            : <span className="cs-shop-price">${fmt(delta)}</span>
+                                          ) : <span className="cs-shop-price">${fmt(opt.price)}</span>}
+                                        </div>
+                                        {group.status !== 'approved' && (
+                                          <div className="cs-shop-actions">
+                                            {isDeclined ? (
+                                              <button className="bds-button bds-button-secondary cs-prev-btn-sm" onClick={() => undeclineOption(opt.id)}>Undo</button>
+                                            ) : opt.selected ? (
+                                              <button className="bds-button bds-button-secondary cs-prev-btn-sm" onClick={() => toggleOption(group.id, opt.id)}>Undo</button>
+                                            ) : (
+                                              <>
+                                                <button className="bds-button bds-button-secondary cs-prev-btn-sm" onClick={() => declineOption(opt.id, group.id)}>Decline</button>
+                                                <button className="bds-button bds-button-primary cs-prev-btn-sm" onClick={() => toggleOption(group.id, opt.id)}>Choose</button>
+                                              </>
+                                            )}
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
                             {/* All declined in this group — prompt to request or show existing request */}
                             {group.status !== 'approved' && opts.every(o => declinedOptions.has(o.id)) && (() => {
                               const existingRequest = requests.find(r => r.groupId === group.id && r.text.toLowerCase().includes(gName.toLowerCase()));
@@ -760,7 +903,7 @@ export default function ClientSelections() {
                                 <div className="cs-all-declined">
                                   <div className="cs-all-declined-text">
                                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#854D00" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><circle cx="12" cy="16" r="1" fill="#854D00"/></svg>
-                                    <span>You've declined all {gName.toLowerCase()} options</span>
+                                    <span>You've skipped all {gName.toLowerCase()} options. Request a different one or undo to choose.</span>
                                   </div>
                                   <button className="cs-prev-btn cs-prev-request" onClick={(e) => {
                                     e.stopPropagation();
@@ -770,6 +913,15 @@ export default function ClientSelections() {
                                 </div>
                               );
                             })()}
+                            {isApproved && hiddenCount > 0 && (
+                              <button className="cs-show-declined" onClick={() => setShowDeclined(prev => {
+                                const next = new Set(prev);
+                                if (next.has(declinedKey)) next.delete(declinedKey); else next.add(declinedKey);
+                                return next;
+                              })}>
+                                {isDeclinedExpanded ? 'Hide declined options' : `Show declined options (${hiddenCount})`}
+                              </button>
+                            )}
                           </div>
                         );
                       });
@@ -810,27 +962,34 @@ export default function ClientSelections() {
                     {/* Actions */}
                     {group.status !== 'approved' ? (
                       <div className="cs-section-actions">
-                        {submittedGroups.has(group.id) && (
-                          <div className="cs-card-submitted">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" fill="#DDFDEF"/><path d="M8 12l3 3 5-5" stroke="#057E4B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                            <span>Submitted — waiting for builder review</span>
-                          </div>
-                        )}
                         <button className="bds-button bds-button-secondary cs-mobile-only" onClick={() => setSwipeGroupId(group.id)}>
                           {madeChoices > 0 ? 'Change selections' : 'Start selecting'}
                         </button>
-                        <button className="bds-button bds-button-secondary" onClick={() => setRequestGroupId(group.id)}>Request a different option</button>
+                        <button className="bds-button bds-button-secondary" onClick={() => setRequestGroupId(group.id)}>Request an option</button>
                       </div>
-                    ) : (
-                      <div className="cs-card-approved-note">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" fill="#DDFDEF"/><path d="M8 12l3 3 5-5" stroke="#057E4B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                        <span>Your builder has confirmed these selections. Contact them if you need to make changes.</span>
-                      </div>
-                    )}
+                    ) : null}
                   </div>
               </div>
             );
-          })}
+            };
+
+            if (filter === 'all') {
+              // Use original status for grouping so cards don't jump while making choices
+              const overdue = filtered.filter(g => g.status === 'overdue');
+              const dueSoon = filtered.filter(g => g.status === 'action_needed');
+              const notStarted = filtered.filter(g => g.status === 'pending' || g.status === 'in_progress');
+              const approved = filtered.filter(g => g.status === 'approved');
+              return (
+                <>
+                  {overdue.length > 0 && <><h2 className="cs-group-title cs-group-overdue">Overdue</h2>{overdue.map(renderCard)}</>}
+                  {dueSoon.length > 0 && <><h2 className="cs-group-title">Choices due soon</h2>{dueSoon.map(renderCard)}</>}
+                  {notStarted.length > 0 && <><h2 className="cs-group-title">Not started</h2>{notStarted.map(renderCard)}</>}
+                  {approved.length > 0 && <><h2 className="cs-group-title">Approved</h2>{approved.map(renderCard)}</>}
+                </>
+              );
+            }
+            return filtered.map(renderCard);
+          })()}
         </div>
 
         {/* Toast */}
@@ -844,10 +1003,10 @@ export default function ClientSelections() {
         <div className="cs-sticky-footer">
           <div className="cs-sticky-inner">
             <div className="cs-sticky-info">
-              <strong>{pendingSubmit.length} selection{pendingSubmit.length > 1 ? 's' : ''}</strong> ready to submit
+              <strong>{pendingSubmit.length} selection{pendingSubmit.length > 1 ? 's' : ''}</strong> ready — submit to lock in your choices
             </div>
             <button className="bds-button bds-button-primary" onClick={handleSubmitAll}>
-              Submit all selections
+              Submit choices
             </button>
           </div>
         </div>

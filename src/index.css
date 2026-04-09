@@ -1597,6 +1597,12 @@ table { width: 100%; border-collapse: collapse; }
 
 /* Shopping card grid */
 .cs-shop-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.cs-shop-list { display: grid; grid-template-columns: 1fr; gap: 16px; }
+.cs-shop-list .cs-shop-card { display: grid; grid-template-columns: 1fr 1fr; }
+.cs-shop-list .cs-shop-img { aspect-ratio: 4/3; min-height: 280px; }
+.cs-shop-list .cs-shop-info { display: flex; flex-direction: column; justify-content: center; padding: 24px; }
+.cs-shop-list .cs-shop-name { font-size: 16px; }
+.cs-shop-list .cs-shop-price { font-size: 16px; }
 .cs-shop-card { border-radius: 10px; overflow: hidden; border: 2px solid #EAEEF5; background: #fff; transition: border-color 0.15s, box-shadow 0.15s; }
 .cs-shop-card:hover { box-shadow: 0 2px 12px rgba(0,0,0,0.06); border-color: #DEE3EB; }
 .cs-shop-card-selected { border-color: #057E4B; }
@@ -1629,8 +1635,8 @@ table { width: 100%; border-collapse: collapse; }
 .cs-card { background: #fff; border: 1px solid #EAEEF5; border-radius: 12px; overflow: hidden; transition: box-shadow 0.15s, border-color 0.15s; }
 .cs-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.03); }
 .cs-card-expanded { border-color: #004FD6; box-shadow: 0 2px 16px rgba(0,79,214,0.07); }
-.cs-card-overdue { border-left: 3px solid #B5254C; }
-.cs-section.cs-card-overdue { border-left: 3px solid #B5254C; }
+.cs-card-overdue { }
+.cs-section.cs-card-overdue { }
 .cs-card-over-budget { background: #FFF9F8; border-color: #FDDDD5; }
 .cs-card-over-budget:hover { box-shadow: 0 2px 8px rgba(181,37,76,0.06); }
 
@@ -1842,6 +1848,56 @@ table { width: 100%; border-collapse: collapse; }
 .cs-request-success .cs-request-title { margin-top: 8px; }
 .cs-request-success .bds-button { margin-top: 8px; }
 
+/* Section group titles */
+.cs-group-title { font-size: 14px; font-weight: 600; color: #202227; margin: 24px 0 8px; padding-bottom: 8px; border-bottom: 1px solid #EAEEF5; }
+.cs-group-title:first-child { margin-top: 0; }
+.cs-group-overdue { color: #B5254C; }
+
+/* Show declined toggle */
+.cs-show-declined { background: none; border: none; color: #004FD6; font-size: 13px; font-weight: 500; cursor: pointer; padding: 8px 0; }
+.cs-show-declined:hover { text-decoration: underline; }
+
+/* Compact row view (builder-style) */
+.cs-compact-list { display: flex; flex-direction: column; border: 1px solid #EAEEF5; border-radius: 10px; overflow: hidden; }
+.cs-compact-row { display: grid; grid-template-columns: 48px 1fr 120px 76px; align-items: center; gap: 16px; padding: 10px 16px; border-bottom: 1px solid #EAEEF5; background: #fff; transition: background 0.1s; }
+.cs-compact-row:last-child { border-bottom: none; }
+.cs-compact-row:hover { background: #FAFBFD; }
+.cs-compact-row-selected { background: #fff; }
+.cs-compact-row-selected:hover { background: #FAFBFD; }
+.cs-compact-row-declined { opacity: 0.6; }
+.cs-compact-thumb { width: 48px; height: 48px; border-radius: 6px; background-size: cover; background-position: center; background-color: #F1F4FA; flex-shrink: 0; cursor: pointer; }
+.cs-compact-info { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.cs-compact-name-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.cs-compact-name { font-size: 13px; font-weight: 500; color: #202227; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cs-compact-vendor { font-size: 12px; color: #8E96A0; }
+.cs-compact-price { font-size: 13px; font-weight: 500; color: #202227; display: flex; align-items: center; gap: 6px; white-space: nowrap; justify-content: flex-end; }
+.cs-compact-status { font-size: 12px; font-weight: 500; padding: 2px 8px; border-radius: 100px; text-align: center; width: fit-content; }
+.cs-row-status-approved { color: #057E4B; background: #DDFDEF; }
+.cs-row-status-declined { color: #B5254C; background: #FFEEEA; }
+.cs-row-status-pending { color: #854D00; background: #FDF3D3; }
+.cs-compact-actions { display: flex; gap: 4px; justify-content: flex-end; }
+.cs-icon-btn { width: 32px; height: 32px; border-radius: 6px; border: 1px solid #EAEEF5; background: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.15s; color: #8E96A0; }
+.cs-icon-btn:hover { background: #F1F4FA; }
+.cs-icon-btn-decline:hover { color: #B5254C; border-color: #B5254C; background: #FFF5F5; }
+.cs-icon-btn-approve:hover { color: #057E4B; border-color: #057E4B; background: #F0FDF4; }
+.cs-icon-btn-undo:hover { color: #004FD6; border-color: #004FD6; background: #EFF6FF; }
+
+/* View toggle */
+.cs-filters { display: flex; align-items: center; justify-content: space-between; }
+.cs-filter-left { display: flex; gap: 8px; }
+.cs-view-toggle { display: flex; gap: 2px; background: #F1F4FA; border-radius: 8px; padding: 2px; }
+.cs-view-btn { width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border: none; background: transparent; border-radius: 6px; cursor: pointer; color: #8E96A0; transition: all 0.15s; }
+.cs-view-btn:hover { color: #4E555F; }
+.cs-view-active { background: #fff; color: #202227; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+
+/* Persona toggle */
+.cs-persona-bar { display: flex; align-items: center; gap: 6px; padding: 8px 16px; background: #F8F0FF; border-bottom: 1px solid #E4D4F4; position: sticky; top: 0; z-index: 20; flex-wrap: wrap; }
+.cs-persona-label { font-size: 11px; font-weight: 600; color: #7C3AED; text-transform: uppercase; letter-spacing: 0.05em; margin-right: 4px; }
+.cs-persona-btn { font-size: 12px; padding: 4px 10px; border-radius: 100px; border: 1px solid #E4D4F4; background: #fff; color: #6B21A8; cursor: pointer; transition: all 0.15s; }
+.cs-persona-btn:hover { background: #F3E8FF; }
+.cs-persona-active { background: #7C3AED; color: #fff; border-color: #7C3AED; }
+.cs-persona-active:hover { background: #6D28D9; }
+
 /* Sticky footer */
 .cs-sticky-footer { position: sticky; bottom: 0; left: 0; right: 0; background: #fff; border-top: 1px solid #EAEEF5; padding: 12px 32px; box-shadow: 0 -4px 12px rgba(0,0,0,0.06); z-index: 10; }
 .cs-sticky-inner { max-width: 880px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
@@ -1886,6 +1942,8 @@ table { width: 100%; border-collapse: collapse; }
   .cs-page { padding: 20px 16px; }
   .cs-hero-stats { justify-content: center; }
   .cs-shop-grid { grid-template-columns: repeat(2, 1fr); }
+  .cs-shop-list .cs-shop-card { grid-template-columns: 1fr; }
+  .cs-shop-list .cs-shop-img { min-height: 200px; }
   .cs-section-header { flex-direction: column; gap: 8px; }
   .cs-hero-title { font-size: 24px; }
   .cs-card-info { flex-direction: column; gap: 4px; }
