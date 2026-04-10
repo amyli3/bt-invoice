@@ -89,7 +89,7 @@ export const MODAL_ALLOWANCES: ModalAllowance[] = [
     name: 'Kitchen Allowance',
     costCode: '9030 - Kitchen Fixtures',
     budgetAmount: 5000,
-    previouslyInvoiced: 0,
+    previouslyInvoiced: 5000,
     selections: [
       { id: 'ms-1', name: 'Kohler Farmhouse Sink', costCode: '9030', costType: 'Material', originalPrice: 2000, approvedPrice: 2500, status: 'approved' },
       { id: 'ms-2', name: 'Delta Touchless Faucet', costCode: '9030', costType: 'Material', originalPrice: 1000, approvedPrice: 1500, status: 'approved' },
