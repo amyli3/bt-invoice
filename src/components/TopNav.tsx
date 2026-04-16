@@ -49,6 +49,7 @@ export default function TopNav({ onNavigate }: TopNavProps) {
           {pmOpen && (
             <div className="topnav-dropdown">
               <button className="topnav-dropdown-item" onClick={() => { closeAll(); onNavigate?.('selections'); }}>Selections</button>
+              <button className="topnav-dropdown-item" onClick={() => { closeAll(); onNavigate?.('change-order-list'); }}>Change Orders</button>
             </div>
           )}
         </div>

@@ -25,9 +25,11 @@ interface SOVLine {
   warningMsg?: string;
   traceCode?: string;
   addedByCO?: string;
+  isFromCost?: boolean;
   coAdjustment?: number;
   disablePct?: boolean;
   hideBalance?: boolean;
+  hideBudget?: boolean;
   children?: SOVLine[];
 }
 
@@ -132,6 +134,49 @@ export const MODAL_ALLOWANCES: ModalAllowance[] = [
   },
 ];
 
+// ─── Cost Data (Bills, Time Clock, QB Costs) ─────────────────────
+interface CostRecord {
+  id: string;
+  vendor: string;
+  description: string;
+  costCode: string;
+  costType: 'Bills' | 'Time Clock' | 'QuickBooks Cost';
+  date: string;
+  amount: number;
+}
+
+const COST_RECORDS: CostRecord[] = [
+  // Masonry costs (previously invoiced scenario)
+  { id: 'cost-1', vendor: 'Stone Supply Co. #4892', description: 'Limestone blocks & mortar', costCode: '4100', costType: 'Bills', date: '2025-08-25', amount: 48000 },
+  { id: 'cost-2', vendor: 'ABC Masonry Contractors', description: 'Foundation wall labor', costCode: '4100', costType: 'Bills', date: '2025-08-28', amount: 25000 },
+  { id: 'cost-3', vendor: 'Masonry crew', description: 'Aug 1 – Aug 28, 2025', costCode: '4100', costType: 'Time Clock', date: '2025-08-28', amount: 5600 },
+  // Framing costs (happy path — same invoice)
+  { id: 'cost-4', vendor: 'Acme Lumber #7201', description: 'Framing lumber delivery', costCode: '3100', costType: 'Bills', date: '2025-09-10', amount: 32000 },
+  { id: 'cost-5', vendor: 'ProFrame Contractors', description: 'Rough carpentry labor', costCode: '3100', costType: 'Bills', date: '2025-09-15', amount: 18500 },
+  // Foundation costs (under budget scenario — $19,500 total vs $28,000 budget)
+  { id: 'cost-6', vendor: 'Heartland Concrete Co', description: 'Foundation pour & forms', costCode: '2010', costType: 'Bills', date: '2025-07-15', amount: 8200 },
+  { id: 'cost-7', vendor: 'Bedrock Excavation', description: 'Excavation & grading', costCode: '2010', costType: 'Bills', date: '2025-07-10', amount: 7000 },
+  { id: 'cost-8', vendor: 'Heartland Concrete Co', description: 'Rebar & waterproofing', costCode: '2010', costType: 'Bills', date: '2025-07-18', amount: 4300 },
+];
+
+// Change order data — available for builder to pull in
+interface ChangeOrderRecord {
+  id: string;
+  title: string;
+  costCode: string;
+  costType: string;
+  amount: number;
+  status: 'approved' | 'pending';
+}
+
+const CHANGE_ORDERS: ChangeOrderRecord[] = [
+  { id: 'co-1', title: 'Change order #1', costCode: '4100', costType: 'Materials', amount: 13600, status: 'approved' },
+  { id: 'co-2', title: 'Change order #2', costCode: '3100', costType: 'Labor', amount: 8500, status: 'approved' },
+  // Budget reallocation: move $8,500 unused budget from Foundation to Framing (which has overage)
+  { id: 'co-3a', title: 'Change order #3', costCode: '3100', costType: 'Labor', amount: 8500, status: 'pending' },
+  { id: 'co-3b', title: 'Change order #3', costCode: '2010', costType: 'Materials', amount: -8500, status: 'pending' },
+];
+
 // ─── Scenario builders ─────────────────────────────────────────────
 
 function makeEstimateGroups() {
@@ -190,6 +235,42 @@ function makeEstimateGroups() {
         annotation: 'Previously invoiced $11,000 — will reverse when selections are added',
       } as SOVLine],
     },
+    masonry: {
+      id: 'g8', label: 'Masonry',
+      lines: [{
+        id: 'masonry-stone',
+        description: '4100 - Stone Masonry',
+        budget: 65000,
+        previousInvoice: 0,
+        thisInvoice: 0,
+        storedMaterials: 0,
+        retainage: 0,
+      } as SOVLine],
+    },
+    framing: {
+      id: 'g9', label: 'Rough Carpentry',
+      lines: [{
+        id: 'framing-rough',
+        description: '3100 - Framing (C)',
+        budget: 42000,
+        previousInvoice: 0,
+        thisInvoice: 0,
+        storedMaterials: 0,
+        retainage: 0,
+      } as SOVLine],
+    },
+    electrical: {
+      id: 'g11', label: 'Foundation',
+      lines: [{
+        id: 'electrical-rough',
+        description: '2010 - Foundation (C)',
+        budget: 28000,
+        previousInvoice: 0,
+        thisInvoice: 0,
+        storedMaterials: 0,
+        retainage: 0,
+      } as SOVLine],
+    },
   };
 }
 
@@ -219,7 +300,7 @@ function getCostCodeViewGroups(addedIds: string[]): CostGroup[] {
   const flooringCOAdj = addedFlooringCO.length > 0 ? flooringApprovedTotal - 8000 : 0;
   const flooringChildren: SOVLine[] = addedFlooringCO.map(item => ({
     id: `child-${item.id}`,
-    description: `${item.selectionCode} - ${item.desc.replace(/^\d+ - /, '')}`,
+    description: `${item.desc.replace(/^\d+ - /, '')}`,
     budget: item.estimate,
     coAdjustment: item.approved - item.estimate,
     previousInvoice: 0,
@@ -249,7 +330,7 @@ function getCostCodeViewGroups(addedIds: string[]): CostGroup[] {
   const addedDrywallCO = ESTIMATE_LINES.drywall.filter(i => addedIds.includes(i.selId));
   const drywallSelectionLines: SOVLine[] = addedDrywallCO.map(item => ({
     id: `child-${item.id}`,
-    description: `${item.selectionCode} - ${item.desc.replace(/^\d+ - /, '')}`,
+    description: `${item.desc.replace(/^\d+ - /, '')}`,
     budget: 0,
     coAdjustment: item.approved,
     previousInvoice: 0,
@@ -290,23 +371,43 @@ function getCostCodeViewGroups(addedIds: string[]): CostGroup[] {
     isFromSelection: addedPlumbingCO.length > 0,
   } as SOVLine];
 
-  return [est.kitchen, est.flooring, est.plumbing, est.drywall];
+  return [est.electrical, est.masonry, est.framing, est.kitchen, est.flooring, est.plumbing, est.drywall];
 }
 
-// Helper to build adjustment lines from any estimate group
+// Helper to build adjustment lines from any estimate group — grouped by cost code with nested selections
 function buildAdjLines(items: typeof ESTIMATE_LINES.kitchen, addedIds: string[], allowanceName: string, _allowanceBudget: number): SOVLine[] {
   const addedItems = items.filter(item => addedIds.includes(item.selId));
-  return addedItems
-    .map(item => {
+  if (addedItems.length === 0) return [];
+
+  // Group by allowance cost code to create parent rows
+  const byCostCode: Record<string, typeof addedItems> = {};
+  for (const item of addedItems) {
+    const code = item.allowanceCode;
+    if (!byCostCode[code]) byCostCode[code] = [];
+    byCostCode[code].push(item);
+  }
+
+  return Object.entries(byCostCode).map(([code, codeItems]) => {
+    const totalBudget = codeItems.reduce((s, item) => {
+      const codeMismatch = item.selectionCode !== item.allowanceCode;
+      return s + (codeMismatch ? item.approved : (item.approved - item.estimate));
+    }, 0);
+    const totalThisInvoice = codeItems.reduce((s, item) => {
+      const codeMismatch = item.selectionCode !== item.allowanceCode;
+      return s + (codeMismatch ? item.approved : (item.approved - item.estimate));
+    }, 0);
+
+    // Build children — individual selection lines
+    const children: SOVLine[] = codeItems.map(item => {
       const delta = item.approved - item.estimate;
       const codeMismatch = item.selectionCode !== item.allowanceCode;
-      // When cost codes mismatch: allowance line is reversed, so adjustment = full approved amount (not delta)
       const adjAmount = codeMismatch ? item.approved : delta;
+      // Look up cost type from MODAL_ALLOWANCES
+      const selData = MODAL_ALLOWANCES.flatMap(a => a.selections).find(s => s.id === item.selId);
+      const costType = selData?.costType || 'Material';
       return {
         id: `adj-${item.id}`,
-        description: codeMismatch
-          ? `${item.selectionCode} - ${item.desc.replace(/^\d+ - /, '')}`
-          : item.desc,
+        description: item.desc.replace(/^\d+ - /, ''),
         budget: codeMismatch ? item.approved : delta,
         previousInvoice: 0,
         thisInvoice: adjAmount,
@@ -316,16 +417,24 @@ function buildAdjLines(items: typeof ESTIMATE_LINES.kitchen, addedIds: string[],
         disablePct: false,
         hideBalance: true,
         highlight: adjAmount < 0,
-        traceCode: codeMismatch ? `${item.allowanceCode} - ${allowanceName}` : undefined,
+        traceCode: `${item.selectionCode} - ${costType}`,
         costCodeMismatch: codeMismatch,
-        warningMsg: codeMismatch
-          ? `Allowance reversed (−$${fmt(item.estimate)} on ${item.allowanceCode}), selection invoiced at full approved price ($${fmt(item.approved)} on ${item.selectionCode})`
-          : undefined,
-        annotation: codeMismatch
-          ? `Allowance −$${fmt(item.estimate)} reversed on ${item.allowanceCode} · Selection invoiced $${fmt(item.approved)} on ${item.selectionCode} · Net change: +$${fmt(delta)}`
-          : `Approved $${fmt(item.approved)} − Estimate $${fmt(item.estimate)} = ${delta >= 0 ? '+' : ''}$${fmt(delta)}`,
       } as SOVLine;
     });
+
+    return {
+      id: `adj-group-${code}-${allowanceName.replace(/\s/g, '')}`,
+      description: `${code} - ${allowanceName}`,
+      budget: totalBudget,
+      previousInvoice: 0,
+      thisInvoice: totalThisInvoice,
+      storedMaterials: 0,
+      retainage: 0,
+      isFromSelection: true,
+      hideBalance: true,
+      children,
+    } as SOVLine;
+  });
 }
 
 // Selection Adjustments: estimate lines stay, adjustments appear in own section (not a CO)
@@ -397,7 +506,7 @@ function getSelAdjGroups(addedIds: string[]): CostGroup[] {
     isAllowance: true,
   } as SOVLine];
 
-  const groups: CostGroup[] = [est.kitchen, est.flooring, est.plumbing, est.drywall];
+  const groups: CostGroup[] = [est.electrical, est.masonry, est.framing, est.kitchen, est.flooring, est.plumbing, est.drywall];
 
   // Build all adjustment lines grouped by allowance
   const kitchenAdj = buildAdjLines(ESTIMATE_LINES.kitchen, addedIds, 'Kitchen Allowance', 5000);
@@ -407,28 +516,12 @@ function getSelAdjGroups(addedIds: string[]): CostGroup[] {
 
   const allAdjLines = [...kitchenAdj, ...flooringAdj, ...plumbingAdj, ...drywallAdj];
 
-  // Standalone change order lines (not from selections — builder created these separately)
-  const standaloneCoLines: SOVLine[] = [
-    {
-      id: 'co-s1',
-      description: '3100 - Additional Structural Support',
-      budget: 4200,
-      previousInvoice: 0,
-      thisInvoice: 0,
-      storedMaterials: 0,
-      retainage: 0,
-      addedByCO: 'CO-003',
-      annotation: 'Engineer required added beam in kitchen — discovered during framing',
-    },
-  ];
-
-  // Combine selection adjustments and change orders into one "Approved changes" group
-  const approvedChangesLines = [...allAdjLines, ...standaloneCoLines];
-  if (approvedChangesLines.length > 0) {
+  // Combine selection adjustments into "Approved changes" group
+  if (allAdjLines.length > 0) {
     groups.push({
       id: 'approved-changes',
       label: 'Approved changes',
-      lines: approvedChangesLines,
+      lines: allAdjLines,
     });
   }
 
@@ -560,6 +653,7 @@ function GroupRow({ group, expanded, onToggle, showCOCols }: { group: CostGroup;
   const groupRevised = t.budget + groupCO;
   const pctBase = showCOCols ? groupRevised : t.budget;
   const pct = pctBase > 0 ? (t.completed / pctBase * 100) : 0;
+  const isOverage = pct > 100.5 && pctBase > 0;
   const balance = showCOCols
     ? group.lines.reduce((s, l) => {
         if (l.hideBalance) return s;
@@ -593,21 +687,22 @@ function GroupRow({ group, expanded, onToggle, showCOCols }: { group: CostGroup;
       <td style={numCellStyle}><strong>${fmt(t.thisInvoice)}</strong></td>
       <td style={numCellStyle}><strong>${fmt(t.storedMaterials)}</strong></td>
       <td style={numCellStyle}><strong>${fmt(t.completed)}</strong></td>
-      <td style={{ ...numCellStyle, textAlign: 'center' }}><strong>{pctBase > 0 ? `${pct.toFixed(0)}%` : '—'}</strong></td>
-      <td style={numCellStyle}><strong>{balance < -0.01 ? `-$${fmt(Math.abs(balance))}` : `$${fmt(balance)}`}</strong></td>
+      <td style={{ ...numCellStyle, textAlign: 'center', color: isOverage ? '#dc2626' : undefined, fontWeight: isOverage ? 700 : undefined }}><strong>{pctBase > 0 ? `${pct.toFixed(0)}%` : '—'}</strong></td>
+      <td style={{ ...numCellStyle, color: balance < -0.01 ? '#dc2626' : undefined }}><strong>{balance < -0.01 ? `-$${fmt(Math.abs(balance))}` : `$${fmt(balance)}`}</strong></td>
       <td style={numCellStyle}><strong>${fmt(t.retainage)}</strong></td>
       <td style={{ ...pinnedColStyle, background: '#f8fafc' }} />
     </tr>
   );
 }
 
-function LineRow({ line, pctOverride, onPctChange, showCOCols, onLineClick, onRemove, depth = 0 }: {
+function LineRow({ line, pctOverride, onPctChange, showCOCols, onLineClick, onRemove, pendingDelete, depth = 0 }: {
   line: SOVLine;
   pctOverride?: number;
   onPctChange?: (lineId: string, pct: number) => void;
   showCOCols?: boolean;
   onLineClick?: (lineId: string) => void;
   onRemove?: (lineId: string) => void;
+  pendingDelete?: boolean;
   depth?: number;
 }) {
   const [childExpanded, setChildExpanded] = useState(false);
@@ -615,6 +710,10 @@ function LineRow({ line, pctOverride, onPctChange, showCOCols, onLineClick, onRe
   const coAdj = line.coAdjustment || 0;
   const revisedBudget = line.budget + coAdj;
   const pctBase = showCOCols ? revisedBudget : line.budget;
+  // Base % from original data (before any user override) — used as floor for cost lines
+  const baseCompleted = line.thisInvoice + line.previousInvoice + line.storedMaterials;
+  const basePct = pctBase > 0 ? Math.round(baseCompleted / pctBase * 100) : 0;
+
   const effectiveThisInvoice = pctOverride !== undefined && pctBase > 0
     ? Math.round((pctOverride / 100) * pctBase - line.previousInvoice - line.storedMaterials)
     : line.thisInvoice;
@@ -623,6 +722,8 @@ function LineRow({ line, pctOverride, onPctChange, showCOCols, onLineClick, onRe
   const balance = pctBase - completed;
   // Minimum % = what's already been invoiced — can't go below this
   const minPct = pctBase > 0 ? Math.round((line.previousInvoice + line.storedMaterials) / pctBase * 100) : 0;
+  // For cost lines: floor is the % from costs+CO, not just previous invoices
+  const costFloorPct = line.isFromCost ? basePct : minPct;
 
   const pctInfo = line.budget === 0 && completed > 0 && !line.isFromSelection
     ? { text: 'ERR', broken: true }
@@ -634,7 +735,9 @@ function LineRow({ line, pctOverride, onPctChange, showCOCols, onLineClick, onRe
     <>
       <tr className="aia-sov-row" style={{
         borderBottom: '1px solid #f1f5f9',
-        background: line.hasError ? '#fef2f2' : line.costCodeMismatch ? '#fff7ed' : line.highlight ? '#fffbeb' : line.isFromSelection ? '#f0fdf4' : 'white',
+        background: pendingDelete ? '#fef8f8' : line.hasError ? '#fef2f2' : line.highlight ? '#fffbeb' : line.isFromSelection ? '#f0fdf4' : 'white',
+        opacity: pendingDelete ? 0.5 : 1,
+        transition: 'opacity 0.15s',
       }}>
         <td style={{ ...cellStyle, paddingLeft: 36 + depth * 28 }}>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
@@ -647,12 +750,17 @@ function LineRow({ line, pctOverride, onPctChange, showCOCols, onLineClick, onRe
                 <path d="M3 4.5L6 7.5L9 4.5" stroke="#64748b" strokeWidth="1.5" fill="none" strokeLinecap="round" />
               </svg>
             )}
+            {!line.isFromSelection && !line.addedByCO && !line.isAllowance && !line.disablePct && (
+              <svg width="14" height="14" viewBox="0 0 32 32" fill="none" style={{ flexShrink: 0 }}>
+                <path fillRule="evenodd" clipRule="evenodd" d="M26.9945 4.85074C26.9182 3.81588 26.0544 3 25 3H7L6.85074 3.00549C5.81588 3.08183 5 3.94564 5 5V27L5.00549 27.1493C5.08183 28.1841 5.94564 29 7 29H25L25.1493 28.9945C26.1841 28.9182 27 28.0544 27 27V5L26.9945 4.85074ZM7 5H25V27H7V5ZM11 22C11.8284 22 12.5 22.6716 12.5 23.5C12.5 24.3284 11.8284 25 11 25C10.1716 25 9.5 24.3284 9.5 23.5C9.5 22.6716 10.1716 22 11 22ZM17.5 23.5C17.5 22.6716 16.8284 22 16 22C15.1716 22 14.5 22.6716 14.5 23.5C14.5 24.3284 15.1716 25 16 25C16.8284 25 17.5 24.3284 17.5 23.5ZM21 22C21.8284 22 22.5 22.6716 22.5 23.5C22.5 24.3284 21.8284 25 21 25C20.1716 25 19.5 24.3284 19.5 23.5C19.5 22.6716 20.1716 22 21 22ZM12.5 18.5C12.5 17.6716 11.8284 17 11 17C10.1716 17 9.5 17.6716 9.5 18.5C9.5 19.3284 10.1716 20 11 20C11.8284 20 12.5 19.3284 12.5 18.5ZM16 17C16.8284 17 17.5 17.6716 17.5 18.5C17.5 19.3284 16.8284 20 16 20C15.1716 20 14.5 19.3284 14.5 18.5C14.5 17.6716 15.1716 17 16 17ZM22.5 18.5C22.5 17.6716 21.8284 17 21 17C20.1716 17 19.5 17.6716 19.5 18.5C19.5 19.3284 20.1716 20 21 20C21.8284 20 22.5 19.3284 22.5 18.5ZM22 7C22.5128 7 22.9355 7.38604 22.9933 7.88338L23 8V14C23 14.5128 22.614 14.9355 22.1166 14.9933L22 15H10C9.48716 15 9.06449 14.614 9.00673 14.1166L9 14V8C9 7.48716 9.38604 7.06449 9.88338 7.00673L10 7H22ZM11 9H21V13H11V9Z" fill="#202227"/>
+              </svg>
+            )}
             {line.isFromSelection && !line.addedByCO && !line.isAllowance && (
               <svg width="14" height="14" viewBox="0 0 26 26" fill="none" style={{ flexShrink: 0 }}>
                 <path fillRule="evenodd" clipRule="evenodd" d="M3.10887 1.65304C3.29196 0.614695 4.24544 -0.0943093 5.27783 0.010202L5.42578 0.0307185L12.3194 1.24626C13.3578 1.42935 14.0668 2.38283 13.9623 3.41522L13.9418 3.56317L12.556 11.416L20.05 8.68856C21.0385 8.32876 22.1265 8.79705 22.5543 9.73909L22.6134 9.8839L25.0075 16.4618C25.1753 16.9228 25.1674 17.4281 24.9878 17.8818L24.9864 23.3422C24.9864 24.3966 24.1706 25.2604 23.1357 25.3367L22.9864 25.3422H5.48644C5.20012 25.3422 4.91927 25.3204 4.63683 25.2762C1.67321 24.8119 -0.353451 21.9856 0.0514701 19.0171L0.0854597 18.7996L3.10887 1.65304ZM22.986 19.326L11.95 23.342L22.9864 23.3422L22.986 19.326ZM2.05508 19.1469L5.07848 2.00033L11.9721 3.21587L8.93329 20.45L8.89543 20.6357C8.48394 22.4102 6.76677 23.5848 4.94602 23.3003C3.02845 22.9998 1.71023 21.1026 2.05508 19.1469ZM20.734 10.5679L12.155 13.69L10.9029 20.7973C10.8491 21.1025 10.771 21.3974 10.671 21.6805L23.1281 17.1458L20.734 10.5679ZM6.98647 19.8422C6.98647 19.0138 6.3149 18.3422 5.48647 18.3422C4.65805 18.3422 3.98647 19.0138 3.98647 19.8422C3.98647 20.6707 4.65805 21.3422 5.48647 21.3422C6.3149 21.3422 6.98647 20.6707 6.98647 19.8422Z" fill="#202227"/>
               </svg>
             )}
-            {line.addedByCO && (
+            {line.addedByCO && depth === 0 && (
               <svg width="11" height="14" viewBox="0 0 20 26" fill="none" style={{ flexShrink: 0 }}>
                 <path fillRule="evenodd" clipRule="evenodd" d="M14.91 0.00399798L15 0L15.0752 0.00278786L15.2007 0.0202401L15.3121 0.0497381L15.4232 0.0936734L15.5207 0.145995L15.6254 0.219689L15.7071 0.292893L19.7071 4.29289C20.0976 4.68342 20.0976 5.31658 19.7071 5.70711C19.3466 6.06759 18.7794 6.09532 18.3871 5.7903L18.2929 5.70711L16 3.415V7.09839C16 9.16872 14.9333 11.0864 13.1893 12.1805L12.9768 12.3078L4.01544 17.4286C2.83474 18.1033 2.08228 19.3284 2.00635 20.676L2 20.9016V25C2 25.5523 1.55228 26 1 26C0.487164 26 0.0644928 25.614 0.00672773 25.1166L0 25V20.9016C0 18.8313 1.06668 16.9136 2.81066 15.8195L3.02317 15.6922L11.9846 10.5714C13.1653 9.89667 13.9177 8.67163 13.9937 7.32405L14 7.09839V3.415L11.7071 5.70711C11.3466 6.06759 10.7794 6.09532 10.3871 5.7903L10.2929 5.70711C9.93241 5.34662 9.90468 4.77939 10.2097 4.3871L10.2929 4.29289L14.2929 0.292893C14.3283 0.257499 14.3657 0.225313 14.4047 0.196335L14.5159 0.124671L14.6287 0.0712255L14.734 0.0358451L14.8515 0.0110178L14.91 0.00399798ZM15 16C15.5128 16 15.9355 16.386 15.9933 16.8834L16 17V25C16 25.5523 15.5523 26 15 26C14.4872 26 14.0645 25.614 14.0067 25.1166L14 25V17C14 16.4477 14.4477 16 15 16ZM1.99327 1.88338C1.93551 1.38604 1.51284 1 1 1C0.447715 1 0 1.44772 0 2V12L0.00672773 12.1166C0.0644928 12.614 0.487164 13 1 13C1.55228 13 2 12.5523 2 12V2L1.99327 1.88338Z" fill="#202227"/>
               </svg>
@@ -663,34 +771,95 @@ function LineRow({ line, pctOverride, onPctChange, showCOCols, onLineClick, onRe
               </svg>
             )}
             <span
-              onClick={hasChildren ? (e) => { e.stopPropagation(); setChildExpanded(!childExpanded); } : onLineClick ? (e) => { e.stopPropagation(); onLineClick(line.id); } : undefined}
-              style={hasChildren ? { cursor: 'pointer' } : onLineClick ? { cursor: 'pointer', color: '#0065db', textDecoration: 'underline', textDecorationColor: '#bfdbfe', textUnderlineOffset: 2 } : undefined}
+              onClick={
+                line.addedByCO && onLineClick
+                  ? (e) => { e.stopPropagation(); onLineClick(line.id); }
+                  : hasChildren
+                    ? (e) => { e.stopPropagation(); setChildExpanded(!childExpanded); }
+                    : onLineClick
+                      ? (e) => { e.stopPropagation(); onLineClick(line.id); }
+                      : undefined
+              }
+              style={
+                (line.addedByCO && onLineClick) || (!hasChildren && onLineClick)
+                  ? { cursor: 'pointer', color: '#0065db', textDecoration: 'underline', textDecorationColor: '#bfdbfe', textUnderlineOffset: 2 }
+                  : hasChildren ? { cursor: 'pointer' } : undefined
+              }
             >{line.description}</span>
 
           </span>
+          {line.traceCode && (
+            <div style={{ marginTop: 3, paddingLeft: depth > 0 ? 0 : 36, fontSize: 11, color: '#94a3b8' }}>
+              {line.traceCode}
+            </div>
+          )}
         </td>
-        <td style={numCellStyle}>${fmt(line.budget)}</td>
+        <td style={numCellStyle}>{line.hideBudget ? <span style={{ color: '#94a3b8' }}>--</span> : `$${fmt(line.budget)}`}</td>
         {showCOCols && (
           <td style={numCellStyle}>
-            {coAdj !== 0 ? `${coAdj > 0 ? '+' : ''}$${fmt(coAdj)}` : '—'}
+            {coAdj !== 0 ? `${coAdj > 0 ? '+' : ''}$${fmt(coAdj)}` : <span style={{ color: '#94a3b8' }}>--</span>}
           </td>
         )}
         {showCOCols && (
           <td style={{ ...numCellStyle, fontWeight: coAdj !== 0 ? 600 : 400 }}>
-            ${fmt(revisedBudget)}
+            {line.hideBudget ? <span style={{ color: '#94a3b8' }}>--</span> : `$${fmt(revisedBudget)}`}
           </td>
         )}
         <td style={numCellStyle}>${fmt(line.previousInvoice)}</td>
-        <td style={{
-          ...numCellStyle,
-        }}>
+        <td
+          className={effectiveThisInvoice < 0 && line.annotation ? 'aia-tooltip-cell' : undefined}
+          style={{
+            ...numCellStyle,
+            background: effectiveThisInvoice < 0 && line.annotation ? '#fefce8' : undefined,
+            color: effectiveThisInvoice < 0 && !line.annotation ? '#dc2626' : undefined,
+            position: 'relative',
+          }}
+        >
+          {effectiveThisInvoice < 0 && line.annotation && (
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style={{ marginRight: 4, verticalAlign: 'middle', color: '#92400e', cursor: 'help' }}>
+              <circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1"/>
+              <path d="M8 5.5v3M8 10.5v.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+            </svg>
+          )}
           {effectiveThisInvoice < 0 ? `-$${fmt(Math.abs(effectiveThisInvoice))}` : `$${fmt(effectiveThisInvoice)}`}
+          {effectiveThisInvoice < 0 && line.annotation && (
+            <div className="aia-tooltip-popup" style={{
+              position: 'absolute', bottom: '100%', right: 0, marginBottom: 6,
+              background: 'white', color: '#334155', padding: '12px 16px', borderRadius: 8,
+              fontSize: 12, lineHeight: 1.5, width: 280, border: '1px solid #e2e8f0',
+              boxShadow: '0 4px 16px rgba(0,0,0,0.1)',
+              pointerEvents: 'none', opacity: 0, transition: 'opacity 0.15s', zIndex: 50,
+              wordWrap: 'break-word', overflowWrap: 'break-word', whiteSpace: 'normal', textAlign: 'left',
+            }}>
+              {line.annotation}
+            </div>
+          )}
         </td>
         <td style={numCellStyle}>${fmt(line.storedMaterials)}</td>
         <td style={numCellStyle}>${fmt(completed)}</td>
         <td style={{ ...numCellStyle, textAlign: 'center', padding: '0 4px' }}>
           {line.disablePct ? (
             <span style={{ color: '#94a3b8' }}>--</span>
+          ) : (line.isFromCost && onPctChange) ? (
+            <input
+              type="number"
+              min={costFloorPct}
+              max={100}
+              value={pctOverride !== undefined ? pctOverride : Math.round(pct)}
+              onChange={(e) => onPctChange(line.id, Math.max(costFloorPct, Math.min(100, Number(e.target.value))))}
+              title={`Minimum ${costFloorPct}% — costs already applied`}
+              style={{
+                width: 48,
+                padding: '2px 4px',
+                fontSize: 12,
+                textAlign: 'center',
+                border: '1px solid #cbd5e1',
+                borderRadius: 4,
+                background: 'white',
+                color: pctInfo.broken ? '#dc2626' : '#334155',
+                fontWeight: pctInfo.broken ? 700 : 400,
+              }}
+            />
           ) : onPctChange ? (
             <input
               type="number"
@@ -721,11 +890,11 @@ function LineRow({ line, pctOverride, onPctChange, showCOCols, onLineClick, onRe
           )}
         </td>
         <td style={numCellStyle}>
-          {line.hideBalance ? '$0.00' : (balance < -0.01) ? `-$${fmt(Math.abs(balance))}` : `$${fmt(Math.abs(balance))}`}
+          {line.hideBalance ? (line.disablePct ? <span style={{ color: '#94a3b8' }}>--</span> : '$0.00') : (balance < -0.01) ? `-$${fmt(Math.abs(balance))}` : `$${fmt(Math.abs(balance))}`}
         </td>
         <td style={numCellStyle}>${fmt(line.retainage)}</td>
         <td style={{ ...pinnedColStyle, background: 'white' }}>
-          {line.isFromSelection && !line.isAllowance && onRemove && (
+          {(line.isFromSelection || line.isFromCost) && !line.isAllowance && onRemove && (
             <button
               className="aia-row-delete"
               onClick={(e) => { e.stopPropagation(); onRemove(line.id); }}
@@ -760,13 +929,14 @@ function LineRow({ line, pctOverride, onPctChange, showCOCols, onLineClick, onRe
   );
 }
 
-function GroupSection({ group, expanded, onToggle, pctOverrides, onPctChange, showCOCols, onLineClick, onRemove }: {
+function GroupSection({ group, expanded, onToggle, pctOverrides, onPctChange, showCOCols, onLineClick, onRemove, pendingDeleteIds }: {
   group: CostGroup; expanded: boolean; onToggle: () => void;
   pctOverrides?: Record<string, number>;
   onPctChange?: (lineId: string, pct: number) => void;
   showCOCols?: boolean;
   onLineClick?: (lineId: string) => void;
   onRemove?: (lineId: string) => void;
+  pendingDeleteIds?: Set<string>;
 }) {
   return (
     <>
@@ -780,6 +950,7 @@ function GroupSection({ group, expanded, onToggle, pctOverrides, onPctChange, sh
           showCOCols={showCOCols}
           onLineClick={onLineClick}
           onRemove={onRemove}
+          pendingDelete={pendingDeleteIds?.has(line.id)}
         />
       ))}
     </>
@@ -788,17 +959,59 @@ function GroupSection({ group, expanded, onToggle, pctOverrides, onPctChange, sh
 
 // ─── Main Component ────────────────────────────────────────────────
 
-export default function AIAPayApp() {
-  const [groupBy, setGroupBy] = useState<'estimate' | 'costcode'>('estimate');
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({ g2: true, g3: true, g4: true, g5: true, g7: true, seladj: true, 'co-standalone': true, 'approved-changes': true });
+export interface OverageInfo {
+  costCode: string;
+  label: string;
+  budget: number;
+  invoiced: number;
+  overage: number;
+}
+
+export default function AIAPayApp({ onNavigate, approvedCOIds, addedCostIds: externalCostIds, onCostIdsChange, addedCOIds: externalCOIds, onCOIdsChange, groupBy: externalGroupBy, onGroupByChange, onOveragesChange }: { onNavigate?: (page: string) => void; approvedCOIds?: string[]; addedCostIds?: string[]; onCostIdsChange?: (ids: string[]) => void; addedCOIds?: string[]; onCOIdsChange?: (ids: string[]) => void; groupBy?: 'estimate' | 'costcode'; onGroupByChange?: (v: 'estimate' | 'costcode') => void; onOveragesChange?: (overages: OverageInfo[]) => void }) {
+  const [localGroupBy, setLocalGroupBy] = useState<'estimate' | 'costcode'>('estimate');
+  const groupBy = externalGroupBy ?? localGroupBy;
+  const setGroupBy = (v: 'estimate' | 'costcode') => { setLocalGroupBy(v); onGroupByChange?.(v); };
+  const [showSwitchViewDialog, setShowSwitchViewDialog] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null); // line ID pending delete
+  // Cost codes that were previously invoiced (negative adjustment scenario)
+  const previouslyInvoicedCodes = new Set(['4100']);
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({ g2: true, g3: true, g4: true, g5: true, g7: true, g8: true, g9: true, g11: true, seladj: true, 'co-standalone': true, 'approved-changes': true });
   const [dateTab, setDateTab] = useState<'date' | 'schedule'>('date');
   const [pctOverrides, setPctOverrides] = useState<Record<string, number>>({});
 
   // "Add from" modal state
   const [showAddFromModal, setShowAddFromModal] = useState(false);
   const [showSelectionsModal, setShowSelectionsModal] = useState(false);
+  const [showCostModal, setShowCostModal] = useState(false);
+  const [showCOModal, setShowCOModal] = useState(false);
   const [addFromDropdownOpen, setAddFromDropdownOpen] = useState(false);
   const addFromDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Cost IDs — use external state if provided, local fallback otherwise
+  const [localCostIds, setLocalCostIds] = useState<string[]>([]);
+  const addedCostIds = externalCostIds ?? localCostIds;
+  const setAddedCostIds = (updater: string[] | ((prev: string[]) => string[])) => {
+    const next = typeof updater === 'function' ? updater(addedCostIds) : updater;
+    setLocalCostIds(next);
+    onCostIdsChange?.(next);
+  };
+  // CO IDs — use external state if provided, local fallback otherwise
+  const [localCOIds, setLocalCOIds] = useState<string[]>([]);
+  const addedCOIds = externalCOIds ?? localCOIds;
+  const setAddedCOIds = (updater: string[] | ((prev: string[]) => string[])) => {
+    const next = typeof updater === 'function' ? updater(addedCOIds) : updater;
+    setLocalCOIds(next);
+    onCOIdsChange?.(next);
+  };
+
+  // Auto-pull approved COs into the progress invoice
+  useEffect(() => {
+    if (!approvedCOIds || approvedCOIds.length === 0) return;
+    setAddedCOIds(prev => {
+      const newIds = approvedCOIds.filter(id => !prev.includes(id));
+      return newIds.length > 0 ? [...prev, ...newIds] : prev;
+    });
+  }, [approvedCOIds]);
 
   useEffect(() => {
     if (!addFromDropdownOpen) return;
@@ -849,22 +1062,48 @@ export default function AIAPayApp() {
   };
 
   // Remove a selection from the invoice — removes ALL selections from the same allowance group
-  const handleRemoveLine = (lineId: string) => {
+  // Actually perform line removal
+  const doRemoveLine = (lineId: string) => {
+    // Check if it's a cost line or a cost child — find the matching cost code and remove all costs for it
+    const allLines = groups.flatMap(g => g.lines);
+    const costLine = allLines.find(l => l.id === lineId && l.isFromCost);
+    // Also check if it's a child of a cost line
+    const parentCostLine = !costLine
+      ? allLines.find(l => l.isFromCost && l.children?.some(ch => ch.id === lineId))
+      : null;
+    const targetLine = costLine || parentCostLine;
+    if (targetLine) {
+      const match = targetLine.description.match(/^(\d+)/);
+      const code = match ? match[1] : '';
+      if (code) {
+        // Remove all cost records with this cost code
+        const costIdsToRemove = COST_RECORDS.filter(c => c.costCode === code).map(c => c.id);
+        setAddedCostIds(prev => prev.filter(id => !costIdsToRemove.includes(id)));
+        // Also remove related CO IDs
+        const coIdsToRemove = CHANGE_ORDERS.filter(co => co.costCode === code).map(co => co.id);
+        setAddedCOIds(prev => prev.filter(id => !coIdsToRemove.includes(id)));
+      }
+      return;
+    }
+
+    // Selection line removal (existing logic)
     const estGroups = [
       { items: ESTIMATE_LINES.kitchen, selIds: ESTIMATE_LINES.kitchen.map(i => i.selId) },
       { items: ESTIMATE_LINES.flooring, selIds: ESTIMATE_LINES.flooring.map(i => i.selId) },
       { items: ESTIMATE_LINES.plumbing, selIds: ESTIMATE_LINES.plumbing.map(i => i.selId) },
       { items: ESTIMATE_LINES.drywall, selIds: ESTIMATE_LINES.drywall.map(i => i.selId) },
     ];
-    // Line id could be the estimate id (e.g. "ke1") or adjustment id (e.g. "adj-ke1")
     const rawId = lineId.replace(/^(adj-|child-)/, '');
-    // Find which allowance group this line belongs to
     const group = estGroups.find(g => g.items.some(i => i.id === rawId));
     if (group) {
-      // Remove all selection IDs from this allowance group
       const groupSelIds = new Set(group.selIds);
       setAddedSelectionIds(prev => prev.filter(id => !groupSelIds.has(id)));
     }
+  };
+
+  // Always show confirmation before deleting any line
+  const handleRemoveLine = (lineId: string) => {
+    setDeleteConfirm(lineId);
   };
 
   // Ellipsis menu
@@ -882,13 +1121,282 @@ export default function AIAPayApp() {
 
   const checkedCount = Object.values(modalChecked).filter(Boolean).length;
 
+  // Aggregate added costs by cost code
+  const costsByCostCode: Record<string, number> = {};
+  if (addedCostIds.length > 0) {
+    const addedCosts = COST_RECORDS.filter(c => addedCostIds.includes(c.id));
+    for (const c of addedCosts) {
+      costsByCostCode[c.costCode] = (costsByCostCode[c.costCode] || 0) + c.amount;
+    }
+  }
+
+  // Aggregate added COs by cost code
+  const cosByCostCode: Record<string, number> = {};
+  if (addedCOIds.length > 0) {
+    const addedCOs = CHANGE_ORDERS.filter(co => addedCOIds.includes(co.id));
+    for (const co of addedCOs) {
+      cosByCostCode[co.costCode] = (cosByCostCode[co.costCode] || 0) + co.amount;
+    }
+  }
+
   // groupBy determines both the data shape and column visibility
   const rawGroups = groupBy === 'costcode'
     ? getCostCodeViewGroups(addedSelectionIds)
     : getSelAdjGroups(addedSelectionIds);
-  const groups = groupBy === 'costcode' ? regroupByCostCode(rawGroups) : rawGroups;
+  const baseGroups = groupBy === 'costcode' ? regroupByCostCode(rawGroups) : rawGroups;
+
+  // Build cost children lookup — individual bills grouped by cost code
+  const costChildrenByCode: Record<string, SOVLine[]> = {};
+  if (addedCostIds.length > 0) {
+    const addedCosts = COST_RECORDS.filter(c => addedCostIds.includes(c.id));
+    for (const c of addedCosts) {
+      if (!costChildrenByCode[c.costCode]) costChildrenByCode[c.costCode] = [];
+      costChildrenByCode[c.costCode].push({
+        id: `cost-child-${c.id}`,
+        description: c.vendor,
+        budget: 0,
+        previousInvoice: 0,
+        thisInvoice: c.amount,
+        storedMaterials: 0,
+        retainage: 0,
+        isFromCost: true,
+        disablePct: true,
+        hideBalance: true,
+        hideBudget: true,
+      });
+    }
+  }
+
+  // Apply costs to matching estimate lines
+  const groupsWithCosts = baseGroups.map(g => ({
+    ...g,
+    lines: g.lines.map(line => {
+      const match = line.description.match(/^(\d+)/);
+      const code = match ? match[1] : '';
+      const costAmt = costsByCostCode[code] || 0;
+      const coAmt = cosByCostCode[code] || 0;
+      if (costAmt <= 0) return line;
+
+      const costChildren = costChildrenByCode[code] || [];
+      const wasPreviouslyInvoiced = previouslyInvoicedCodes.has(code);
+
+      // Build CO child for cost code view — shows amount in approved changes column
+      const matchingCO = coAmt !== 0
+        ? CHANGE_ORDERS.find(co => co.costCode === code && addedCOIds.includes(co.id))
+        : null;
+      const coChildLine: SOVLine | null = (matchingCO && groupBy === 'costcode') ? {
+        id: `cost-co-child-${matchingCO.id}`,
+        description: matchingCO.title,
+        budget: 0,
+        previousInvoice: 0,
+        thisInvoice: 0,
+        storedMaterials: 0,
+        retainage: 0,
+        coAdjustment: matchingCO.amount,
+        addedByCO: matchingCO.title,
+        disablePct: true,
+        hideBalance: true,
+        hideBudget: true,
+      } : null;
+
+      if (wasPreviouslyInvoiced) {
+        // ── Previously invoiced scenario (e.g. Masonry) ──
+        // Costs were in a prior application → show in "Previous invoice"
+        const prevChildren = costChildren.map(ch => ({
+          ...ch,
+          previousInvoice: ch.thisInvoice,
+          thisInvoice: 0,
+        }));
+        if (coAmt > 0) {
+          // CO added → in cost code view, CO shows in Approved Changes column so thisInvoice nets to 0
+          // In estimate view, thisInvoice is negative because the CO is a separate line
+          const overage = costAmt - line.budget;
+          const thisInv = groupBy === 'costcode' ? 0 : -overage;
+          return {
+            ...line,
+            previousInvoice: line.previousInvoice + costAmt,
+            thisInvoice: thisInv,
+            coAdjustment: coAmt,
+            isFromCost: true,
+            hideBalance: true,
+            annotation: groupBy === 'costcode' ? undefined : 'A change order covers an overage for this item, so we reduced this amount to prevent invoicing your client twice',
+            children: [...prevChildren, ...(coChildLine ? [coChildLine] : [])],
+          };
+        }
+        return {
+          ...line,
+          previousInvoice: line.previousInvoice + costAmt,
+          thisInvoice: 0,
+          isFromCost: true,
+          children: prevChildren,
+        };
+      } else {
+        // ── Happy path (e.g. Framing) — costs + CO in same invoice ──
+        // This invoice = full cost amount regardless of CO
+        // CO adjusts the budget via approved changes column
+        return {
+          ...line,
+          thisInvoice: line.thisInvoice + costAmt,
+          coAdjustment: coAmt !== 0 ? coAmt : undefined,
+          isFromCost: true,
+          children: [...costChildren, ...(coChildLine ? [coChildLine] : [])],
+        };
+      }
+    }),
+  }));
+
+  // Build approved changes CO lines for estimate view — grouped by CO title
+  const coLines: SOVLine[] = (() => {
+    if (addedCOIds.length === 0) return [];
+    const addedCOs = CHANGE_ORDERS.filter(co => addedCOIds.includes(co.id));
+    const allEstLines = groupsWithCosts.flatMap(g => g.lines);
+    // Group by title
+    const byTitle: Record<string, typeof addedCOs> = {};
+    for (const co of addedCOs) {
+      if (!byTitle[co.title]) byTitle[co.title] = [];
+      byTitle[co.title].push(co);
+    }
+    return Object.entries(byTitle).map(([title, cos]) => {
+      const netAmount = cos.reduce((s, co) => s + co.amount, 0);
+      const children: SOVLine[] = cos.map(co => {
+        const originalLine = allEstLines.find(l => {
+          const m = l.description.match(/^(\d+)/);
+          return m && m[1] === co.costCode;
+        });
+        const traceLabel = originalLine
+          ? originalLine.description
+          : `${co.costCode} - ${co.costType}`;
+        return {
+          id: `co-child-${co.id}`,
+          description: traceLabel,
+          budget: co.amount,
+          previousInvoice: 0,
+          thisInvoice: co.amount,
+          storedMaterials: 0,
+          retainage: 0,
+          addedByCO: title,
+          disablePct: true,
+          hideBalance: true,
+        } as SOVLine;
+      });
+      return {
+        id: `co-line-${cos[0].id}`,
+        description: title,
+        budget: netAmount,
+        previousInvoice: 0,
+        thisInvoice: netAmount,
+        storedMaterials: 0,
+        retainage: 0,
+        addedByCO: title,
+        children,
+      } as SOVLine;
+    });
+  })();
+
+  // Merge CO lines into the Approved changes group if it exists, or create one
+  // In cost code view, CO amounts show inline via coAdjustment — no separate group needed
+  const groups = (() => {
+    const result = [...groupsWithCosts];
+    if (coLines.length > 0 && groupBy !== 'costcode') {
+      const acIdx = result.findIndex(g => g.id === 'approved-changes');
+      if (acIdx >= 0) {
+        result[acIdx] = {
+          ...result[acIdx],
+          lines: [...result[acIdx].lines, ...coLines],
+        };
+      } else {
+        result.push({
+          id: 'approved-changes',
+          label: 'Approved changes',
+          lines: coLines,
+        });
+      }
+    }
+    return result;
+  })();
+
+  // Detect overages — estimate lines where thisInvoice exceeds budget
+  const overages: { costCode: string; label: string; budget: number; invoiced: number; overage: number }[] = [];
+  for (const g of groups) {
+    for (const line of g.lines) {
+      if (!line.isFromCost || !line.budget) continue;
+      const match = line.description.match(/^(\d+)/);
+      const code = match ? match[1] : '';
+      const coAdj = cosByCostCode[code] || 0;
+      const adjustedBudget = line.budget + coAdj;
+      const completed = line.thisInvoice + line.previousInvoice + line.storedMaterials;
+      if (completed > adjustedBudget && adjustedBudget > 0) {
+        overages.push({
+          costCode: code,
+          label: line.description,
+          budget: adjustedBudget,
+          invoiced: completed,
+          overage: completed - adjustedBudget,
+        });
+      }
+    }
+  }
+
+  // Report overages to parent so CO page can use them
+  const overagesKey = overages.map(o => `${o.costCode}:${o.overage}`).join(',');
+  useEffect(() => {
+    onOveragesChange?.(overages);
+  }, [overagesKey]);
+
   const showCOCols = groupBy === 'costcode';
   const totals = grandTotals(groups);
+
+  // Compute which line IDs would be deleted if deleteConfirm is acted on
+  const pendingDeleteIds: Set<string> = (() => {
+    if (!deleteConfirm) return new Set<string>();
+    const ids = new Set<string>();
+
+    // Check if it's a cost line or child of a cost line
+    const allGroupLines = groups.flatMap(g => g.lines);
+    const costLine = allGroupLines.find(l => l.id === deleteConfirm && l.isFromCost);
+    const parentCostLine = !costLine
+      ? allGroupLines.find(l => l.isFromCost && l.children?.some(ch => ch.id === deleteConfirm))
+      : null;
+    const targetCostLine = costLine || parentCostLine;
+    if (targetCostLine) {
+      const match = targetCostLine.description.match(/^(\d+)/);
+      const code = match ? match[1] : '';
+      if (code) {
+        for (const g of groups) {
+          for (const l of g.lines) {
+            if (l.isFromCost) {
+              const m = l.description.match(/^(\d+)/);
+              if (m && m[1] === code) {
+                ids.add(l.id);
+                // Also mark children for pending delete visual
+                if (l.children) l.children.forEach(ch => ids.add(ch.id));
+              }
+            }
+          }
+        }
+      }
+      return ids;
+    }
+
+    // Selection line — find all lines from the same allowance group
+    const rawId = deleteConfirm.replace(/^(adj-|child-)/, '');
+    const estGroups2 = [
+      { items: ESTIMATE_LINES.kitchen },
+      { items: ESTIMATE_LINES.flooring },
+      { items: ESTIMATE_LINES.plumbing },
+      { items: ESTIMATE_LINES.drywall },
+    ];
+    const estGroup = estGroups2.find(g => g.items.some(i => i.id === rawId));
+    if (estGroup) {
+      for (const item of estGroup.items) {
+        ids.add(item.id);
+        ids.add(`adj-${item.id}`);
+        ids.add(`child-${item.id}`);
+      }
+    }
+    ids.add(deleteConfirm);
+    return ids;
+  })();
 
   const toggleGroup = (id: string) => setExpanded(prev => ({ ...prev, [id]: !prev[id] }));
 
@@ -915,6 +1423,41 @@ export default function AIAPayApp() {
 
         {/* Body */}
         <div style={{ padding: '20px 24px' }}>
+          {/* Overage warning banner */}
+          {overages.length > 0 && (
+            <div style={{
+              background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: 8,
+              padding: '14px 18px', marginBottom: 20, display: 'flex', alignItems: 'flex-start', gap: 12,
+            }}>
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0, marginTop: 1 }}>
+                <path d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" stroke="#92400e" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 700, fontSize: 14, color: '#92400e', marginBottom: 4 }}>
+                  This invoice exceeds the budgeted amount
+                </div>
+                {overages.map(o => (
+                  <div key={o.costCode} style={{ fontSize: 13, color: '#92400e', marginBottom: 2 }}>
+                    {o.label} is over budget by <strong>${fmt(o.overage)}</strong>
+                  </div>
+                ))}
+                <div style={{ fontSize: 12, color: '#a16207', marginTop: 6 }}>
+                  We recommend creating a change order for the overage amounts.
+                </div>
+              </div>
+              <button
+                onClick={() => onNavigate?.('change-order')}
+                style={{
+                  flexShrink: 0, padding: '8px 16px', fontSize: 13, fontWeight: 600,
+                  background: '#0065db', color: 'white', border: 'none', borderRadius: 6,
+                  cursor: 'pointer', whiteSpace: 'nowrap',
+                }}
+              >
+                Create change order
+              </button>
+            </div>
+          )}
+
           {/* Progress invoice information */}
           <div style={{ marginBottom: 24 }}>
             <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 12, color: '#0f172a' }}>Progress invoice information</div>
@@ -928,9 +1471,38 @@ export default function AIAPayApp() {
                 <input style={inputStyle} defaultValue="002" readOnly />
               </div>
             </div>
-            <div style={{ display: 'flex', gap: 0, marginBottom: 12 }}>
-              <button onClick={() => setDateTab('date')} style={{ ...tabBtnStyle, background: dateTab === 'date' ? '#0065db' : 'white', color: dateTab === 'date' ? 'white' : '#64748b', fontWeight: dateTab === 'date' ? 600 : 400 }}>Invoice date</button>
-              <button onClick={() => setDateTab('schedule')} style={{ ...tabBtnStyle, background: dateTab === 'schedule' ? '#0065db' : 'white', color: dateTab === 'schedule' ? 'white' : '#64748b', fontWeight: dateTab === 'schedule' ? 600 : 400 }}>Link to schedule item</button>
+            <div style={{ display: 'inline-flex', marginBottom: 12, border: '1px solid #B1B4B5', borderRadius: 5, overflow: 'hidden' }}>
+              <button
+                onClick={() => setDateTab('date')}
+                style={{
+                  padding: '7px 20px', fontSize: 13, fontFamily: 'inherit', cursor: 'pointer',
+                  border: dateTab === 'date' ? '1px solid #0763FB' : '1px solid transparent',
+                  borderRadius: dateTab === 'date' ? 4 : 0,
+                  background: 'white',
+                  color: dateTab === 'date' ? '#004FD6' : '#26292E',
+                  fontWeight: dateTab === 'date' ? 500 : 400,
+                  margin: dateTab === 'date' ? -1 : 0,
+                  position: 'relative', zIndex: dateTab === 'date' ? 1 : 0,
+                }}
+              >
+                Invoice date
+              </button>
+              <div style={{ width: 1, background: dateTab === 'date' ? '#0763FB' : '#B1B4B5', alignSelf: 'stretch' }} />
+              <button
+                onClick={() => setDateTab('schedule')}
+                style={{
+                  padding: '7px 20px', fontSize: 13, fontFamily: 'inherit', cursor: 'pointer',
+                  border: dateTab === 'schedule' ? '1px solid #0763FB' : '1px solid transparent',
+                  borderRadius: dateTab === 'schedule' ? 4 : 0,
+                  background: 'white',
+                  color: dateTab === 'schedule' ? '#004FD6' : '#26292E',
+                  fontWeight: dateTab === 'schedule' ? 500 : 400,
+                  margin: dateTab === 'schedule' ? -1 : 0,
+                  position: 'relative', zIndex: dateTab === 'schedule' ? 1 : 0,
+                }}
+              >
+                Link to schedule item
+              </button>
             </div>
             <div style={{ display: 'flex', gap: 16 }}>
               <div><label style={labelStyle}>Invoice date</label><input type="date" style={inputStyle} /></div>
@@ -945,7 +1517,15 @@ export default function AIAPayApp() {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
               <select
                 value={groupBy}
-                onChange={e => setGroupBy(e.target.value as 'estimate' | 'costcode')}
+                onChange={e => {
+                  const val = e.target.value as 'estimate' | 'costcode';
+                  if (val === 'estimate' && groupBy === 'costcode') {
+                    setShowSwitchViewDialog(true);
+                    e.target.value = 'costcode'; // reset select visually
+                  } else {
+                    setGroupBy(val);
+                  }
+                }}
                 style={{
                   fontSize: 12, padding: '5px 28px 5px 10px', border: '1px solid #e2e8f0', borderRadius: 6,
                   background: 'white', cursor: 'pointer', color: '#334155', fontWeight: 500,
@@ -969,8 +1549,13 @@ export default function AIAPayApp() {
                 {addFromDropdownOpen && (
                   <div className="add-from-dropdown">
                     <button className="add-from-option" onClick={() => { setAddFromDropdownOpen(false); setShowSelectionsModal(true); }}>
-                      <span style={{ fontWeight: 500 }}>Add from selections</span>
-                      <span style={{ fontSize: 11, color: 'var(--g400)' }}>Post-contract overages &amp; option changes</span>
+                      <span style={{ fontWeight: 500 }}>Selections</span>
+                    </button>
+                    <button className="add-from-option" onClick={() => { setAddFromDropdownOpen(false); setShowCostModal(true); }}>
+                      <span style={{ fontWeight: 500 }}>Costs</span>
+                    </button>
+                    <button className="add-from-option" onClick={() => { setAddFromDropdownOpen(false); setShowCOModal(true); }}>
+                      <span style={{ fontWeight: 500 }}>Change orders</span>
                     </button>
                   </div>
                 )}
@@ -1006,8 +1591,18 @@ export default function AIAPayApp() {
                         pctOverrides={pctOverrides}
                         onPctChange={handlePctChange}
                         showCOCols={showCOCols}
-                        onLineClick={setSelectedLineId}
+                        onLineClick={(lineId) => {
+                          // CO lines navigate to the change order page
+                          const allLines = groups.flatMap(g => g.lines);
+                          const line = allLines.find(l => l.id === lineId);
+                          if (line?.addedByCO) {
+                            onNavigate?.('change-order');
+                          } else {
+                            setSelectedLineId(lineId);
+                          }
+                        }}
                         onRemove={handleRemoveLine}
+                        pendingDeleteIds={pendingDeleteIds}
                       />
                     ))}
                   </tbody>
@@ -1054,35 +1649,150 @@ export default function AIAPayApp() {
           </div>
 
           {/* Bottom sections */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, alignItems: 'start' }}>
+            {/* Left column */}
             <div>
-              <div style={{ marginBottom: 20 }}><label style={labelStyle}>Internal Notes</label><textarea style={{ ...inputStyle, minHeight: 60, resize: 'vertical' }} placeholder="Text Here" /></div>
-              <div><label style={labelStyle}>Invoice Description</label><textarea style={{ ...inputStyle, minHeight: 80, resize: 'vertical' }} placeholder="Text Here" />
-                <div style={{ display: 'flex', gap: 4, padding: '6px 8px', border: '1px solid #e2e8f0', borderTop: 'none', borderRadius: '0 0 6px 6px', background: '#f8fafc' }}>
-                  {['Font', 'Size', 'A', 'A', 'B', 'I', 'U', 'S'].map((l, i) => (<span key={i} style={{ fontSize: 11, padding: '2px 6px', color: '#64748b' }}>{l}</span>))}
+              {/* Internal Notes */}
+              <div style={{ marginBottom: 24 }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: '#0f172a', marginBottom: 8 }}>Internal Notes</div>
+                <textarea
+                  style={{
+                    width: '100%', boxSizing: 'border-box', padding: '12px 14px', fontSize: 13,
+                    border: '1px solid #e2e8f0', borderRadius: 6, resize: 'vertical',
+                    minHeight: 72, outline: 'none', color: '#0f172a', fontFamily: 'inherit',
+                  }}
+                  placeholder="Text Here"
+                />
+              </div>
+
+              {/* Invoice Description */}
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: '#0f172a', marginBottom: 8 }}>Invoice Description</div>
+                <textarea
+                  style={{
+                    width: '100%', boxSizing: 'border-box', padding: '12px 14px', fontSize: 13,
+                    border: '1px solid #e2e8f0', borderRadius: '6px 6px 0 0', borderBottom: 'none',
+                    resize: 'vertical', minHeight: 96, outline: 'none', color: '#0f172a', fontFamily: 'inherit',
+                  }}
+                  placeholder="Text Here"
+                />
+                {/* Rich text toolbar */}
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 2, padding: '6px 10px',
+                  border: '1px solid #e2e8f0', borderRadius: '0 0 6px 6px', background: '#fafbfc',
+                }}>
+                  {/* Font dropdown */}
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 8px', fontSize: 12, color: '#26292E', cursor: 'pointer' }}>
+                    Font
+                    <svg width="8" height="8" viewBox="0 0 8 6" fill="none"><path d="M1 1l3 3 3-3" stroke="#64748b" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  </span>
+                  <div style={{ width: 1, height: 16, background: '#e2e8f0', margin: '0 4px' }} />
+                  {/* Size dropdown */}
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 8px', fontSize: 12, color: '#26292E', cursor: 'pointer' }}>
+                    Size
+                    <svg width="8" height="8" viewBox="0 0 8 6" fill="none"><path d="M1 1l3 3 3-3" stroke="#64748b" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  </span>
+                  <div style={{ width: 1, height: 16, background: '#e2e8f0', margin: '0 4px' }} />
+                  {/* Text color */}
+                  <span style={{ padding: '3px 6px', fontSize: 13, cursor: 'pointer', color: '#26292E', display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+                    A<svg width="6" height="6" viewBox="0 0 6 4" fill="none"><path d="M0.5 0.5l2.5 2.5 2.5-2.5" stroke="#64748b" strokeWidth="1" strokeLinecap="round"/></svg>
+                  </span>
+                  {/* Highlight color */}
+                  <span style={{ padding: '3px 6px', fontSize: 13, cursor: 'pointer', background: '#fef3c7', borderRadius: 2, color: '#26292E', display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+                    A<svg width="6" height="6" viewBox="0 0 6 4" fill="none"><path d="M0.5 0.5l2.5 2.5 2.5-2.5" stroke="#64748b" strokeWidth="1" strokeLinecap="round"/></svg>
+                  </span>
+                  <div style={{ width: 1, height: 16, background: '#e2e8f0', margin: '0 6px' }} />
+                  {/* B I U S */}
+                  {['B', 'I', 'U', 'S'].map(c => (
+                    <span key={c} style={{
+                      padding: '3px 7px', fontSize: 13, cursor: 'pointer', color: '#26292E',
+                      fontWeight: c === 'B' ? 700 : 400,
+                      fontStyle: c === 'I' ? 'italic' : 'normal',
+                      textDecoration: c === 'U' ? 'underline' : c === 'S' ? 'line-through' : 'none',
+                    }}>{c}</span>
+                  ))}
+                  <div style={{ width: 1, height: 16, background: '#e2e8f0', margin: '0 6px' }} />
+                  {/* Alignment icons */}
+                  {[
+                    <svg key="al" width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 3h12M2 6.5h8M2 10h12M2 13.5h8" stroke="#64748b" strokeWidth="1.2" strokeLinecap="round"/></svg>,
+                    <svg key="ac" width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 3h12M4 6.5h8M2 10h12M4 13.5h8" stroke="#64748b" strokeWidth="1.2" strokeLinecap="round"/></svg>,
+                    <svg key="ar" width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 3h12M6 6.5h8M2 10h12M6 13.5h8" stroke="#64748b" strokeWidth="1.2" strokeLinecap="round"/></svg>,
+                    <svg key="aj" width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 3h12M2 6.5h12M2 10h12M2 13.5h12" stroke="#64748b" strokeWidth="1.2" strokeLinecap="round"/></svg>,
+                  ].map((icon, i) => (
+                    <span key={i} style={{ padding: '3px 4px', cursor: 'pointer', display: 'inline-flex' }}>{icon}</span>
+                  ))}
+                  <div style={{ width: 1, height: 16, background: '#e2e8f0', margin: '0 6px' }} />
+                  {/* Link icon */}
+                  <span style={{ padding: '3px 4px', cursor: 'pointer', display: 'inline-flex' }}>
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                      <path d="M6.5 9.5l3-3M7 11l-1.5 1.5a2.12 2.12 0 01-3-3L4 8" stroke="#64748b" strokeWidth="1.2" strokeLinecap="round"/>
+                      <path d="M9 5l1.5-1.5a2.12 2.12 0 013 3L12 8" stroke="#64748b" strokeWidth="1.2" strokeLinecap="round"/>
+                    </svg>
+                  </span>
                 </div>
               </div>
             </div>
+
+            {/* Right column */}
             <div>
-              <div style={{ border: '1px solid #e2e8f0', borderRadius: 8, padding: 16, marginBottom: 16 }}>
-                <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>QuickBooks status</div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 8 }}><span style={{ fontWeight: 500 }}>Invoice status</span><span style={{ color: '#94a3b8' }}>Not Invoiced</span></div>
-                <button style={{ fontSize: 12, padding: '5px 12px', border: '1px solid #e2e8f0', borderRadius: 6, background: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, color: '#334155' }}>
-                  <span style={{ width: 16, height: 16, borderRadius: '50%', background: '#22c55e', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, color: 'white', fontWeight: 700 }}>qb</span>Create invoice
+              {/* QuickBooks status */}
+              <div style={{ background: '#f8fafc', borderRadius: 8, padding: '16px 20px', marginBottom: 16 }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: '#0f172a', marginBottom: 12 }}>QuickBooks status</div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13, marginBottom: 12 }}>
+                  <span style={{ fontWeight: 500, color: '#334155' }}>Invoice status</span>
+                  <span style={{ color: '#94a3b8' }}>Not Invoiced</span>
+                </div>
+                <button style={{
+                  fontSize: 13, padding: '7px 14px', border: '1px solid #e2e8f0', borderRadius: 6,
+                  background: 'white', cursor: 'pointer', display: 'inline-flex', alignItems: 'center',
+                  gap: 8, color: '#334155', fontFamily: 'inherit', fontWeight: 500,
+                }}>
+                  <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                    <circle cx="9" cy="9" r="9" fill="#22c55e"/>
+                    <text x="9" y="12.5" textAnchor="middle" fontSize="8" fontWeight="700" fill="white" fontFamily="Arial">qb</text>
+                  </svg>
+                  Create invoice
                 </button>
               </div>
-              <div style={{ border: '1px solid #e2e8f0', borderRadius: 8, padding: 16 }}>
-                <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>Attachments</div>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <button style={{ fontSize: 12, padding: '5px 12px', border: '1px solid #e2e8f0', borderRadius: 6, background: 'white', cursor: 'pointer', color: '#334155' }}>Add</button>
-                  <button style={{ fontSize: 12, padding: '5px 12px', border: '1px solid #e2e8f0', borderRadius: 6, background: 'white', cursor: 'pointer', color: '#334155' }}>Create New Doc</button>
+
+              {/* Attachments */}
+              <div style={{ background: '#f8fafc', borderRadius: 8, padding: '16px 20px' }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: '#0f172a', marginBottom: 12 }}>Attachments</div>
+                <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
+                  <button style={{
+                    fontSize: 13, padding: '6px 14px', border: '1px solid #e2e8f0', borderRadius: 6,
+                    background: 'white', cursor: 'pointer', color: '#334155', fontFamily: 'inherit',
+                  }}>Button</button>
+                  <button style={{
+                    fontSize: 13, padding: '6px 14px', border: '1px solid #e2e8f0', borderRadius: 6,
+                    background: 'white', cursor: 'pointer', color: '#334155', fontFamily: 'inherit',
+                  }}>Button</button>
+                </div>
+                {/* Attachment thumbnails */}
+                <div style={{ display: 'flex', gap: 10 }}>
+                  {[1, 2, 3, 4].map(i => (
+                    <div key={i} style={{
+                      width: 80, height: 100, borderRadius: 6, border: '1px solid #e2e8f0',
+                      background: 'white', overflow: 'hidden', display: 'flex', alignItems: 'center',
+                      justifyContent: 'center', flexShrink: 0,
+                    }}>
+                      <div style={{ width: '100%', height: '100%', background: `linear-gradient(135deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%)`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <svg width="24" height="28" viewBox="0 0 24 28" fill="none">
+                          <rect x="1" y="1" width="22" height="26" rx="2" stroke="#cbd5e1" strokeWidth="1"/>
+                          <path d="M6 8h12M6 12h12M6 16h8" stroke="#cbd5e1" strokeWidth="1" strokeLinecap="round"/>
+                        </svg>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>
           </div>
-          <div style={{ marginTop: 20, borderTop: '1px solid #e2e8f0', paddingTop: 12 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#64748b', cursor: 'pointer' }}>
-              <svg width="10" height="10" viewBox="0 0 10 10"><path d="M2.5 4L5 6.5L7.5 4" stroke="#64748b" strokeWidth="1.2" fill="none" strokeLinecap="round"/></svg>
+
+          {/* Custom Fields */}
+          <div style={{ marginTop: 20, background: '#f8fafc', borderRadius: 8, padding: '12px 16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14, fontWeight: 700, color: '#0f172a', cursor: 'pointer' }}>
+              <svg width="10" height="10" viewBox="0 0 10 10"><path d="M2.5 4L5 6.5L7.5 4" stroke="#0f172a" strokeWidth="1.5" fill="none" strokeLinecap="round"/></svg>
               Custom Fields (0)
             </div>
           </div>
@@ -1658,6 +2368,127 @@ export default function AIAPayApp() {
         jobName="Johnson Residence — Full Remodel"
         addedGroupIds={addedSelectionIds}
       />
+
+      {/* ─── Switch View Confirmation Dialog ─────────────────────────── */}
+      {showSwitchViewDialog && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 1100,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
+          onClick={() => setShowSwitchViewDialog(false)}
+        >
+          <div
+            style={{
+              background: 'white', borderRadius: 12, width: 420, padding: '24px 28px',
+              boxShadow: '0 16px 48px rgba(0,0,0,0.18)',
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div style={{ fontSize: 18, fontWeight: 700, color: '#0f172a', marginBottom: 12 }}>
+              Switch view
+            </div>
+            <div style={{ fontSize: 14, color: '#475569', lineHeight: 1.6, marginBottom: 24 }}>
+              The cost code view is recommended for jobs with selections and allowances so you can track how amounts were reallocated across cost codes.
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <button
+                onClick={() => setShowSwitchViewDialog(false)}
+                style={{
+                  padding: '9px 20px', fontSize: 14, border: '1px solid #e2e8f0', borderRadius: 6,
+                  background: 'white', cursor: 'pointer', color: '#334155', fontFamily: 'inherit',
+                  fontWeight: 500,
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => { setGroupBy('estimate'); setShowSwitchViewDialog(false); }}
+                style={{
+                  padding: '9px 20px', fontSize: 14, border: 'none', borderRadius: 6,
+                  background: '#0065db', color: 'white', cursor: 'pointer', fontFamily: 'inherit',
+                  fontWeight: 600,
+                }}
+              >
+                Group by estimate
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Delete Line Item Confirmation ────────────────────────────── */}
+      {deleteConfirm && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 1100,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
+          onClick={() => setDeleteConfirm(null)}
+        >
+          <div
+            style={{
+              background: 'white', borderRadius: 12, width: 420, padding: '24px 28px',
+              boxShadow: '0 16px 48px rgba(0,0,0,0.18)',
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div style={{ fontSize: 18, fontWeight: 700, color: '#0f172a', marginBottom: 12 }}>
+              Delete line item?
+            </div>
+            <div style={{ fontSize: 14, color: '#475569', lineHeight: 1.6, marginBottom: 24 }}>
+              Are you sure you want to delete the selected bill line items?
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <button
+                onClick={() => setDeleteConfirm(null)}
+                style={{
+                  padding: '9px 20px', fontSize: 14, border: '1px solid #e2e8f0', borderRadius: 6,
+                  background: 'white', cursor: 'pointer', color: '#334155', fontFamily: 'inherit',
+                  fontWeight: 500,
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => { doRemoveLine(deleteConfirm); setDeleteConfirm(null); }}
+                style={{
+                  padding: '9px 20px', fontSize: 14, border: 'none', borderRadius: 6,
+                  background: '#dc2626', color: 'white', cursor: 'pointer', fontFamily: 'inherit',
+                  fontWeight: 600,
+                }}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Add Costs to Invoice Modal ─────────────────────────────── */}
+      {showCostModal && (
+        <AddCostsModal
+          onClose={() => setShowCostModal(false)}
+          addedCostIds={addedCostIds}
+          onAdd={(ids) => {
+            setAddedCostIds(prev => [...prev, ...ids.filter(id => !prev.includes(id))]);
+            setShowCostModal(false);
+          }}
+        />
+      )}
+
+      {/* ─── Add Change Orders Modal ────────────────────────────────── */}
+      {showCOModal && (
+        <AddCOModal
+          onClose={() => setShowCOModal(false)}
+          addedCOIds={addedCOIds}
+          onAdd={(ids) => {
+            setAddedCOIds(prev => [...prev, ...ids.filter(id => !prev.includes(id))]);
+            setShowCOModal(false);
+          }}
+        />
+      )}
+
     </div>
   );
 }
@@ -1996,6 +2827,506 @@ function ClientPreviewModal({ groups, totals, showCOCols: _showCOCols, contracto
   );
 }
 
+// ─── Add Costs Modal ──────────────────────────────────────────────
+
+function AddCostsModal({ onClose, addedCostIds, onAdd }: {
+  onClose: () => void;
+  addedCostIds: string[];
+  onAdd: (ids: string[]) => void;
+}) {
+  const [checked, setChecked] = useState<Record<string, boolean>>({});
+  const [recordType, setRecordType] = useState<Record<string, boolean>>({ Bills: true, 'Time Clock': true, 'QuickBooks Cost': true });
+  const [includeDescs, setIncludeDescs] = useState(true);
+  const [importAttachments, setImportAttachments] = useState(false);
+  const [includeInternalNotes, setIncludeInternalNotes] = useState(true);
+  const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
+
+  const available = COST_RECORDS.filter(c => !addedCostIds.includes(c.id) && recordType[c.costType]);
+  const allChecked = available.length > 0 && available.every(c => checked[c.id]);
+  const checkedItems = available.filter(c => checked[c.id]);
+  const checkedCount = checkedItems.length;
+  const totalCosts = checkedItems.reduce((s, c) => s + c.amount, 0);
+  const markup = 0;
+  const invoiceAmount = totalCosts + markup;
+
+  const toggleAll = () => { const val = !allChecked; const next: Record<string, boolean> = {}; available.forEach(c => { next[c.id] = val; }); setChecked(next); };
+  const toggleExpand = (id: string) => setExpandedRows(prev => ({ ...prev, [id]: !prev[id] }));
+  const expandAll = () => { const e: Record<string, boolean> = {}; available.forEach(c => { e[c.id] = true; }); setExpandedRows(e); };
+  const collapseAll = () => setExpandedRows({});
+  const removeRecordType = (type: string) => setRecordType(prev => ({ ...prev, [type]: false }));
+  const fmtDate2 = (d: string) => new Date(d + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  const attachCounts: Record<string, number> = { 'cost-1': 2, 'cost-2': 2, 'cost-4': 1 };
+
+  // Record type chip configs
+  const chipConfigs = [
+    { key: 'Bills', label: 'Bills', icon: <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="2" y="1.5" width="12" height="13" rx="1.5" stroke="#334155" strokeWidth="1.2"/><path d="M5 5h6M5 8h6M5 11h3" stroke="#334155" strokeWidth="1" strokeLinecap="round"/></svg> },
+    { key: 'Time Clock', label: 'Time Clock', icon: <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="#334155" strokeWidth="1.2"/><path d="M8 5v3.5l2.5 1.5" stroke="#334155" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg> },
+    { key: 'QuickBooks Cost', label: 'QuickBooks Cost', icon: <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="2" y="1.5" width="12" height="13" rx="1.5" stroke="#334155" strokeWidth="1.2"/><path d="M5 5h6M5 8h6M5 11h3" stroke="#334155" strokeWidth="1" strokeLinecap="round"/></svg> },
+  ];
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={onClose}>
+      <div style={{ background: 'white', borderRadius: 12, width: 920, maxWidth: '96vw', maxHeight: '88vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }} onClick={e => e.stopPropagation()}>
+
+        {/* ── Header ── */}
+        <div style={{ padding: '20px 28px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexShrink: 0 }}>
+          <div>
+            <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 2 }}>Job title</div>
+            <div style={{ fontSize: 20, fontWeight: 700, color: '#0f172a' }}>Add costs to invoice</div>
+          </div>
+          <button onClick={onClose} style={{ width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none', background: 'transparent', cursor: 'pointer', borderRadius: 6 }}>
+            <svg width="18" height="18" viewBox="0 0 16 16" fill="none"><path d="M4 4l8 8M12 4l-8 8" stroke="#64748b" strokeWidth="1.5" strokeLinecap="round"/></svg>
+          </button>
+        </div>
+
+        {/* ── Filter bar ── */}
+        <div style={{ padding: '0 28px 20px', display: 'flex', gap: 32, alignItems: 'flex-start', flexWrap: 'wrap', borderBottom: '1px solid #e2e8f0' }}>
+          {/* Date */}
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 6 }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: '#0f172a' }}>Date</span>
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{ color: '#94a3b8' }}><circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1"/><path d="M8 5.5v3M8 10.5v.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
+            </div>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '7px 14px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 13, color: '#334155', background: 'white', cursor: 'pointer' }}>
+              10/1/2025-10/31/2025
+              <svg width="12" height="12" viewBox="0 0 12 8" fill="none"><path d="M1 1.5L6 6.5L11 1.5" stroke="#64748b" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            </div>
+          </div>
+
+          {/* Record type */}
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: '#0f172a', marginBottom: 6 }}>Record type</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              {chipConfigs.filter(t => recordType[t.key]).map(t => (
+                <span key={t.key} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 10px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 13, color: '#334155', background: 'white', whiteSpace: 'nowrap' }}>
+                  {t.icon}
+                  {t.label}
+                  <button onClick={() => removeRecordType(t.key)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', marginLeft: 2, color: '#94a3b8' }}>
+                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M3 3l6 6M9 3l-6 6" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
+                  </button>
+                </span>
+              ))}
+            </div>
+          </div>
+
+          {/* Bill options */}
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: '#0f172a', marginBottom: 6 }}>Bill options</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#334155', cursor: 'pointer' }}>
+                <input type="checkbox" checked={includeDescs} onChange={() => setIncludeDescs(!includeDescs)} style={{ width: 16, height: 16, accentColor: '#0065db' }} />
+                Include line item descriptions &amp; notes
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#334155', cursor: 'pointer' }}>
+                <input type="checkbox" checked={importAttachments} onChange={() => setImportAttachments(!importAttachments)} style={{ width: 16, height: 16, accentColor: '#0065db' }} />
+                Import attachments to invoice
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{ color: '#94a3b8' }}><circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1"/><path d="M8 5.5v3M8 10.5v.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
+              </label>
+            </div>
+          </div>
+
+          {/* Time clock options */}
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: '#0f172a', marginBottom: 6 }}>Time clock options</div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#334155', cursor: 'pointer' }}>
+              <input type="checkbox" checked={includeInternalNotes} onChange={() => setIncludeInternalNotes(!includeInternalNotes)} style={{ width: 16, height: 16, accentColor: '#0065db' }} />
+              Include internal notes
+            </label>
+          </div>
+        </div>
+
+        {/* ── Body ── */}
+        <div style={{ padding: '16px 28px', overflowY: 'auto', flex: 1, background: '#f8fafc' }}>
+          {/* Select all + Expand/Collapse */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, color: '#334155' }}>
+              <input type="checkbox" checked={allChecked} onChange={toggleAll} style={{ width: 16, height: 16, accentColor: '#0065db' }} />
+              Select all
+            </label>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button onClick={expandAll} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 14px', fontSize: 13, border: '1px solid #e2e8f0', borderRadius: 6, background: 'white', cursor: 'pointer', color: '#334155', fontWeight: 500, fontFamily: 'inherit' }}>
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M3 5l5 5 5-5" stroke="#334155" strokeWidth="1.3" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                Expand all
+              </button>
+              <button onClick={collapseAll} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 14px', fontSize: 13, border: '1px solid #e2e8f0', borderRadius: 6, background: 'white', cursor: 'pointer', color: '#334155', fontWeight: 500, fontFamily: 'inherit' }}>
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M3 11l5-5 5 5" stroke="#334155" strokeWidth="1.3" fill="none" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                Collapse all
+              </button>
+            </div>
+          </div>
+
+          {/* Cost rows */}
+          {available.length === 0 ? (
+            <div style={{ padding: 32, textAlign: 'center', color: '#94a3b8', fontSize: 13, background: 'white', border: '1px solid #e2e8f0', borderRadius: 8 }}>No cost records match the current filters.</div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {available.map(cost => {
+                const isChecked = checked[cost.id] || false;
+                const isExpanded = expandedRows[cost.id] || false;
+                const isBill = cost.costType === 'Bills' || cost.costType === 'QuickBooks Cost';
+                const isTC = cost.costType === 'Time Clock';
+                const attCount = attachCounts[cost.id] || 0;
+
+                return (
+                  <div key={cost.id} style={{ background: 'white', borderRadius: 8, border: '1px solid #e2e8f0', overflow: 'hidden' }}>
+                    {/* Row */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 18px', cursor: 'pointer' }}
+                      onClick={() => setChecked(prev => ({ ...prev, [cost.id]: !prev[cost.id] }))}
+                    >
+                      <input type="checkbox" checked={isChecked} onChange={() => {}} style={{ width: 16, height: 16, accentColor: '#0065db', cursor: 'pointer', flexShrink: 0 }} />
+                      <button onClick={(e) => { e.stopPropagation(); toggleExpand(cost.id); }} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, display: 'flex', alignItems: 'center', color: '#64748b', flexShrink: 0 }}>
+                        <svg width="14" height="14" viewBox="0 0 14 14" style={{ transform: isExpanded ? 'rotate(90deg)' : 'rotate(0)', transition: 'transform 0.15s' }}>
+                          <path d="M5 3l4 4-4 4" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      </button>
+
+                      {/* Title + subtitle */}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontWeight: 600, fontSize: 14, color: '#0f172a' }}>{cost.vendor}</div>
+                        {cost.description && <div style={{ fontSize: 12, color: '#64748b', marginTop: 1 }}>{cost.description}</div>}
+                      </div>
+
+                      {/* Attachments */}
+                      {attCount > 0 && (
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 12, color: '#64748b', flexShrink: 0 }}>
+                          <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M14 8l-5.5 5.5a3.54 3.54 0 01-5-5L9 3a2.36 2.36 0 013.33 3.33L6.83 11.83a1.18 1.18 0 01-1.66-1.66L10.5 4.83" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                          {attCount}
+                        </span>
+                      )}
+
+                      {/* Date */}
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 13, color: '#64748b', flexShrink: 0, whiteSpace: 'nowrap' }}>
+                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="2" y="2.5" width="12" height="11" rx="1.5" stroke="currentColor" strokeWidth="1.1"/><path d="M2 6h12M5.5 1v3M10.5 1v3" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/></svg>
+                        {isTC ? `Shift dates: ${fmtDate2(cost.date)}` : `Invoice date: ${fmtDate2(cost.date)}`}
+                      </span>
+
+                      {/* Amount + type icon */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, whiteSpace: 'nowrap' }}>
+                        <span style={{ fontSize: 14, color: '#0f172a' }}>
+                          {isBill ? 'Bill total: ' : 'Time Clock total: '}
+                          <strong>${fmt(cost.amount)}</strong>
+                        </span>
+                        {isBill ? (
+                          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style={{ color: '#94a3b8' }}><rect x="2" y="1.5" width="12" height="13" rx="1.5" stroke="currentColor" strokeWidth="1.1"/><path d="M5 5h6M5 8h6M5 11h3" stroke="currentColor" strokeWidth="1" strokeLinecap="round"/></svg>
+                        ) : (
+                          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style={{ color: '#94a3b8' }}><circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.1"/><path d="M8 5v3.5l2.5 1.5" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Expanded table */}
+                    {isExpanded && (
+                      <div style={{ borderTop: '1px solid #e2e8f0', padding: '0 18px 12px 54px' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                          <thead>
+                            <tr style={{ borderBottom: '1px solid #e2e8f0' }}>
+                              {['Item', 'Cost code', 'Cost types'].map(h => (
+                                <th key={h} style={{ padding: '8px 12px 8px 0', textAlign: 'left', fontSize: 12, fontWeight: 500, color: '#64748b' }}>{h}</th>
+                              ))}
+                              {['Builder cost', '% Markup', 'Invoice amount'].map(h => (
+                                <th key={h} style={{ padding: '8px 0 8px 12px', textAlign: 'right', fontSize: 12, fontWeight: 500, color: '#64748b' }}>{h}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <tr>
+                              <td style={{ padding: '10px 12px 10px 0', color: '#334155' }}>{cost.vendor}</td>
+                              <td style={{ padding: '10px 12px 10px 0', color: '#334155' }}>{cost.costCode === '4100' ? '4100 - Stone Masonry' : cost.costCode === '6100' ? '3100 - Framing (C)' : cost.costCode}</td>
+                              <td style={{ padding: '10px 12px 10px 0', color: '#64748b' }}>None</td>
+                              <td style={{ padding: '10px 0 10px 12px', textAlign: 'right', color: '#334155' }}>${fmt(cost.amount)}</td>
+                              <td style={{ padding: '10px 0 10px 12px', textAlign: 'right' }}>
+                                <div style={{ display: 'inline-flex', alignItems: 'center', border: '1px solid #e2e8f0', borderRadius: 4, overflow: 'hidden' }}>
+                                  <input type="text" defaultValue="0.00" style={{ width: 48, padding: '4px 6px', fontSize: 12, border: 'none', outline: 'none', textAlign: 'right', fontFamily: 'inherit' }} />
+                                  <span style={{ padding: '4px 6px', fontSize: 12, color: '#64748b', borderLeft: '1px solid #e2e8f0', background: '#f8fafc' }}>%</span>
+                                </div>
+                              </td>
+                              <td style={{ padding: '10px 0 10px 12px', textAlign: 'right', fontWeight: 500, color: '#0f172a' }}>${fmt(cost.amount)}</td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* ── Footer ── */}
+        <div style={{ padding: '16px 28px', background: 'white', borderTop: '1px solid #e2e8f0', borderRadius: '0 0 12px 12px', display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 20 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ fontSize: 12, color: '#64748b' }}>Total costs</div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: '#0f172a' }}>${fmt(totalCosts)}</div>
+            </div>
+            <span style={{ fontSize: 18, color: '#94a3b8', fontWeight: 300, lineHeight: 1 }}>+</span>
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ fontSize: 12, color: '#64748b' }}>Markup</div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: '#0f172a' }}>${fmt(markup)}</div>
+            </div>
+            <span style={{ fontSize: 18, color: '#94a3b8', fontWeight: 300, lineHeight: 1 }}>=</span>
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ fontSize: 12, color: '#64748b' }}>Invoice amount</div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: '#0f172a' }}>${fmt(invoiceAmount)}</div>
+            </div>
+          </div>
+          <button
+            onClick={() => { const ids = available.filter(c => checked[c.id]).map(c => c.id); if (ids.length > 0) onAdd(ids); }}
+            disabled={checkedCount === 0}
+            style={{ padding: '10px 24px', fontSize: 14, border: 'none', borderRadius: 6, fontWeight: 600, background: checkedCount > 0 ? '#0065db' : '#cbd5e1', color: 'white', cursor: checkedCount > 0 ? 'pointer' : 'not-allowed' }}
+          >
+            Add costs to invoice
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Add Change Orders Modal ──────────────────────────────────────
+
+function AddCOModal({ onClose, addedCOIds, onAdd }: {
+  onClose: () => void;
+  addedCOIds: string[];
+  onAdd: (ids: string[]) => void;
+}) {
+  const [checked, setChecked] = useState<Record<string, boolean>>({});
+  const [includeDescs, setIncludeDescs] = useState(true);
+  const [adjustPct, setAdjustPct] = useState('100.00');
+  const [linePcts, setLinePcts] = useState<Record<string, number>>({});
+  const available = CHANGE_ORDERS.filter(co => co.status === 'approved' && !addedCOIds.includes(co.id));
+  const checkedCount = available.filter(co => checked[co.id]).length;
+
+  const applyAll = () => {
+    const pct = parseFloat(adjustPct) || 0;
+    const updates: Record<string, number> = {};
+    available.forEach(co => { updates[co.id] = pct; });
+    setLinePcts(updates);
+  };
+
+  const getLineAmt = (co: ChangeOrderRecord) => {
+    const pct = linePcts[co.id] ?? 0;
+    return co.amount * pct / 100;
+  };
+
+  const invoiceSubtotal = available
+    .filter(co => checked[co.id])
+    .reduce((s, co) => s + getLineAmt(co), 0);
+
+  // Select all
+  const allChecked = available.length > 0 && available.every(co => checked[co.id]);
+  const toggleAll = () => {
+    const val = !allChecked;
+    const next: Record<string, boolean> = {};
+    available.forEach(co => { next[co.id] = val; });
+    setChecked(next);
+  };
+
+  return (
+    <div
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+      onClick={onClose}
+    >
+      <div
+        style={{ background: 'white', borderRadius: 12, width: 1020, maxWidth: '96vw', maxHeight: '88vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div style={{ padding: '20px 28px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexShrink: 0 }}>
+          <div style={{ fontSize: 20, fontWeight: 700, color: '#0f172a' }}>Add line items to invoice</div>
+          <button onClick={onClose} style={{ width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none', background: 'transparent', cursor: 'pointer', borderRadius: 6 }}>
+            <svg width="18" height="18" viewBox="0 0 16 16" fill="none"><path d="M4 4l8 8M12 4l-8 8" stroke="#64748b" strokeWidth="1.5" strokeLinecap="round"/></svg>
+          </button>
+        </div>
+
+        {/* Body */}
+        <div style={{ flex: 1, overflowY: 'auto' }}>
+          <div style={{ background: '#f8fafc', margin: '0 28px', borderRadius: 8, padding: '20px 24px' }}>
+            {/* Section banner */}
+            <div style={{ fontSize: 15, fontWeight: 700, color: '#0f172a', marginBottom: 8 }}>Change Order Line Items</div>
+            <div style={{ fontSize: 13, color: '#64748b', marginBottom: 14 }}>
+              Select any line items to add to the invoice and indicate the percentage or amount to invoice.
+            </div>
+
+            {/* Include descriptions checkbox */}
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#334155', cursor: 'pointer', marginBottom: 16 }}>
+              <input type="checkbox" checked={includeDescs} onChange={() => setIncludeDescs(!includeDescs)} style={{ width: 16, height: 16, accentColor: '#0065db' }} />
+              Include line item descriptions &amp; notes
+            </label>
+
+            {/* Adjust Invoice % */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: '#0f172a' }}>Adjust Invoice %</span>
+              <div style={{ display: 'flex', alignItems: 'center', border: '1px solid #e2e8f0', borderRadius: 6, overflow: 'hidden', background: 'white' }}>
+                <input
+                  type="text"
+                  value={adjustPct}
+                  onChange={e => setAdjustPct(e.target.value)}
+                  style={{
+                    width: 64, padding: '6px 10px', fontSize: 13, border: 'none', outline: 'none',
+                    textAlign: 'right', color: '#0f172a', fontFamily: 'inherit',
+                  }}
+                />
+                <span style={{ padding: '6px 8px', fontSize: 13, color: '#64748b', borderLeft: '1px solid #e2e8f0', background: '#f8fafc' }}>%</span>
+              </div>
+              <button
+                onClick={applyAll}
+                style={{
+                  padding: '6px 14px', fontSize: 13, border: '1px solid #e2e8f0', borderRadius: 6,
+                  background: 'white', cursor: 'pointer', color: '#334155', fontFamily: 'inherit',
+                }}
+              >
+                Apply all
+              </button>
+            </div>
+
+            {available.length === 0 ? (
+              <div style={{ padding: 24, textAlign: 'center', color: '#94a3b8', fontSize: 13, background: 'white', borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                {addedCOIds.length > 0 ? 'All available change orders have been added.' : 'No approved change orders available.'}
+              </div>
+            ) : (
+              <>
+                {/* Table */}
+                <div style={{ background: 'white', borderRadius: 8, border: '1px solid #e2e8f0', overflow: 'hidden' }}>
+                  {/* Table header */}
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: '36px 1.2fr 140px 90px 100px 1fr 110px 130px',
+                    padding: '10px 16px', borderBottom: '1px solid #e2e8f0',
+                    fontSize: 12, fontWeight: 500, color: '#64748b', gap: 12, alignItems: 'center',
+                  }}>
+                    <input type="checkbox" checked={allChecked} onChange={toggleAll} style={{ width: 16, height: 16, accentColor: '#0065db', cursor: 'pointer' }} />
+                    <span>Title</span>
+                    <span>Cost code</span>
+                    <span>Cost types</span>
+                    <span style={{ textAlign: 'right' }}>Client price</span>
+                    <span>Invoice overview</span>
+                    <span style={{ textAlign: 'right' }}>New invoice %</span>
+                    <span style={{ textAlign: 'right' }}>New invoice amount</span>
+                  </div>
+
+                  {available.map(co => {
+                    const isChecked = checked[co.id] || false;
+                    const pct = linePcts[co.id] ?? 0;
+                    const lineAmt = getLineAmt(co);
+                    const overviewPct = Math.min(pct, 100);
+
+                    return (
+                      <div key={co.id}>
+                        {/* CO group row */}
+                        <div
+                          style={{
+                            display: 'grid',
+                            gridTemplateColumns: '36px 1.2fr 140px 90px 100px 1fr 110px 130px',
+                            padding: '14px 16px', gap: 12, alignItems: 'center',
+                            borderBottom: '1px solid #f1f5f9', cursor: 'pointer',
+                          }}
+                          onClick={() => setChecked(prev => ({ ...prev, [co.id]: !prev[co.id] }))}
+                        >
+                          <input type="checkbox" checked={isChecked} onChange={() => {}} style={{ width: 16, height: 16, accentColor: '#0065db', cursor: 'pointer' }} />
+                          <span style={{ fontWeight: 700, fontSize: 13, color: '#0f172a' }}>{co.title}</span>
+                          <span />
+                          <span />
+                          <span style={{ textAlign: 'right', fontWeight: 600, fontSize: 13 }}>${fmt(co.amount)}</span>
+                          <span />
+                          <span />
+                          <span />
+                        </div>
+
+                        {/* CO child line */}
+                        <div style={{
+                          display: 'grid',
+                          gridTemplateColumns: '36px 1.2fr 140px 90px 100px 1fr 110px 130px',
+                          padding: '12px 16px', gap: 12, alignItems: 'center',
+                          borderBottom: '1px solid #f1f5f9', fontSize: 13,
+                        }}>
+                          <input type="checkbox" checked={isChecked} onChange={() => setChecked(prev => ({ ...prev, [co.id]: !prev[co.id] }))} style={{ width: 16, height: 16, accentColor: '#0065db', cursor: 'pointer' }} />
+                          <span style={{ color: '#334155', paddingLeft: 8 }}>--</span>
+                          <span style={{ color: '#334155' }}>Buildertrend Flat Rate</span>
+                          <span style={{ color: '#64748b' }}>None</span>
+                          <span style={{ textAlign: 'right', color: '#334155' }}>${fmt(co.amount)}</span>
+                          {/* Invoice overview progress bar */}
+                          <div style={{ padding: '0 4px' }}>
+                            <div style={{ height: 8, borderRadius: 4, background: '#e2e8f0', overflow: 'hidden' }}>
+                              <div style={{
+                                height: '100%', borderRadius: 4, width: `${overviewPct}%`,
+                                background: overviewPct > 0 ? '#94a3b8' : 'transparent',
+                                transition: 'width 0.2s',
+                              }} />
+                            </div>
+                          </div>
+                          {/* New invoice % */}
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', border: '1px solid #e2e8f0', borderRadius: 4, overflow: 'hidden', background: 'white' }}>
+                              <input
+                                type="number"
+                                min={0}
+                                max={100}
+                                value={pct}
+                                onChange={e => setLinePcts(prev => ({ ...prev, [co.id]: Math.max(0, Math.min(100, Number(e.target.value))) }))}
+                                style={{
+                                  width: 52, padding: '5px 6px', fontSize: 12, border: 'none', outline: 'none',
+                                  textAlign: 'right', color: '#0f172a', fontFamily: 'inherit',
+                                }}
+                              />
+                              <span style={{ padding: '5px 6px', fontSize: 12, color: '#64748b', borderLeft: '1px solid #e2e8f0', background: '#f8fafc' }}>%</span>
+                            </div>
+                          </div>
+                          {/* New invoice amount */}
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', border: '1px solid #e2e8f0', borderRadius: 4, overflow: 'hidden', background: 'white' }}>
+                              <span style={{ padding: '5px 6px', fontSize: 12, color: '#64748b', borderRight: '1px solid #e2e8f0', background: '#f8fafc' }}>$</span>
+                              <input
+                                type="text"
+                                value={fmt(lineAmt)}
+                                readOnly
+                                style={{
+                                  width: 68, padding: '5px 6px', fontSize: 12, border: 'none', outline: 'none',
+                                  textAlign: 'right', color: '#0f172a', fontFamily: 'inherit', background: 'white',
+                                }}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Invoice subtotal */}
+                <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 24, padding: '14px 14px 4px', fontSize: 13 }}>
+                  <span style={{ fontWeight: 600, color: '#334155' }}>Invoice subtotal</span>
+                  <span style={{ fontWeight: 700, color: '#0f172a', minWidth: 80, textAlign: 'right' }}>${fmt(invoiceSubtotal)}</span>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div style={{ padding: '16px 28px', display: 'flex', justifyContent: 'flex-end', flexShrink: 0 }}>
+          <button
+            onClick={() => {
+              const ids = available.filter(co => checked[co.id]).map(co => co.id);
+              if (ids.length > 0) onAdd(ids);
+            }}
+            disabled={checkedCount === 0}
+            style={{
+              padding: '10px 24px', fontSize: 14, border: 'none', borderRadius: 6, fontWeight: 600,
+              background: checkedCount > 0 ? '#0065db' : '#cbd5e1',
+              color: 'white',
+              cursor: checkedCount > 0 ? 'pointer' : 'not-allowed',
+            }}
+          >
+            Add line items to invoice
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Styles ────────────────────────────────────────────────────────
 
 const pinnedColStyle: React.CSSProperties = {
@@ -2028,10 +3359,6 @@ const inputStyle: React.CSSProperties = {
 const iconBtnStyle: React.CSSProperties = {
   width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center',
   border: 'none', background: 'transparent', cursor: 'pointer', borderRadius: 6,
-};
-
-const tabBtnStyle: React.CSSProperties = {
-  padding: '6px 14px', fontSize: 12, border: '1px solid #e2e8f0', borderRadius: '6px 6px 0 0', cursor: 'pointer',
 };
 
 const footerBtnStyle: React.CSSProperties = {

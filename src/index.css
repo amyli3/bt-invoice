@@ -1482,6 +1482,7 @@ table { width: 100%; border-collapse: collapse; }
 /* ===== Estimate Page ===== */
 /* Progress invoice row hover delete */
 .aia-sov-row:hover .aia-row-delete { opacity: 1 !important; }
+.aia-tooltip-cell:hover .aia-tooltip-popup { opacity: 1 !important; pointer-events: auto !important; }
 
 /* Selection detail modal */
 .sp-modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 1000; display: flex; align-items: center; justify-content: center; }
@@ -1910,6 +1911,95 @@ table { width: 100%; border-collapse: collapse; }
 /* Toast */
 .cs-toast { position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%); background: #202227; color: #fff; font-size: 14px; padding: 12px 20px; border-radius: 10px; display: flex; align-items: center; gap: 8px; box-shadow: 0 4px 16px rgba(0,0,0,0.15); z-index: 100; animation: cs-toast-in 0.3s ease; }
 @keyframes cs-toast-in { from { opacity: 0; transform: translateX(-50%) translateY(10px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
+
+/* ── Forecast bar (integrated into hero stats) ── */
+.cs-fbar { width: 100%; }
+.cs-fbar-row { display: flex; align-items: center; gap: 12px; justify-content: center; flex-wrap: wrap; }
+.cs-fbar-item { text-align: center; min-width: 100px; }
+.cs-fbar-label { font-size: 11px; font-weight: 500; color: #8E96A0; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+.cs-fbar-value { font-size: 18px; font-weight: 700; color: #1A1D23; }
+.cs-fbar-value.cs-over { color: #B5254C; }
+.cs-fbar-value.cs-under { color: #057E4B; }
+.cs-fbar-arrow { color: #C7D0D9; display: flex; align-items: center; padding-top: 14px; }
+.cs-fbar-item-projected { background: #EBF2FF; border-radius: 10px; padding: 8px 20px; }
+.cs-fbar-value-projected { color: #004FD6; font-size: 22px; }
+.cs-fbar-progress { text-align: center; min-width: 60px; margin-left: 8px; padding-top: 10px; }
+.cs-fbar-progress-label { font-size: 16px; font-weight: 700; color: #1A1D23; margin-bottom: 1px; }
+.cs-fbar-progress-sub { font-size: 11px; color: #8E96A0; margin-bottom: 6px; }
+.cs-fbar-progress-bar { width: 60px; height: 4px; background: #E8ECF1; border-radius: 2px; overflow: hidden; margin: 0 auto; }
+.cs-fbar-progress-fill { height: 100%; background: #057E4B; border-radius: 2px; transition: width 0.3s ease; }
+/* High-end callout */
+.cs-fbar-highend { display: flex; align-items: center; gap: 8px; margin-top: 16px; padding: 10px 16px; background: #FFF8F0; border: 1px solid #F5DEC0; border-radius: 8px; font-size: 12px; color: #854D00; line-height: 1.4; }
+.cs-fbar-highend strong { font-weight: 700; color: #6B3D00; }
+@media (max-width: 600px) {
+  .cs-fbar-row { gap: 8px; }
+  .cs-fbar-value { font-size: 15px; }
+  .cs-fbar-value-projected { font-size: 18px; }
+  .cs-fbar-arrow { display: none; }
+  .cs-fbar-headline-left .cs-fbar-value-projected { font-size: 22px; }
+  .cs-fbar-toggle-text { font-size: 12px; }
+  .cs-review-modal { padding: 20px; }
+}
+
+/* Inline forecast on option rows */
+.cs-forecast-inline { display: block; font-size: 11px; font-weight: 500; color: #8E96A0; margin-top: 2px; white-space: nowrap; }
+.cs-forecast-inline-up { color: #B5254C; }
+.cs-forecast-inline-down { color: #057E4B; }
+/* Forecast on grid card */
+.cs-forecast-card-impact { display: flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 500; color: #8E96A0; padding: 4px 0; }
+.cs-forecast-card-impact.cs-forecast-inline-up { color: #B5254C; }
+.cs-forecast-card-impact.cs-forecast-inline-down { color: #057E4B; }
+
+/* ── Collapsible forecast headline ── */
+.cs-fbar-headline { display: flex; align-items: center; justify-content: space-between; cursor: pointer; padding: 4px 0; }
+.cs-fbar-headline-left { display: flex; flex-direction: column; gap: 4px; }
+.cs-fbar-headline-left .cs-fbar-value-projected { font-size: 28px; color: #004FD6; font-weight: 800; }
+.cs-fbar-toggle { display: flex; align-items: center; gap: 6px; background: none; border: none; cursor: pointer; color: #004FD6; font-size: 13px; font-weight: 500; padding: 6px 12px; border-radius: 8px; transition: background 0.15s; }
+.cs-fbar-toggle:hover { background: #EBF2FF; }
+.cs-fbar-toggle-text { white-space: nowrap; }
+.cs-fbar-breakdown { margin-top: 16px; padding-top: 16px; border-top: 1px solid #EAEEF5; animation: cs-fbar-expand 0.2s ease; }
+@keyframes cs-fbar-expand { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
+
+/* ── Sticky sub-group headers ── */
+.cs-opt-group-header-sticky { position: sticky; top: 0; z-index: 2; background: #fff; padding: 8px 2px; margin: 0 -2px 8px; border-bottom: 1px solid #F1F4FA; }
+.cs-opt-group-header-sticky .cs-opt-group-name { font-size: 13px; font-weight: 600; color: #1A1D23; }
+.cs-opt-group-header-sticky .cs-opt-group-hint { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600; color: #004FD6; background: #EBF2FF; padding: 3px 10px; border-radius: 12px; }
+
+/* ── Prototype: enhanced sub-group hierarchy ── */
+.cs-section-desc { font-size: 13px; color: #6B7280; line-height: 1.5; margin: 0 0 16px; padding: 0; }
+.cs-opt-group-proto { background: #F8F9FB; border-radius: 10px; padding: 12px; margin-bottom: 16px; }
+.cs-opt-group-proto:last-child { margin-bottom: 0; }
+.cs-opt-group-header-proto { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; padding: 0; }
+.cs-opt-group-header-proto .cs-opt-group-name { font-size: 14px; font-weight: 700; color: #1A1D23; }
+.cs-opt-group-count { font-size: 12px; color: #6B7280; font-weight: 500; }
+
+/* ── Request review status ── */
+.cs-request-review-status { display: flex; align-items: flex-start; gap: 8px; font-size: 12px; color: #004FD6; background: #EBF2FF; padding: 8px 12px; border-radius: 8px; margin-bottom: 8px; line-height: 1.4; }
+.cs-request-review-status svg { flex-shrink: 0; margin-top: 1px; }
+.cs-request-pending-badge { display: inline-flex; align-items: center; gap: 4px; }
+
+/* ── Review modal ── */
+.cs-review-modal { background: #fff; border-radius: 16px; padding: 28px; max-width: 560px; width: 90vw; max-height: 80vh; overflow-y: auto; position: relative; }
+.cs-review-modal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+.cs-review-modal-title { font-size: 20px; font-weight: 700; color: #1A1D23; margin: 0; }
+.cs-review-modal-close { background: none; border: none; cursor: pointer; color: #8E96A0; padding: 4px; border-radius: 6px; display: flex; align-items: center; justify-content: center; }
+.cs-review-modal-close:hover { background: #F1F4FA; color: #4E555F; }
+.cs-review-modal-sub { font-size: 14px; color: #8E96A0; margin: 0 0 20px; }
+.cs-review-modal-list { display: flex; flex-direction: column; gap: 16px; }
+.cs-review-modal-group { border: 1px solid #EAEEF5; border-radius: 12px; padding: 16px; }
+.cs-review-modal-group-name { font-size: 14px; font-weight: 600; color: #1A1D23; margin-bottom: 12px; }
+.cs-review-modal-items { display: flex; flex-direction: column; gap: 8px; }
+.cs-review-modal-item { display: flex; align-items: center; gap: 10px; }
+.cs-review-modal-item-thumb { width: 36px; height: 36px; border-radius: 6px; background: #F1F4FA center/cover no-repeat; flex-shrink: 0; }
+.cs-review-modal-item-name { flex: 1; font-size: 13px; color: #1A1D23; }
+.cs-review-modal-item-price { font-size: 13px; font-weight: 600; color: #1A1D23; }
+.cs-review-modal-summary { display: flex; justify-content: space-between; margin-top: 12px; padding-top: 10px; border-top: 1px solid #F1F4FA; font-size: 12px; color: #8E96A0; }
+.cs-review-modal-actions { display: flex; gap: 8px; margin-top: 24px; justify-content: flex-end; }
+
+/* ── Empty filter state ── */
+.cs-empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 48px 24px; text-align: center; }
+.cs-empty-title { font-size: 16px; font-weight: 600; color: #1A1D23; margin-top: 16px; }
+.cs-empty-desc { font-size: 14px; color: #8E96A0; margin-top: 4px; }
 
 /* Zoom button on swipe card */
 .sw-zoom-btn { position: absolute; bottom: 12px; right: 12px; width: 36px; height: 36px; border-radius: 50%; background: rgba(0,0,0,0.5); border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; opacity: 0.7; transition: opacity 0.15s; }

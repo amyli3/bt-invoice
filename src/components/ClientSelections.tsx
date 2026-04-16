@@ -19,7 +19,7 @@ const selectionGroups = [
     ],
   },
   {
-    id: 'sel-2', name: 'Main floor flooring', allowance: 0, dueDate: '2026-04-05', status: 'overdue' as const,
+    id: 'sel-2', name: 'Main floor flooring', allowance: 4000, dueDate: '2026-04-05', status: 'overdue' as const,
     description: 'Select your flooring for the living room, hallway, and dining area. 800 sq ft total.',
     options: [
       { id: 'o5', name: 'Shaw Natural Classics — White Oak', vendor: 'Shaw Floors', price: 5800, image: 'https://shawfloors.widen.net/content/maw31txwtx/jpeg/sw774_01147_main', selected: false, group: 'Flooring', tier: 'upgrade' as const },
@@ -68,7 +68,7 @@ const fmt = (n: number) => n.toLocaleString('en-US', { minimumFractionDigits: 2,
 
 function daysUntil(dateStr: string) {
   const diff = Math.ceil((new Date(dateStr).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
-  if (diff < 0) return `${Math.abs(diff)} days overdue — overdue choices can delay project completion and may increase costs`;
+  if (diff < 0) return `${Math.abs(diff)} days overdue`;
   if (diff === 0) return 'Due today';
   if (diff === 1) return 'Due tomorrow';
   return `${diff} days`;
@@ -249,14 +249,15 @@ function SwipeMode({ group, onDone, onToggle, onViewImage }: {
 }
 
 /* ── Main Component ── */
-type Persona = 'spec' | 'custom';
-const personaConfig: Record<Persona, { label: string; jobName: string; heroTitle: string; heroDesc: string; showAllowance: boolean; showTiers: boolean; showDelta: boolean; pricingLabel: string }> = {
-  custom: { label: 'Custom / Remodel', jobName: 'Johnson Residence — Full Remodel', heroTitle: 'Your selections', heroDesc: 'Review and approve materials and finishes for your project. Pricing is shown per item.', showAllowance: true, showTiers: false, showDelta: false, pricingLabel: 'Approved price' },
-  spec: { label: 'Spec / Production', jobName: 'Lot 14 — Oakwood Estates', heroTitle: 'Your selections', heroDesc: 'Choose your finishes, fixtures, and materials. Your allowance budget is shown for each category.', showAllowance: true, showTiers: false, showDelta: true, pricingLabel: 'Additional cost' },
+type Persona = 'spec' | 'custom' | 'prototype';
+const personaConfig: Record<Persona, { label: string; jobName: string; heroTitle: string; heroDesc: string; showAllowance: boolean; showTiers: boolean; showDelta: boolean; showForecast: boolean; pricingLabel: string }> = {
+  custom: { label: 'Custom / Remodel', jobName: 'Johnson Residence — Full Remodel', heroTitle: 'Your selections', heroDesc: 'Review and approve materials and finishes for your project. Pricing is shown per item.', showAllowance: true, showTiers: false, showDelta: false, showForecast: false, pricingLabel: 'Approved price' },
+  spec: { label: 'Spec / Production', jobName: 'Lot 14 — Oakwood Estates', heroTitle: 'Your selections', heroDesc: 'Choose your finishes, fixtures, and materials. Your allowance budget is shown for each category.', showAllowance: true, showTiers: false, showDelta: true, showForecast: false, pricingLabel: 'Additional cost' },
+  prototype: { label: 'Prototype', jobName: 'Johnson Residence — Full Remodel', heroTitle: 'Your selections', heroDesc: 'Review and approve materials and finishes for your project. Your allowance budget is shown for each category.', showAllowance: true, showTiers: false, showDelta: false, showForecast: true, pricingLabel: 'Approved price' },
 };
 
 export default function ClientSelections() {
-  const [persona, setPersona] = useState<Persona>('custom');
+  const [persona, setPersona] = useState<Persona>('prototype');
   const pc = personaConfig[persona];
   const [viewMode, setViewMode] = useState<'grid' | 'compact'>('compact');
   const [expandedId] = useState<string | null>(null);
@@ -278,6 +279,8 @@ export default function ClientSelections() {
   const [, setRequestedGroups] = useState<Set<string>>(new Set());
   const [requests, setRequests] = useState<{groupId: string; text: string; link: string; image: string | null; autoApprove: boolean; date: string}[]>([]);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
+  const [forecastExpanded, setForecastExpanded] = useState(false);
+  const [showReviewModal, setShowReviewModal] = useState(false);
 
   const showToast = (msg: string) => {
     setToastMsg(msg);
@@ -311,41 +314,40 @@ export default function ClientSelections() {
       const isSelecting = !targetOpt.selected;
       const optGroup = (targetOpt as any).group;
 
-      // If selecting and option has a group with multiple items, auto-decline siblings
-      if (isSelecting && optGroup) {
-        const siblings = g.options.filter(o => (o as any).group === optGroup && o.id !== optionId);
-        const hasGroupSiblings = siblings.length > 0;
-        if (hasGroupSiblings) {
-          // Auto-decline siblings
-          const newDeclined = new Set(declinedOptions);
-          siblings.forEach(sib => newDeclined.add(sib.id));
-          setDeclinedOptions(newDeclined);
-          const declinedNames = siblings.map(s => s.name);
-          if (declinedNames.length > 0) showToast(`${declinedNames.join(', ')} auto-declined`);
-          // Deselect siblings
-          return { ...g, options: g.options.map(o => {
-            if (o.id === optionId) return { ...o, selected: true };
-            if ((o as any).group === optGroup && o.id !== optionId) return { ...o, selected: false };
-            return o;
-          })};
+      // Auto-decline siblings only for non-prototype personas (prototype allows multi-select)
+      if (persona !== 'prototype') {
+        if (isSelecting && optGroup) {
+          const siblings = g.options.filter(o => (o as any).group === optGroup && o.id !== optionId);
+          const hasGroupSiblings = siblings.length > 0;
+          if (hasGroupSiblings) {
+            const newDeclined = new Set(declinedOptions);
+            siblings.forEach(sib => newDeclined.add(sib.id));
+            setDeclinedOptions(newDeclined);
+            const declinedNames = siblings.map(s => s.name);
+            if (declinedNames.length > 0) showToast(`${declinedNames.join(', ')} auto-declined`);
+            return { ...g, options: g.options.map(o => {
+              if (o.id === optionId) return { ...o, selected: true };
+              if ((o as any).group === optGroup && o.id !== optionId) return { ...o, selected: false };
+              return o;
+            })};
+          }
+        }
+
+        if (!isSelecting && optGroup) {
+          const siblings = g.options.filter(o => (o as any).group === optGroup && o.id !== optionId);
+          if (siblings.length > 0) {
+            const newDeclined = new Set(declinedOptions);
+            siblings.forEach(sib => newDeclined.delete(sib.id));
+            setDeclinedOptions(newDeclined);
+            const restoredNames = siblings.filter(s => declinedOptions.has(s.id)).map(s => s.name);
+            if (restoredNames.length > 0) showToast(`${restoredNames.join(', ')} restored`);
+          }
         }
       }
 
       // Remove from declined if re-selecting
       if (isSelecting && declinedOptions.has(optionId)) {
         setDeclinedOptions(prev => { const n = new Set(prev); n.delete(optionId); return n; });
-      }
-
-      // Undo auto-decline on siblings when deselecting
-      if (!isSelecting && optGroup) {
-        const siblings = g.options.filter(o => (o as any).group === optGroup && o.id !== optionId);
-        if (siblings.length > 0) {
-          const newDeclined = new Set(declinedOptions);
-          siblings.forEach(sib => newDeclined.delete(sib.id));
-          setDeclinedOptions(newDeclined);
-          const restoredNames = siblings.filter(s => declinedOptions.has(s.id)).map(s => s.name);
-          if (restoredNames.length > 0) showToast(`${restoredNames.join(', ')} restored`);
-        }
       }
 
       return { ...g, options: g.options.map(o => o.id === optionId ? { ...o, selected: !o.selected } : o) };
@@ -385,6 +387,11 @@ export default function ClientSelections() {
   const totalRemaining = totalAllowance - totalSelectedPrice;
   const getDynamicStatus = (group: typeof selectionGroups[0]) => {
     if (group.status === 'approved') return 'approved';
+    const anySelected = group.options.some(o => o.selected);
+    if (persona === 'prototype') {
+      // Prototype: no "one per group" constraint — any selection counts as ready
+      return anySelected ? 'ready' : group.status;
+    }
     const optGroups = new Set(group.options.map(o => (o as any).group || o.id));
     const made = Array.from(optGroups).filter(g =>
       group.options.some(o => ((o as any).group || o.id) === g && o.selected)
@@ -399,6 +406,44 @@ export default function ClientSelections() {
   const readyCount = dynamicStatuses.filter(s => s === 'ready').length;
   const approvedCount = dynamicStatuses.filter(s => s === 'approved').length;
   const completedCount = approvedCount + readyCount;
+
+  /* ── Forecast calculations ── */
+  const CONTRACT_PRICE = 485000;
+  // Only count impact from categories where at least one option is selected
+  const selectionsImpact = selections.reduce((s, g) => {
+    const selectedTotal = g.options.filter(o => o.selected).reduce((a, o) => a + o.price, 0);
+    if (selectedTotal === 0) return s; // no selections made yet — don't count this category
+    return s + (selectedTotal - g.allowance);
+  }, 0);
+  const pendingCategories = selections.filter((_g, i) => {
+    const ds = dynamicStatuses[i];
+    return ds !== 'approved' && ds !== 'ready';
+  });
+  const pendingEstimate = pendingCategories.reduce((s, g) => {
+    const avgPrice = g.options.length > 0 ? g.options.reduce((a, o) => a + o.price, 0) / g.options.length : 0;
+    const selectedInGroup = g.options.filter(o => o.selected).reduce((a, o) => a + o.price, 0);
+    if (selectedInGroup > 0) return s + (selectedInGroup - g.allowance);
+    const cheapest = g.options.length > 0 ? Math.min(...g.options.map(o => o.price)) : 0;
+    const estimated = (cheapest + avgPrice) / 2;
+    return s + Math.max(0, estimated - g.allowance);
+  }, 0);
+  const projectedPrice = CONTRACT_PRICE + selectionsImpact + (pendingCategories.length > 0 ? pendingEstimate : 0);
+
+  // High-end forecast: most expensive option per sub-group in each category
+  const highEndImpact = selections.reduce((s, g) => {
+    const optGroups = new Map<string, typeof g.options>();
+    g.options.forEach(opt => {
+      const gKey = (opt as any).group || opt.id;
+      if (!optGroups.has(gKey)) optGroups.set(gKey, []);
+      optGroups.get(gKey)!.push(opt);
+    });
+    let groupMax = 0;
+    optGroups.forEach(opts => {
+      groupMax += Math.max(...opts.map(o => o.price));
+    });
+    return s + (groupMax - g.allowance);
+  }, 0);
+  const highEndPrice = CONTRACT_PRICE + highEndImpact;
 
   // Groups ready to submit (all choices made, not yet submitted or approved)
   const pendingSubmit = selections.filter((g, i) =>
@@ -599,7 +644,64 @@ export default function ClientSelections() {
 
         {/* Budget stats */}
         <div className="cs-hero-stats">
-          {pc.showDelta ? (
+          {pc.showForecast ? (
+            /* Prototype: delta-first forecast bar — net impact is the headline, full breakdown behind toggle */
+            <>
+              <div className="cs-fbar">
+                {/* Always visible: progress + net impact */}
+                <div className="cs-fbar-headline" onClick={() => setForecastExpanded(!forecastExpanded)}>
+                  <div className="cs-fbar-headline-left">
+                    <div className="cs-fbar-label">{completedCount}/{selections.length} categories complete</div>
+                    <div className={`cs-fbar-value ${selectionsImpact > 0 ? 'cs-over' : selectionsImpact < 0 ? 'cs-under' : ''}`}>
+                      {selectionsImpact === 0
+                        ? 'On budget'
+                        : selectionsImpact > 0
+                          ? `+$${fmt(selectionsImpact)} from selections`
+                          : `-$${fmt(Math.abs(selectionsImpact))} under budget`
+                      }
+                    </div>
+                  </div>
+                  <button className="cs-fbar-toggle" aria-expanded={forecastExpanded}>
+                    <span className="cs-fbar-toggle-text">{forecastExpanded ? 'Hide details' : 'See details'}</span>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: forecastExpanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s ease' }}><polyline points="6 9 12 15 18 9"/></svg>
+                  </button>
+                </div>
+
+                {/* Collapsible breakdown */}
+                {forecastExpanded && (
+                  <div className="cs-fbar-breakdown">
+                    <div className="cs-fbar-row">
+                      <div className="cs-fbar-item">
+                        <div className="cs-fbar-label">Contract price</div>
+                        <div className="cs-fbar-value">${fmt(CONTRACT_PRICE)}</div>
+                      </div>
+                      <div className="cs-fbar-arrow">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#C7D0D9" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><polyline points="12 5 19 12 12 19"/></svg>
+                      </div>
+                      <div className="cs-fbar-item">
+                        <div className="cs-fbar-label">Selections impact</div>
+                        <div className={`cs-fbar-value ${selectionsImpact > 0 ? 'cs-over' : selectionsImpact < 0 ? 'cs-under' : ''}`}>
+                          {selectionsImpact > 0 ? '+' : selectionsImpact < 0 ? '-' : ''}${fmt(Math.abs(selectionsImpact))}
+                        </div>
+                      </div>
+                      <div className="cs-fbar-arrow">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#C7D0D9" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><polyline points="12 5 19 12 12 19"/></svg>
+                      </div>
+                      <div className="cs-fbar-item cs-fbar-item-projected">
+                        <div className="cs-fbar-label">Projected price</div>
+                        <div className="cs-fbar-value cs-fbar-value-projected">${fmt(projectedPrice)}</div>
+                      </div>
+                    </div>
+                    {/* High-end callout inside breakdown */}
+                    <div className="cs-fbar-highend">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+                      <span>If all premium options are selected, your price could reach <strong>${fmt(highEndPrice)}</strong></span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </>
+          ) : pc.showDelta ? (
             /* Spec: allowance + additional cost + completed */
             <>
               <div className="cs-stat">
@@ -643,10 +745,10 @@ export default function ClientSelections() {
           )}
         </div>
 
-        {false && actionCount > 0 && (
+        {actionCount > 0 && (
           <div className="cs-alert">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="#854D00" strokeWidth="2"/><line x1="12" y1="8" x2="12" y2="12" stroke="#854D00" strokeWidth="2" strokeLinecap="round"/><circle cx="12" cy="16" r="1" fill="#854D00"/></svg>
-            <span>{actionCount} selection{actionCount > 1 ? 's' : ''} need{actionCount === 1 ? 's' : ''} your attention — your builder is waiting on your choices.</span>
+            <span>{actionCount} selection{actionCount > 1 ? 's' : ''} need{actionCount === 1 ? 's' : ''} your attention — overdue choices can delay your project and may increase costs.</span>
           </div>
         )}
 
@@ -691,7 +793,11 @@ export default function ClientSelections() {
                     <span className="cs-status-dot" style={{ background: sc.color }} />
                     <h3 className="cs-section-name">{group.name}</h3>
                     <span className="cs-status-badge" style={{ background: sc.bg, color: sc.color }}>{sc.label}</span>
-                    <span className="cs-section-meta">{madeChoices} of {totalChoices} choices made &middot; Due {formatDate(group.dueDate)} ({dueDays})</span>
+                    <span className="cs-section-meta">
+                      {persona !== 'prototype' && <>{madeChoices} of {totalChoices} choices made &middot; </>}
+                      {persona === 'prototype' && group.options.filter(o => o.selected).length > 0 && <>{group.options.filter(o => o.selected).length} selected &middot; </>}
+                      Due {formatDate(group.dueDate)} ({dueDays})
+                    </span>
                   </div>
                   <div className="cs-section-right">
                     {pc.showDelta ? (
@@ -717,6 +823,11 @@ export default function ClientSelections() {
                 </div>
 
                   <div className="cs-section-body">
+
+                    {/* Allowance description (prototype only) */}
+                    {persona === 'prototype' && group.description && group.status !== 'approved' && (
+                      <p className="cs-section-desc">{group.description}</p>
+                    )}
 
                     {/* Shopping card grid */}
                     {(() => {
@@ -747,12 +858,23 @@ export default function ClientSelections() {
                         const chosenOpts = isApproved && !isDeclinedExpanded ? opts.filter(o => o.selected) : opts;
                         const hiddenCount = isApproved ? opts.filter(o => !o.selected).length : 0;
                         // Note: sort already places chosen above declined when approved
+                        const selectedInGroup = opts.filter(o => o.selected).length;
                         return (
-                          <div key={gName} className="cs-opt-group">
-                            {isMultiChoice && (
-                              <div className="cs-opt-group-header">
+                          <div key={gName} className={`cs-opt-group ${persona === 'prototype' ? 'cs-opt-group-proto' : ''}`}>
+                            {(isMultiChoice || persona === 'prototype') && (
+                              <div className={`cs-opt-group-header ${persona !== 'prototype' ? 'cs-opt-group-header-sticky' : 'cs-opt-group-header-proto'}`}>
                                 <span className="cs-opt-group-name">{gName}</span>
-                                {group.status !== 'approved' && <span className="cs-opt-group-hint">Choose one</span>}
+                                {group.status !== 'approved' && persona !== 'prototype' && (
+                                  <span className="cs-opt-group-hint">
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9 12l2 2 4-4"/></svg>
+                                    Choose one
+                                  </span>
+                                )}
+                                {persona === 'prototype' && group.status !== 'approved' && (
+                                  <span className="cs-opt-group-count">
+                                    {selectedInGroup > 0 ? `${selectedInGroup} selected` : `${opts.length} options`}
+                                  </span>
+                                )}
                               </div>
                             )}
                             {viewMode === 'compact' ? (
@@ -785,6 +907,21 @@ export default function ClientSelections() {
                                           (opt as any).tier === 'base' ? <span className="cs-preview-price-included">$0</span>
                                           : <span>${fmt(delta)}</span>
                                         ) : <span>${fmt(opt.price)}</span>}
+                                        {pc.showForecast && persona !== 'prototype' && !opt.selected && !declinedOptions.has(opt.id) && group.status !== 'approved' && (() => {
+                                          const currentGroupSelected = group.options.filter(o => o.selected).reduce((s, o) => s + o.price, 0);
+                                          const sameGroupOpts = group.options.filter(o => (o as any).group === (opt as any).group);
+                                          const currentSameGroupSelected = sameGroupOpts.find(o => o.selected);
+                                          const wouldReplace = currentSameGroupSelected ? currentSameGroupSelected.price : 0;
+                                          const newGroupSelected = currentGroupSelected - wouldReplace + opt.price;
+                                          const jobImpact = newGroupSelected - group.allowance;
+                                          const currentImpact = currentGroupSelected - group.allowance;
+                                          const netChange = jobImpact - currentImpact;
+                                          return (
+                                            <span className={`cs-forecast-inline ${netChange > 0 ? 'cs-forecast-inline-up' : netChange < 0 ? 'cs-forecast-inline-down' : ''}`}>
+                                              {netChange > 0 ? '+' : netChange < 0 ? '-' : ''}${fmt(Math.abs(netChange))}
+                                            </span>
+                                          );
+                                        })()}
                                       </div>
                                       <div className="cs-compact-actions">
                                         {group.status !== 'approved' && (
@@ -873,6 +1010,22 @@ export default function ClientSelections() {
                                             : <span className="cs-shop-price">${fmt(delta)}</span>
                                           ) : <span className="cs-shop-price">${fmt(opt.price)}</span>}
                                         </div>
+                                        {pc.showForecast && persona !== 'prototype' && !opt.selected && !isDeclined && group.status !== 'approved' && (() => {
+                                          const currentGroupSelected = group.options.filter(o => o.selected).reduce((s, o) => s + o.price, 0);
+                                          const sameGroupOpts = group.options.filter(o => (o as any).group === (opt as any).group);
+                                          const currentSameGroupSelected = sameGroupOpts.find(o => o.selected);
+                                          const wouldReplace = currentSameGroupSelected ? currentSameGroupSelected.price : 0;
+                                          const newGroupSelected = currentGroupSelected - wouldReplace + opt.price;
+                                          const jobImpact = newGroupSelected - group.allowance;
+                                          const currentImpact = currentGroupSelected - group.allowance;
+                                          const netChange = jobImpact - currentImpact;
+                                          return (
+                                            <div className={`cs-forecast-card-impact ${netChange > 0 ? 'cs-forecast-inline-up' : netChange < 0 ? 'cs-forecast-inline-down' : ''}`}>
+                                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20v-4"/></svg>
+                                              {netChange > 0 ? '+' : netChange < 0 ? '-' : ''}${fmt(Math.abs(netChange))}
+                                            </div>
+                                          );
+                                        })()}
                                         {group.status !== 'approved' && (
                                           <div className="cs-shop-actions">
                                             {isDeclined ? (
@@ -934,8 +1087,15 @@ export default function ClientSelections() {
                         {requests.filter(r => r.groupId === group.id).map((r, i) => (
                           <div key={i} className="cs-request-item">
                             <div className="cs-request-item-top">
-                              <span className="cs-request-pending-badge">Pending</span>
-                              <span className="cs-request-item-date">{r.date}</span>
+                              <span className="cs-request-pending-badge">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                                Under review
+                              </span>
+                              <span className="cs-request-item-date">Sent {r.date}</span>
+                            </div>
+                            <div className="cs-request-review-status">
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#004FD6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                              <span>Your builder is reviewing this request. You'll be notified when they respond.</span>
                             </div>
                             <div className="cs-request-item-text">{r.text}</div>
                             {r.link && (
@@ -960,10 +1120,11 @@ export default function ClientSelections() {
                     )}
 
                     {/* Actions */}
-                    {group.status !== 'approved' ? (
+                    {group.status !== 'approved' && persona !== 'prototype' ? (
                       <div className="cs-section-actions">
-                        <button className="bds-button bds-button-secondary cs-mobile-only" onClick={() => setSwipeGroupId(group.id)}>
-                          {madeChoices > 0 ? 'Change selections' : 'Start selecting'}
+                        <button className="bds-button bds-button-secondary" onClick={() => setSwipeGroupId(group.id)}>
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/></svg>
+                          {madeChoices > 0 ? 'Browse & choose' : 'Browse & choose'}
                         </button>
                         <button className="bds-button bds-button-secondary" onClick={() => setRequestGroupId(group.id)}>Request an option</button>
                       </div>
@@ -973,6 +1134,19 @@ export default function ClientSelections() {
             );
             };
 
+            if (filtered.length === 0) {
+              return (
+                <div className="cs-empty-state">
+                  <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#C7D0D9" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
+                  <div className="cs-empty-title">
+                    {filter === 'action' ? "You're all caught up" : 'No completed selections yet'}
+                  </div>
+                  <div className="cs-empty-desc">
+                    {filter === 'action' ? 'No selections need your attention right now.' : 'Selections will appear here once approved.'}
+                  </div>
+                </div>
+              );
+            }
             if (filter === 'all') {
               // Use original status for grouping so cards don't jump while making choices
               const overdue = filtered.filter(g => g.status === 'overdue');
@@ -998,6 +1172,54 @@ export default function ClientSelections() {
         )}
       </div>
 
+      {/* Review modal before submit */}
+      {showReviewModal && (
+        <div className="sw-overlay" style={{background: 'rgba(0,0,0,0.5)', zIndex: 1500}} onClick={() => setShowReviewModal(false)}>
+          <div className="cs-review-modal" onClick={e => e.stopPropagation()}>
+            <div className="cs-review-modal-header">
+              <h3 className="cs-review-modal-title">Review your selections</h3>
+              <button className="cs-review-modal-close" onClick={() => setShowReviewModal(false)}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+            <p className="cs-review-modal-sub">Once submitted, these selections are locked in. Please review before confirming.</p>
+            <div className="cs-review-modal-list">
+              {pendingSubmit.map(group => {
+                const selectedOpts = group.options.filter(o => o.selected);
+                const groupTotal = selectedOpts.reduce((s, o) => s + o.price, 0);
+                const diff = group.allowance - groupTotal;
+                return (
+                  <div key={group.id} className="cs-review-modal-group">
+                    <div className="cs-review-modal-group-name">{group.name}</div>
+                    <div className="cs-review-modal-items">
+                      {selectedOpts.map(opt => (
+                        <div key={opt.id} className="cs-review-modal-item">
+                          <div className="cs-review-modal-item-thumb" style={{ backgroundImage: opt.image ? `url(${opt.image})` : undefined }} />
+                          <span className="cs-review-modal-item-name">{opt.name}</span>
+                          <span className="cs-review-modal-item-price">${fmt(opt.price)}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="cs-review-modal-summary">
+                      <span>Allowance: ${fmt(group.allowance)}</span>
+                      <span className={diff < 0 ? 'cs-over' : diff > 0 ? 'cs-under' : ''}>
+                        {diff >= 0 ? `Remaining: $${fmt(diff)}` : `Over: -$${fmt(Math.abs(diff))}`}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="cs-review-modal-actions">
+              <button className="bds-button bds-button-primary" onClick={() => { setShowReviewModal(false); handleSubmitAll(); }}>
+                Confirm & submit
+              </button>
+              <button className="bds-button bds-button-tertiary" onClick={() => setShowReviewModal(false)}>Go back</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Sticky footer */}
       {pendingSubmit.length > 0 && (
         <div className="cs-sticky-footer">
@@ -1005,8 +1227,8 @@ export default function ClientSelections() {
             <div className="cs-sticky-info">
               <strong>{pendingSubmit.length} selection{pendingSubmit.length > 1 ? 's' : ''}</strong> ready — submit to lock in your choices
             </div>
-            <button className="bds-button bds-button-primary" onClick={handleSubmitAll}>
-              Submit choices
+            <button className="bds-button bds-button-primary" onClick={() => setShowReviewModal(true)}>
+              Review & submit
             </button>
           </div>
         </div>

@@ -18,16 +18,18 @@ import SelectionsModalV2 from './components/SelectionsModalV2';
 import JobPriceSummary from './components/JobPriceSummary';
 import SelectionsPage from './components/SelectionsPage';
 import OptionDetailPage from './components/OptionDetailPage';
-import AIAPayApp, { MODAL_ALLOWANCES } from './components/AIAPayApp';
+import AIAPayApp, { MODAL_ALLOWANCES, type OverageInfo } from './components/AIAPayApp';
+import ChangeOrderPage from './components/ChangeOrderPage';
+import ChangeOrderListPage from './components/ChangeOrderListPage';
 import EstimatePage from './components/EstimatePage';
 import ClientSelections from './components/ClientSelections';
 import ClientPortal, { ClientTopNav } from './components/ClientPortal';
 import { JOBS } from './mockData';
 import { getNextId } from './mockData';
 
-type PageType = 'invoice' | 'job-price-summary' | 'selections' | 'option-detail' | 'progress-invoice' | 'client-portal' | 'client-jps' | 'estimate' | 'client-selections';
+type PageType = 'invoice' | 'job-price-summary' | 'selections' | 'option-detail' | 'progress-invoice' | 'change-order' | 'change-order-list' | 'client-portal' | 'client-jps' | 'estimate' | 'client-selections';
 
-const validPages: PageType[] = ['invoice', 'job-price-summary', 'selections', 'option-detail', 'progress-invoice', 'client-portal', 'client-jps', 'estimate', 'client-selections'];
+const validPages: PageType[] = ['invoice', 'job-price-summary', 'selections', 'option-detail', 'progress-invoice', 'change-order', 'change-order-list', 'client-portal', 'client-jps', 'estimate', 'client-selections'];
 
 function getInitialPage(): PageType {
   const hash = window.location.hash.replace('#', '');
@@ -40,9 +42,23 @@ export default function App() {
   const [jobOpen, setJobOpen] = useState(false);
   const [selectedJob, setSelectedJob] = useState(1);
   const [activePage, _setActivePage] = useState<PageType>(getInitialPage);
+  // Shared state — persists across page navigation
+  const [approvedCOIds, setApprovedCOIds] = useState<string[]>([]);
+  const [addedCostIds, setAddedCostIds] = useState<string[]>(['cost-1', 'cost-2', 'cost-3', 'cost-6', 'cost-7', 'cost-8']);
+  const [addedCOIds, setAddedCOIds] = useState<string[]>([]);
+  const [piGroupBy, setPiGroupBy] = useState<'estimate' | 'costcode'>('estimate');
+  const [currentOverages, setCurrentOverages] = useState<OverageInfo[]>([]);
+  const [selectedCOId, setSelectedCOId] = useState<string | null>(null);
 
-  const setActivePage = (page: PageType) => {
-    _setActivePage(page);
+  const setActivePage = (page: PageType | string) => {
+    // Handle change-order:id navigation
+    if (typeof page === 'string' && page.startsWith('change-order:')) {
+      setSelectedCOId(page.split(':')[1]);
+      _setActivePage('change-order' as PageType);
+      return;
+    }
+    if (page === 'change-order') setSelectedCOId(null);
+    _setActivePage(page as PageType);
     window.location.hash = page;
   };
   const [selectedOption, setSelectedOption] = useState<{ name: string; category: string; price: number; allowanceName?: string; status: string } | null>(null);
@@ -162,12 +178,57 @@ export default function App() {
     );
   }
 
+  if (activePage === 'change-order-list') {
+    return (
+      <div style={{display: 'flex', flexDirection: 'column', height: '100vh'}}>
+        <TopNav onNavigate={(page) => setActivePage(page as PageType)} />
+        <div style={{flex: 1, overflowY: 'auto'}}>
+          <ChangeOrderListPage onNavigate={(page) => setActivePage(page as PageType)} approvedCOIds={approvedCOIds} />
+        </div>
+      </div>
+    );
+  }
+
+  if (activePage === 'change-order') {
+    return (
+      <div style={{display: 'flex', flexDirection: 'column', height: '100vh'}}>
+        <TopNav onNavigate={(page) => setActivePage(page as PageType)} />
+        <div style={{flex: 1, overflowY: 'auto'}}>
+          <ChangeOrderPage
+            onBack={() => setActivePage(selectedCOId ? 'change-order-list' : 'progress-invoice')}
+            overages={currentOverages}
+            coId={selectedCOId}
+            onApprove={() => {
+              if (selectedCOId === 'co-3') {
+                // Budget reallocation CO
+                const newIds = ['co-3a', 'co-3b'].filter(id => !addedCOIds.includes(id));
+                if (newIds.length > 0) {
+                  setApprovedCOIds(prev => [...prev, ...newIds]);
+                  setAddedCOIds(prev => [...prev, ...newIds]);
+                }
+              } else {
+                const coMap: Record<string, string> = { '4100': 'co-1', '6100': 'co-2' };
+                const newIds = currentOverages
+                  .map(o => coMap[o.costCode])
+                  .filter((id): id is string => !!id && !addedCOIds.includes(id));
+                if (newIds.length > 0) {
+                  setApprovedCOIds(prev => [...prev, ...newIds]);
+                  setAddedCOIds(prev => [...prev, ...newIds]);
+                }
+              }
+            }}
+          />
+        </div>
+      </div>
+    );
+  }
+
   if (activePage === 'progress-invoice') {
     return (
       <div style={{display: 'flex', flexDirection: 'column', height: '100vh'}}>
         <TopNav onNavigate={(page) => setActivePage(page as PageType)} />
         <div style={{flex: 1, overflowY: 'auto'}}>
-          <AIAPayApp />
+          <AIAPayApp onNavigate={(page) => setActivePage(page as PageType)} approvedCOIds={approvedCOIds} addedCostIds={addedCostIds} onCostIdsChange={setAddedCostIds} addedCOIds={addedCOIds} onCOIdsChange={setAddedCOIds} groupBy={piGroupBy} onGroupByChange={setPiGroupBy} onOveragesChange={setCurrentOverages} />
         </div>
       </div>
     );
