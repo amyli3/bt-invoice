@@ -1570,7 +1570,7 @@ export default function AIAPayApp({ onNavigate, approvedCOIds, addedCostIds: ext
                       <th style={{ ...headerCellStyle, textAlign: 'left', minWidth: 240 }}>Description</th>
                       <th style={headerCellStyle}>{showCOCols ? 'Scheduled value' : 'Budget'}</th>
                       {showCOCols && <th style={{ ...headerCellStyle }}>Approved changes</th>}
-                      {showCOCols && <th style={{ ...headerCellStyle }}>Revised value</th>}
+                      {showCOCols && <th style={{ ...headerCellStyle }}>Revised budget</th>}
                       <th style={headerCellStyle}>Previous invoice</th>
                       <th style={headerCellStyle}>This invoice</th>
                       <th style={headerCellStyle}>Stored materials</th>

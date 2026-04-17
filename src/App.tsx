@@ -32,7 +32,11 @@ type PageType = 'invoice' | 'job-price-summary' | 'selections' | 'option-detail'
 const validPages: PageType[] = ['invoice', 'job-price-summary', 'selections', 'option-detail', 'progress-invoice', 'change-order', 'change-order-list', 'client-portal', 'client-jps', 'estimate', 'client-selections'];
 
 function getInitialPage(): PageType {
-  const hash = window.location.hash.replace('#', '');
+  // Support ?page=X query param (used when hash is occupied by Figma capture)
+  const params = new URLSearchParams(window.location.search);
+  const qPage = params.get('page');
+  if (qPage && validPages.includes(qPage as PageType)) return qPage as PageType;
+  const hash = window.location.hash.replace('#', '').split('&')[0];
   if (validPages.includes(hash as PageType)) return hash as PageType;
   return 'invoice';
 }
