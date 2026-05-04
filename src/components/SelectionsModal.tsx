@@ -1,7 +1,40 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { fmt } from '../utils';
 import { allAllowances, allSelections } from '../allowanceMockData';
+
+/* ─── Scenario note tooltip (portalled so overflow:hidden ancestors can't clip it) ─── */
+function ScenarioTooltip({ note }: { note: string }) {
+  const iconRef = useRef<HTMLSpanElement>(null);
+  const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
+
+  const show = () => {
+    if (!iconRef.current) return;
+    const r = iconRef.current.getBoundingClientRect();
+    setPos({ left: r.left + r.width / 2, top: r.top - 8 });
+  };
+  const hide = () => setPos(null);
+
+  return (
+    <span
+      className="sel-scenario-tip"
+      onClick={e => e.stopPropagation()}
+      onMouseEnter={show}
+      onMouseLeave={hide}
+    >
+      <span ref={iconRef} className="sel-scenario-tip-icon">i</span>
+      {pos && createPortal(
+        <span
+          className="sel-scenario-tip-bubble sel-scenario-tip-bubble-portal"
+          style={{ left: pos.left, top: pos.top }}
+        >
+          {note}
+        </span>,
+        document.body,
+      )}
+    </span>
+  );
+}
 
 /* ─── Icons ─── */
 const AllowanceIcon = () => (
@@ -35,7 +68,11 @@ interface SelectionGroup {
   revisedPrice: number;
   previouslyInvoiced: number;
   invoiceBalance: number;
+  allowanceBudget?: number;
+  overage?: number;
   status?: string;
+  scenarioNote?: string;
+  isComplete?: boolean;
   children: SelectionChild[];
 }
 
@@ -90,9 +127,13 @@ interface Props {
   jobName: string;
   data?: SelectionGroup[];
   addedGroupIds?: string[];
+  // Invoice-page-only behaviors; default to legacy progress-invoice behavior.
+  showNegativeBalances?: boolean;
+  sortByBalance?: boolean;
+  onMarkComplete?: (id: string) => void;
 }
 
-export default function SelectionsModal({ open, onClose, onAdd, jobName, addedGroupIds = [], data }: Props) {
+export default function SelectionsModal({ open, onClose, onAdd, jobName, addedGroupIds = [], data, showNegativeBalances = false, sortByBalance = false, onMarkComplete }: Props) {
   const sourceData = data || SELECTIONS_DATA;
   const addedSet = new Set(addedGroupIds);
   const availableData = sourceData.filter(d => !addedSet.has(d.id));
@@ -100,7 +141,7 @@ export default function SelectionsModal({ open, onClose, onAdd, jobName, addedGr
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [expanded, setExpanded] = useState<Record<string, boolean>>(() => {
     const e: Record<string, boolean> = {};
-    sourceData.forEach(d => { e[d.id] = true; });
+    sourceData.forEach(d => { e[d.id] = d.type === 'allowance'; });
     return e;
   });
   const [includeDescs, setIncludeDescs] = useState(true);
@@ -211,10 +252,13 @@ export default function SelectionsModal({ open, onClose, onAdd, jobName, addedGr
           {/* Items */}
           <div className="est-table-scroll">
             <div className="est-table-inner">
-              {filtered.filter(d => d.type === 'allowance' && d.invoiceBalance >= 0).length > 0 && (
+              {filtered.filter(d => d.type === 'allowance' && (showNegativeBalances || d.invoiceBalance >= 0)).length > 0 && (
                 <div className="est-section-label">Allowances</div>
               )}
-              {filtered.filter(d => d.type === 'allowance' && d.invoiceBalance >= 0).map(item => {
+              {(() => {
+                const allowances = filtered.filter(d => d.type === 'allowance' && (showNegativeBalances || d.invoiceBalance >= 0));
+                return sortByBalance ? [...allowances].sort((a, b) => b.invoiceBalance - a.invoiceBalance) : allowances;
+              })().map(item => {
                 const isExpanded = expanded[item.id];
                 return (
                   <div key={item.id} style={{ marginBottom: 10, border: '1px solid var(--g200)', borderRadius: 8, overflow: 'hidden' }}>
@@ -235,7 +279,26 @@ export default function SelectionsModal({ open, onClose, onAdd, jobName, addedGr
                             {item.type === 'allowance' ? <AllowanceIcon /> : <SelectionIcon />}
                           </span>
                           <span style={{ fontWeight: 600, fontSize: 14, color: 'var(--bt-midnight)' }}>{item.name}</span>
+                          {item.scenarioNote && <ScenarioTooltip note={item.scenarioNote} />}
                         </div>
+                        {onMarkComplete && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); onMarkComplete(item.id); }}
+                            style={{
+                              marginLeft: 8,
+                              padding: '3px 10px',
+                              fontSize: 12,
+                              fontWeight: 500,
+                              borderRadius: 4,
+                              border: item.isComplete ? '1px solid var(--green, #2f855a)' : '1px solid var(--g300)',
+                              background: item.isComplete ? 'var(--green-bg, #f0fff4)' : '#fff',
+                              color: item.isComplete ? 'var(--green, #2f855a)' : 'var(--g600)',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            {item.isComplete ? '✓ Completed' : 'Mark complete'}
+                          </button>
+                        )}
                       </div>
                       <div className="sel-card-meta">
                         <div className="sel-meta-item">
@@ -248,7 +311,7 @@ export default function SelectionsModal({ open, onClose, onAdd, jobName, addedGr
                         </div>
                         <div className="sel-meta-item">
                           <div className="sel-meta-label">Remaining to invoice</div>
-                          <div className="sel-meta-value" style={{ color: item.invoiceBalance > 0 ? 'var(--bt-midnight)' : 'var(--g500)' }}>${fmt(item.invoiceBalance)}</div>
+                          <div className="sel-meta-value" style={{ color: item.invoiceBalance < 0 ? 'var(--red, #c53030)' : item.invoiceBalance > 0 ? 'var(--bt-midnight)' : 'var(--g500)' }}>{item.invoiceBalance < 0 ? '-' : ''}${fmt(Math.abs(item.invoiceBalance))}</div>
                         </div>
                       </div>
                     </div>
@@ -309,97 +372,6 @@ export default function SelectionsModal({ open, onClose, onAdd, jobName, addedGr
                   </div>
                 );
               })}
-              {/* Under-budget allowances — credit suggestion */}
-              {filtered.filter(d => d.type === 'allowance' && d.invoiceBalance < 0).length > 0 && (
-                <>
-                  <div className="est-section-label" style={{ marginTop: 8 }}>Under budget — credit recommended</div>
-                  <div style={{ fontSize: 12, color: 'var(--g500)', padding: '4px 14px 10px', lineHeight: 1.4 }}>
-                    These selections came in under the original allowance. Consider issuing a credit memo for the difference.
-                  </div>
-                </>
-              )}
-              {filtered.filter(d => d.type === 'allowance' && d.invoiceBalance < 0).map(item => {
-                const isExpanded = expanded[item.id];
-                const allowanceChild = item.children.find(c => c.selection === 'Allowance');
-                const allowanceAmt = allowanceChild ? allowanceChild.price : 0;
-                const selectionAmt = item.children.filter(c => c.selection !== 'Allowance').reduce((s, c) => s + c.price, 0);
-                const creditAmt = allowanceAmt - selectionAmt;
-                return (
-                  <div key={item.id} style={{ marginBottom: 10, border: '1px solid var(--g200)', borderRadius: 8, overflow: 'hidden', background: 'white' }}>
-                    <div className="sel-card-header" style={{ background: 'white' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <div
-                          style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}
-                          onClick={() => toggleExpand(item.id)}
-                        >
-                          {chevron(isExpanded)}
-                          <span style={{ color: 'var(--bt-midnight)', display: 'inline-flex', alignItems: 'center', flexShrink: 0 }}>
-                            <AllowanceIcon />
-                          </span>
-                          <span style={{ fontWeight: 600, fontSize: 14, color: 'var(--bt-midnight)' }}>{item.name}</span>
-                        </div>
-                      </div>
-                      <div className="sel-card-meta">
-                        <div className="sel-meta-item">
-                          <div className="sel-meta-label">Allowance</div>
-                          <div className="sel-meta-value">${fmt(allowanceAmt)}</div>
-                        </div>
-                        <div className="sel-meta-item">
-                          <div className="sel-meta-label">Selection cost</div>
-                          <div className="sel-meta-value">${fmt(selectionAmt)}</div>
-                        </div>
-                        <div className="sel-meta-item">
-                          <div className="sel-meta-label">Suggested credit</div>
-                          <div className="sel-meta-value" style={{ color: 'var(--green)' }}>${fmt(creditAmt)}</div>
-                        </div>
-                      </div>
-                    </div>
-
-                    {isExpanded && (
-                      <div style={{ overflowX: 'auto' }}>
-                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, tableLayout: 'fixed', minWidth: 560 }}>
-                        <colgroup>
-                          <col style={{ width: '22%' }} />
-                          <col style={{ width: '22%' }} />
-                          <col style={{ width: '26%' }} />
-                          <col style={{ width: '15%' }} />
-                          <col style={{ width: '15%' }} />
-                        </colgroup>
-                        <thead>
-                          <tr style={{ background: '#f8fafc' }}>
-                            <th style={{ textAlign: 'left', padding: '8px 14px', fontWeight: 500, fontSize: 12, color: 'var(--g500)', borderTop: '1px solid var(--g200)', borderBottom: '1px solid var(--g200)' }}>Line item</th>
-                            <th style={{ textAlign: 'left', padding: '8px 14px', fontWeight: 500, fontSize: 12, color: 'var(--g500)', borderTop: '1px solid var(--g200)', borderBottom: '1px solid var(--g200)' }}>Cost code</th>
-                            <th style={{ textAlign: 'left', padding: '8px 14px', fontWeight: 500, fontSize: 12, color: 'var(--g500)', borderTop: '1px solid var(--g200)', borderBottom: '1px solid var(--g200)' }}>Selection</th>
-                            <th style={{ textAlign: 'right', padding: '8px 14px', fontWeight: 500, fontSize: 12, color: 'var(--g500)', borderTop: '1px solid var(--g200)', borderBottom: '1px solid var(--g200)' }}>Price</th>
-                            <th style={{ textAlign: 'right', padding: '8px 14px', fontWeight: 500, fontSize: 12, color: 'var(--g500)', borderTop: '1px solid var(--g200)', borderBottom: '1px solid var(--g200)' }}>Difference</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {item.children.map((child, idx) => (
-                            <tr key={child.id} style={{ borderBottom: idx < item.children.length - 1 ? '1px solid var(--g100)' : 'none' }}>
-                              <td style={{ padding: '8px 14px', color: 'var(--g700)' }}>{child.lineItem}</td>
-                              <td style={{ padding: '8px 14px', color: 'var(--g500)' }}>{child.costCode}</td>
-                              <td style={{ padding: '8px 14px' }}>
-                                {child.selection === 'Allowance' ? (
-                                  <span style={{ color: 'var(--g500)' }}>Allowance</span>
-                                ) : (
-                                  <a href="#" onClick={e => e.preventDefault()} style={{ color: 'var(--bt-blue)', textDecoration: 'underline', fontSize: 13 }}>{child.selection}</a>
-                                )}
-                              </td>
-                              <td style={{ padding: '8px 14px', textAlign: 'right' }}>${fmt(child.price)}</td>
-                              <td style={{ padding: '8px 14px', textAlign: 'right', fontWeight: 500, color: 'var(--g700)' }}>
-                                {child.newInvoiceAmt === null ? '--' : `${child.newInvoiceAmt < 0 ? '-' : ''}$${fmt(Math.abs(child.newInvoiceAmt))}`}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-
               {filtered.filter(d => d.type === 'selection').length > 0 && (
                 <div className="est-section-label" style={{ marginTop: 8 }}>Selections</div>
               )}
@@ -424,6 +396,7 @@ export default function SelectionsModal({ open, onClose, onAdd, jobName, addedGr
                             <SelectionIcon />
                           </span>
                           <span style={{ fontWeight: 600, fontSize: 14, color: 'var(--bt-midnight)' }}>{item.name}</span>
+                          {item.scenarioNote && <ScenarioTooltip note={item.scenarioNote} />}
                         </div>
                       </div>
                       <div className="sel-card-meta">
@@ -437,7 +410,7 @@ export default function SelectionsModal({ open, onClose, onAdd, jobName, addedGr
                         </div>
                         <div className="sel-meta-item">
                           <div className="sel-meta-label">Remaining to invoice</div>
-                          <div className="sel-meta-value" style={{ color: item.invoiceBalance > 0 ? 'var(--bt-midnight)' : 'var(--g500)' }}>${fmt(item.invoiceBalance)}</div>
+                          <div className="sel-meta-value" style={{ color: item.invoiceBalance < 0 ? 'var(--red, #c53030)' : item.invoiceBalance > 0 ? 'var(--bt-midnight)' : 'var(--g500)' }}>{item.invoiceBalance < 0 ? '-' : ''}${fmt(Math.abs(item.invoiceBalance))}</div>
                         </div>
                       </div>
                     </div>
@@ -493,7 +466,7 @@ export default function SelectionsModal({ open, onClose, onAdd, jobName, addedGr
             Invoice subtotal: <strong style={{ fontSize: 16, color: 'var(--bt-midnight)', marginLeft: 6 }}>${fmt(invoiceSubtotal)}</strong>
           </div>
           <button className="btn btn-p" onClick={handleCreate} disabled={selectedCount === 0} style={{ opacity: selectedCount === 0 ? 0.5 : 1 }}>
-            Add to invoice{selectedCount > 0 ? ` (${selectedCount})` : ''}
+            Add to invoice
           </button>
         </div>
       </div>

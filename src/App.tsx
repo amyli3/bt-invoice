@@ -8,7 +8,6 @@ import InvoiceInfo from './components/InvoiceInfo';
 import OwnerPrice from './components/OwnerPrice';
 import LineItems from './components/LineItems';
 import Notes from './components/Notes';
-import PaymentHistory from './components/PaymentHistory';
 import ClientPreview from './components/ClientPreview';
 import EmailPreview from './components/EmailPreview';
 import ClientColumnToggle from './components/ClientColumnToggle';
@@ -18,18 +17,20 @@ import SelectionsModalV2 from './components/SelectionsModalV2';
 import JobPriceSummary from './components/JobPriceSummary';
 import SelectionsPage from './components/SelectionsPage';
 import OptionDetailPage from './components/OptionDetailPage';
-import AIAPayApp, { MODAL_ALLOWANCES, type OverageInfo } from './components/AIAPayApp';
+import AIAPayApp, { type OverageInfo } from './components/AIAPayApp';
+import { INVOICE_SELECTION_SCENARIOS, INVOICE_STANDALONE_SELECTIONS } from './selectionsData';
 import ChangeOrderPage from './components/ChangeOrderPage';
 import ChangeOrderListPage from './components/ChangeOrderListPage';
 import EstimatePage from './components/EstimatePage';
 import ClientSelections from './components/ClientSelections';
+import ClientSelections3 from './components/ClientSelections3';
 import ClientPortal, { ClientTopNav } from './components/ClientPortal';
 import { JOBS } from './mockData';
 import { getNextId } from './mockData';
 
-type PageType = 'invoice' | 'job-price-summary' | 'selections' | 'option-detail' | 'progress-invoice' | 'change-order' | 'change-order-list' | 'client-portal' | 'client-jps' | 'estimate' | 'client-selections';
+type PageType = 'invoice' | 'job-price-summary' | 'selections' | 'option-detail' | 'progress-invoice' | 'change-order' | 'change-order-list' | 'client-portal' | 'client-jps' | 'estimate' | 'client-selections' | 'client-selections-2' | 'client-selections-3';
 
-const validPages: PageType[] = ['invoice', 'job-price-summary', 'selections', 'option-detail', 'progress-invoice', 'change-order', 'change-order-list', 'client-portal', 'client-jps', 'estimate', 'client-selections'];
+const validPages: PageType[] = ['invoice', 'job-price-summary', 'selections', 'option-detail', 'progress-invoice', 'change-order', 'change-order-list', 'client-portal', 'client-jps', 'estimate', 'client-selections', 'client-selections-2', 'client-selections-3'];
 
 function getInitialPage(): PageType {
   // Support ?page=X query param (used when hash is occupied by Figma capture)
@@ -66,6 +67,7 @@ export default function App() {
     window.location.hash = page;
   };
   const [selectedOption, setSelectedOption] = useState<{ name: string; category: string; price: number; allowanceName?: string; status: string } | null>(null);
+  const [prefilledAllowance, setPrefilledAllowance] = useState<string | null>(null);
   const [activeView, setActiveView] = useState<'builder' | 'preview'>('builder');
   const [previewTab, setPreviewTab] = useState<'client' | 'email'>('client');
 
@@ -81,6 +83,15 @@ export default function App() {
   const [estModalOpen, setEstModalOpen] = useState(false);
   const [selModalOpen, setSelModalOpen] = useState(false);
   const [selV2ModalOpen, setSelV2ModalOpen] = useState(false);
+  const [completedAllowanceIds, setCompletedAllowanceIds] = useState<Set<string>>(new Set());
+  const toggleAllowanceComplete = (id: string) => {
+    setCompletedAllowanceIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
   const handleAddFromEstimate = (items: any[]) => {
     const newItems = items.map((i: any) => {
       const pct = i.invoicePct || 0;
@@ -108,13 +119,17 @@ export default function App() {
     items.forEach((group: any) => {
       if (group.children && group.children.length > 0) {
         group.children.forEach((child: any) => {
+          // Skip any row whose new-invoice amount is null — informational rows
+          // not billable on this invoice (e.g., already-invoiced selections,
+          // unbilled allowance placeholders).
+          if (child.newInvoiceAmt === null) return;
           const isAllowanceLine = child.selection === 'Allowance';
           newItems.push({
             id: getNextId(),
             description: child.lineItem,
             costCode: child.costCode,
             costType: isAllowanceLine ? 'Allowance' : 'Selection',
-            unitCost: child.newInvoiceAmt ?? child.price,
+            unitCost: child.newInvoiceAmt,
             quantity: 1,
             unit: '--',
             markup: 0,
@@ -164,7 +179,7 @@ export default function App() {
     return (
       <div style={{display: 'flex', flexDirection: 'column', height: '100vh'}}>
         <ClientTopNav onNavigate={(page) => setActivePage(page as PageType)} />
-        <div className="content-area">
+        <div style={{flex: 1, overflowY: 'auto'}}>
           <JobPriceSummary jobOpen={false} onBack={() => setActivePage('client-portal')} onOpenSelection={(sel) => { setSelectedOption(sel); setActivePage('option-detail'); }} />
         </div>
       </div>
@@ -177,6 +192,17 @@ export default function App() {
         <ClientTopNav onNavigate={(page) => setActivePage(page as PageType)} />
         <div style={{flex: 1, overflow: 'auto'}}>
           <ClientSelections />
+        </div>
+      </div>
+    );
+  }
+
+  if (activePage === 'client-selections-2' || activePage === 'client-selections-3') {
+    return (
+      <div style={{display: 'flex', flexDirection: 'column', height: '100vh'}}>
+        <ClientTopNav onNavigate={(page) => setActivePage(page as PageType)} />
+        <div style={{flex: 1, overflow: 'auto'}}>
+          <ClientSelections3 />
         </div>
       </div>
     );
@@ -258,7 +284,7 @@ export default function App() {
         <TopNav onNavigate={(page) => setActivePage(page as PageType)} />
         <div style={{display: 'flex', flex: 1, minHeight: 0}}>
           <div className="content-area">
-            <OptionDetailPage onBack={() => { setActivePage(selectedOption ? 'job-price-summary' : 'selections'); setSelectedOption(null); }} selectionData={selectedOption} />
+            <OptionDetailPage onBack={() => { setActivePage(selectedOption ? 'job-price-summary' : 'selections'); setSelectedOption(null); setPrefilledAllowance(null); }} selectionData={selectedOption} prefilledAllowance={prefilledAllowance} />
           </div>
         </div>
       </div>
@@ -272,7 +298,15 @@ export default function App() {
         <div style={{display: 'flex', flex: 1, minHeight: 0}}>
           <JobSidebar open={jobOpen} onToggle={() => setJobOpen(false)} selectedJob={selectedJob} onSelectJob={(id) => { setSelectedJob(id); if (isNarrow) setJobOpen(false); }} onHomeClick={() => setActivePage('client-portal')} />
           <div className="content-area">
-            <SelectionsPage jobOpen={jobOpen} onToggleJob={() => setJobOpen(true)} onOpenOption={(sel) => { if (sel) setSelectedOption(sel); setActivePage('option-detail'); }} />
+            <SelectionsPage
+              jobOpen={jobOpen}
+              onToggleJob={() => setJobOpen(true)}
+              onOpenOption={(sel) => { if (sel) setSelectedOption(sel); setPrefilledAllowance(null); setActivePage('option-detail'); }}
+              onAddToAllowance={(name) => { setSelectedOption(null); setPrefilledAllowance(name); setActivePage('option-detail'); }}
+              completedAllowanceIds={completedAllowanceIds}
+              onToggleAllowanceComplete={toggleAllowanceComplete}
+              onOpenInvoice={() => setActivePage('invoice')}
+            />
           </div>
         </div>
       </div>
@@ -314,7 +348,6 @@ export default function App() {
               <OwnerPrice invoice={invoice} onChange={setInvoice} />
               {invoice.mode === 'lineItems' && <LineItems invoice={invoice} onChange={setInvoice} vis={vis} onVisChange={setVis} onOpenEstimate={() => setEstModalOpen(true)} onOpenSelections={() => setSelModalOpen(true)} onOpenSelectionsV2={() => setSelV2ModalOpen(true)} />}
               <Notes invoice={invoice} onChange={setInvoice} />
-              <PaymentHistory invoice={invoice} onChange={setInvoice} />
             </div>
             <div className="preview" style={{...(isNarrow && activeView !== 'preview' ? {display: 'none'} : {}), padding: 0, display: isNarrow && activeView !== 'preview' ? 'none' : 'flex', flexDirection: 'column'}}>
               <div className="preview-tabs">
@@ -354,21 +387,114 @@ export default function App() {
         onAdd={handleAddFromSelections}
         jobName={currentJob?.name || 'Job name'}
         addedGroupIds={invoice.lineItems.filter(li => li.relatedItem?.groupId).map(li => li.relatedItem!.groupId)}
-        data={MODAL_ALLOWANCES.map(ma => {
+        onMarkComplete={toggleAllowanceComplete}
+        showNegativeBalances
+        data={INVOICE_SELECTION_SCENARIOS.map(ma => {
           const selectionsTotal = ma.selections.reduce((s, sel) => s + sel.approvedPrice, 0);
+          const billableSelectionsTotal = ma.selections.reduce((s, sel) => s + (sel.status === 'invoiced' ? 0 : sel.approvedPrice), 0);
+          const invoicedSelectionsTotal = ma.selections.reduce((s, sel) => s + (sel.status === 'invoiced' ? sel.approvedPrice : 0), 0);
+          const notPreviouslyInvoiced = ma.previouslyInvoiced === 0;
+          const anyInvoicedSelection = ma.selections.some(s => s.status === 'invoiced');
+          const markedComplete = ma.closeoutMode === 'credit' || completedAllowanceIds.has(ma.id);
+
+          // Allowance reversal line + invoice balance, by case:
+          //  1. Selections previously invoiced (Cabinets edge case, Paint open):
+          //     - open: null, balance = billable selections (the new approved one if any)
+          //     - marked complete (Paint): null — no credit, allowance placeholder was
+          //       never invoiced so client was only billed for actuals; nothing to refund
+          //     - marked complete over budget (Cabinets): null (no credit to surface)
+          //  2. Allowance not previously invoiced + selections still to bill (Plumbing, Lighting):
+          //     - open: null, balance = billable selections (allowance stays open)
+          //     - marked complete: null — same principle as Paint, nothing was pre-billed
+          //  3. Allowance previously invoiced (placeholder pre-billed) + selections to bill (Flooring, Kitchen):
+          //     - open: reverse only the matching selection amount (-min(selections, budget))
+          //         under: net = $0 (allowance stays open with unspent budget)
+          //         over:  net = overage (full reversal happens implicitly)
+          //     - marked complete: full budget reversal
+          //         under: net = -underage (the genuine credit — client overpaid placeholder)
+          //         over:  net = +overage (same as open; no math change)
+          let allowanceNewInvoiceAmt: number | null;
+          let invoiceBalance: number;
+          if (anyInvoicedSelection) {
+            allowanceNewInvoiceAmt = null;
+            invoiceBalance = billableSelectionsTotal;
+          } else if (notPreviouslyInvoiced) {
+            allowanceNewInvoiceAmt = null;
+            invoiceBalance = billableSelectionsTotal;
+          } else {
+            if (markedComplete) {
+              allowanceNewInvoiceAmt = -ma.budgetAmount;
+              invoiceBalance = selectionsTotal - ma.budgetAmount;
+            } else {
+              const matchedReversal = Math.min(selectionsTotal, ma.budgetAmount);
+              allowanceNewInvoiceAmt = -matchedReversal;
+              invoiceBalance = selectionsTotal - matchedReversal;
+            }
+          }
+          // Edge case: when prior selections are already invoiced, the header
+          // "Previously invoiced" reflects those selection totals, and the
+          // "Remaining to invoice" is only the newly added (still approved) selections.
+          const previouslyInvoicedDisplay = anyInvoicedSelection ? invoicedSelectionsTotal : ma.previouslyInvoiced;
           return {
             id: ma.id,
-            type: 'allowance' as const,
+            type: 'allowance' as 'allowance' | 'selection',
             name: ma.name,
+            scenarioNote: ma.scenarioNote,
+            isComplete: markedComplete,
             revisedPrice: selectionsTotal,
-            previouslyInvoiced: ma.previouslyInvoiced,
-            invoiceBalance: selectionsTotal - ma.previouslyInvoiced,
+            previouslyInvoiced: previouslyInvoicedDisplay,
+            invoiceBalance,
+            allowanceBudget: ma.budgetAmount,
+            overage: selectionsTotal - ma.budgetAmount,
             children: [
-              { id: `${ma.id}-rev`, lineItem: ma.name, costCode: ma.costCode, selection: 'Allowance', price: ma.budgetAmount, newInvoiceAmt: -ma.budgetAmount },
-              ...ma.selections.map(sel => ({ id: sel.id, lineItem: sel.name, costCode: `${sel.costCode} - ${sel.costType}`, selection: sel.name, price: sel.approvedPrice, newInvoiceAmt: sel.approvedPrice })),
+              {
+                id: `${ma.id}-rev`,
+                lineItem: ma.name,
+                costCode: ma.costCode,
+                selection: 'Allowance',
+                price: ma.budgetAmount,
+                newInvoiceAmt: allowanceNewInvoiceAmt,
+              },
+              ...ma.selections.map(sel => ({
+                id: sel.id,
+                lineItem: sel.name,
+                costCode: `${sel.costCode} - ${sel.costType}`,
+                selection: sel.name,
+                price: sel.approvedPrice,
+                newInvoiceAmt: sel.status === 'invoiced' ? null : sel.approvedPrice,
+              })),
             ],
           };
-        })}
+        }).filter(row => {
+          // Hide allowance rows with nothing to do — all selections already invoiced,
+          // allowance placeholder never invoiced, no credit to surface (Paint scenario).
+          // Keeps the row out of "Add from selections" so users don't see no-op options.
+          const allowanceRev = row.children[0]?.newInvoiceAmt;
+          return row.invoiceBalance !== 0 || allowanceRev !== null;
+        }).concat(
+          INVOICE_STANDALONE_SELECTIONS.map(ss => ({
+            id: ss.id,
+            type: 'selection' as const,
+            name: ss.name,
+            scenarioNote: ss.scenarioNote,
+            isComplete: false,
+            revisedPrice: ss.approvedPrice,
+            previouslyInvoiced: 0,
+            invoiceBalance: ss.approvedPrice,
+            allowanceBudget: 0,
+            overage: 0,
+            children: [
+              {
+                id: `${ss.id}-row`,
+                lineItem: ss.name,
+                costCode: `${ss.costCode} - ${ss.costType}`,
+                selection: ss.name,
+                price: ss.approvedPrice,
+                newInvoiceAmt: ss.approvedPrice,
+              },
+            ],
+          }))
+        )}
       />
       <SelectionsModalV2
         open={selV2ModalOpen}

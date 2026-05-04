@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import ReactDOM from 'react-dom';
 import SelectionsModal from './SelectionsModal';
+import { BdsButton, BdsTextArea } from '../bds';
 
 const fmt = (n: number) =>
   n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -73,9 +74,10 @@ export interface ModalAllowance {
   budgetAmount: number;
   previouslyInvoiced: number;
   selections: ModalSelection[];
+  scenarioNote?: string;
 }
 
-interface ModalSelection {
+export interface ModalSelection {
   id: string;
   name: string;
   costCode: string;
@@ -92,6 +94,7 @@ export const MODAL_ALLOWANCES: ModalAllowance[] = [
     costCode: '9030 - Kitchen Fixtures',
     budgetAmount: 5000,
     previouslyInvoiced: 5000,
+    scenarioNote: 'Scenario 1 · Allowance previously invoiced, selections go over → invoice the overage',
     selections: [
       { id: 'ms-1', name: 'Kohler Farmhouse Sink', costCode: '9030', costType: 'Material', originalPrice: 2000, approvedPrice: 2500, status: 'approved' },
       { id: 'ms-2', name: 'Delta Touchless Faucet', costCode: '9030', costType: 'Material', originalPrice: 1000, approvedPrice: 1500, status: 'approved' },
@@ -104,6 +107,7 @@ export const MODAL_ALLOWANCES: ModalAllowance[] = [
     costCode: '6010 - Flooring',
     budgetAmount: 8000,
     previouslyInvoiced: 8000,
+    scenarioNote: 'Scenario 4 · Allowance previously invoiced, selections come in under → net negative credit to client',
     selections: [
       { id: 'ms-5', name: 'Engineered Hardwood — Living Room', costCode: '6010', costType: 'Material', originalPrice: 5000, approvedPrice: 4500, status: 'approved' },
       { id: 'ms-6', name: 'Luxury Vinyl Plank — Entryway', costCode: '6010', costType: 'Labor', originalPrice: 3000, approvedPrice: 2700, status: 'approved' },
@@ -115,6 +119,7 @@ export const MODAL_ALLOWANCES: ModalAllowance[] = [
     costCode: '4010 - Plumbing',
     budgetAmount: 4000,
     previouslyInvoiced: 0,
+    scenarioNote: 'Scenario 2 · Allowance not yet invoiced, selections go over → invoice selections only (allowance row shows --)',
     selections: [
       { id: 'ms-12', name: 'Bathroom Faucet Set', costCode: '4010', costType: 'Material', originalPrice: 2000, approvedPrice: 2200, status: 'approved' },
       { id: 'ms-13', name: 'Shower Valve Kit', costCode: '4010', costType: 'Material', originalPrice: 2000, approvedPrice: 2500, status: 'approved' },
@@ -126,6 +131,7 @@ export const MODAL_ALLOWANCES: ModalAllowance[] = [
     costCode: '5003 - Lighting',
     budgetAmount: 11000,
     previouslyInvoiced: 11000,
+    scenarioNote: 'Scenario 1 · Allowance previously invoiced, selections go over → invoice the overage (same pattern as Kitchen)',
     selections: [
       { id: 'ms-7', name: 'Recessed Can Lights', costCode: '7020', costType: 'Material', originalPrice: 7000, approvedPrice: 8500, status: 'approved' },
       { id: 'ms-8', name: 'Pendant Fixtures', costCode: '7030', costType: 'Material', originalPrice: 3000, approvedPrice: 4000, status: 'approved' },
@@ -1112,6 +1118,27 @@ export default function AIAPayApp({ onNavigate, approvedCOIds, addedCostIds: ext
   // Certification state
   const [contractorCert, setContractorCert] = useState({ firstName: '', lastName: '', date: '', signature: '' });
   const [architectCert, setArchitectCert] = useState({ firstName: '', lastName: '', date: '', signature: '' });
+  const [invoiceDate, setInvoiceDate] = useState('');
+  const [paymentTerms, setPaymentTerms] = useState('');
+  const parsePaymentTermDays = (term: string): number | null => {
+    const t = term.trim().toLowerCase();
+    if (!t || t === 'none') return null;
+    if (t === 'due upon receipt' || t === 'upon receipt' || t === 'receipt') return 0;
+    const netMatch = t.match(/^net\s*(\d+)$/);
+    if (netMatch) return parseInt(netMatch[1], 10);
+    const num = parseInt(t, 10);
+    if (!isNaN(num) && num >= 0 && String(num) === t) return num;
+    return null;
+  };
+  const dueDate = (() => {
+    if (!invoiceDate) return '';
+    const days = parsePaymentTermDays(paymentTerms);
+    if (days === null) return '';
+    const d = new Date(invoiceDate);
+    if (isNaN(d.getTime())) return '';
+    d.setDate(d.getDate() + days);
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  })();
 
   // Client preview modal
   const [showClientPreview, setShowClientPreview] = useState(false);
@@ -1401,12 +1428,12 @@ export default function AIAPayApp({ onNavigate, approvedCOIds, addedCostIds: ext
   const toggleGroup = (id: string) => setExpanded(prev => ({ ...prev, [id]: !prev[id] }));
 
   return (
-    <div style={{ fontFamily: "'Inter', sans-serif" }}>
+    <div className="aia-page" style={{ fontFamily: "'Inter', sans-serif" }}>
 
       {/* Modal chrome */}
-      <div style={{ background: 'white', borderRadius: 12, margin: 20, border: '1px solid #e2e8f0', boxShadow: '0 4px 24px rgba(0,0,0,0.08)' }}>
+      <div className="aia-chrome" style={{ background: 'white', borderRadius: 12, margin: 20, border: '1px solid #e2e8f0', boxShadow: '0 4px 24px rgba(0,0,0,0.08)' }}>
         {/* Modal header */}
-        <div style={{ padding: '16px 24px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div className="aia-header" style={{ padding: '16px 24px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <div>
             <div style={{ fontSize: 11, color: '#94a3b8' }}>Johnson Residence</div>
             <div style={{ fontSize: 18, fontWeight: 700, color: '#0f172a' }}>Progress invoice</div>
@@ -1422,7 +1449,7 @@ export default function AIAPayApp({ onNavigate, approvedCOIds, addedCostIds: ext
         </div>
 
         {/* Body */}
-        <div style={{ padding: '20px 24px' }}>
+        <div className="aia-body" style={{ padding: '20px 24px' }}>
           {/* Overage warning banner */}
           {overages.length > 0 && (
             <div style={{
@@ -1504,10 +1531,42 @@ export default function AIAPayApp({ onNavigate, approvedCOIds, addedCostIds: ext
                 Link to schedule item
               </button>
             </div>
-            <div style={{ display: 'flex', gap: 16 }}>
-              <div><label style={labelStyle}>Invoice date</label><input type="date" style={inputStyle} /></div>
-              <div><label style={labelStyle}>Payment terms</label><select style={inputStyle}><option>None</option><option>Net 30</option></select></div>
-              <div><label style={labelStyle}>Due date</label><div style={{ padding: '8px 0', fontSize: 13, color: '#94a3b8' }}>--</div></div>
+            <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+              <div>
+                <label style={labelStyle}>Invoice date</label>
+                <input
+                  type="date"
+                  style={inputStyle}
+                  value={invoiceDate}
+                  onChange={e => setInvoiceDate(e.target.value)}
+                />
+              </div>
+              <div>
+                <label style={labelStyle}>Payment terms</label>
+                <input
+                  list="payment-terms-options"
+                  style={{ ...inputStyle, minWidth: 180 }}
+                  placeholder="Select or type days"
+                  value={paymentTerms}
+                  onChange={e => setPaymentTerms(e.target.value)}
+                />
+                <datalist id="payment-terms-options">
+                  <option value="None" />
+                  <option value="Due upon receipt" />
+                  <option value="Net 3" />
+                  <option value="Net 5" />
+                  <option value="Net 7" />
+                  <option value="Net 10" />
+                  <option value="Net 15" />
+                  <option value="Net 30" />
+                </datalist>
+              </div>
+              <div>
+                <label style={labelStyle}>Due date</label>
+                <div style={{ padding: '8px 0', fontSize: 13, color: dueDate ? '#0f172a' : '#94a3b8', fontWeight: dueDate ? 500 : 400 }}>
+                  {dueDate || '--'}
+                </div>
+              </div>
             </div>
           </div>
 
@@ -1648,200 +1707,190 @@ export default function AIAPayApp({ onNavigate, approvedCOIds, addedCostIds: ext
             </div>
           </div>
 
-          {/* Bottom sections */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, alignItems: 'start' }}>
-            {/* Left column */}
-            <div>
-              {/* Internal Notes */}
-              <div style={{ marginBottom: 24 }}>
-                <div style={{ fontSize: 14, fontWeight: 700, color: '#0f172a', marginBottom: 8 }}>Internal Notes</div>
-                <textarea
-                  style={{
-                    width: '100%', boxSizing: 'border-box', padding: '12px 14px', fontSize: 13,
-                    border: '1px solid #e2e8f0', borderRadius: 6, resize: 'vertical',
-                    minHeight: 72, outline: 'none', color: '#0f172a', fontFamily: 'inherit',
-                  }}
-                  placeholder="Text Here"
-                />
-              </div>
+          {/* Bottom sections — 2x2 grid, paired rows match height */}
+          <div className="aia-bottom-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, alignItems: 'stretch' }}>
+            {/* Internal notes */}
+            <div style={{ background: '#f8fafc', borderRadius: 8, padding: '16px 20px', display: 'flex', flexDirection: 'column' }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: '#0f172a', marginBottom: 12 }}>Internal notes</div>
+              <BdsTextArea
+                id="aia-internal-notes"
+                placeholder="Add a note..."
+                rows={3}
+                style={{ flex: 1, minHeight: 72, resize: 'vertical' }}
+              />
+            </div>
 
-              {/* Invoice Description */}
-              <div>
-                <div style={{ fontSize: 14, fontWeight: 700, color: '#0f172a', marginBottom: 8 }}>Invoice Description</div>
-                <textarea
-                  style={{
-                    width: '100%', boxSizing: 'border-box', padding: '12px 14px', fontSize: 13,
-                    border: '1px solid #e2e8f0', borderRadius: '6px 6px 0 0', borderBottom: 'none',
-                    resize: 'vertical', minHeight: 96, outline: 'none', color: '#0f172a', fontFamily: 'inherit',
-                  }}
-                  placeholder="Text Here"
-                />
-                {/* Rich text toolbar */}
-                <div style={{
-                  display: 'flex', alignItems: 'center', gap: 2, padding: '6px 10px',
-                  border: '1px solid #e2e8f0', borderRadius: '0 0 6px 6px', background: '#fafbfc',
-                }}>
-                  {/* Font dropdown */}
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 8px', fontSize: 12, color: '#26292E', cursor: 'pointer' }}>
-                    Font
-                    <svg width="8" height="8" viewBox="0 0 8 6" fill="none"><path d="M1 1l3 3 3-3" stroke="#64748b" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                  </span>
-                  <div style={{ width: 1, height: 16, background: '#e2e8f0', margin: '0 4px' }} />
-                  {/* Size dropdown */}
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 8px', fontSize: 12, color: '#26292E', cursor: 'pointer' }}>
-                    Size
-                    <svg width="8" height="8" viewBox="0 0 8 6" fill="none"><path d="M1 1l3 3 3-3" stroke="#64748b" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                  </span>
-                  <div style={{ width: 1, height: 16, background: '#e2e8f0', margin: '0 4px' }} />
-                  {/* Text color */}
-                  <span style={{ padding: '3px 6px', fontSize: 13, cursor: 'pointer', color: '#26292E', display: 'inline-flex', alignItems: 'center', gap: 2 }}>
-                    A<svg width="6" height="6" viewBox="0 0 6 4" fill="none"><path d="M0.5 0.5l2.5 2.5 2.5-2.5" stroke="#64748b" strokeWidth="1" strokeLinecap="round"/></svg>
-                  </span>
-                  {/* Highlight color */}
-                  <span style={{ padding: '3px 6px', fontSize: 13, cursor: 'pointer', background: '#fef3c7', borderRadius: 2, color: '#26292E', display: 'inline-flex', alignItems: 'center', gap: 2 }}>
-                    A<svg width="6" height="6" viewBox="0 0 6 4" fill="none"><path d="M0.5 0.5l2.5 2.5 2.5-2.5" stroke="#64748b" strokeWidth="1" strokeLinecap="round"/></svg>
-                  </span>
-                  <div style={{ width: 1, height: 16, background: '#e2e8f0', margin: '0 6px' }} />
-                  {/* B I U S */}
-                  {['B', 'I', 'U', 'S'].map(c => (
-                    <span key={c} style={{
-                      padding: '3px 7px', fontSize: 13, cursor: 'pointer', color: '#26292E',
-                      fontWeight: c === 'B' ? 700 : 400,
-                      fontStyle: c === 'I' ? 'italic' : 'normal',
-                      textDecoration: c === 'U' ? 'underline' : c === 'S' ? 'line-through' : 'none',
-                    }}>{c}</span>
-                  ))}
-                  <div style={{ width: 1, height: 16, background: '#e2e8f0', margin: '0 6px' }} />
-                  {/* Alignment icons */}
-                  {[
-                    <svg key="al" width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 3h12M2 6.5h8M2 10h12M2 13.5h8" stroke="#64748b" strokeWidth="1.2" strokeLinecap="round"/></svg>,
-                    <svg key="ac" width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 3h12M4 6.5h8M2 10h12M4 13.5h8" stroke="#64748b" strokeWidth="1.2" strokeLinecap="round"/></svg>,
-                    <svg key="ar" width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 3h12M6 6.5h8M2 10h12M6 13.5h8" stroke="#64748b" strokeWidth="1.2" strokeLinecap="round"/></svg>,
-                    <svg key="aj" width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 3h12M2 6.5h12M2 10h12M2 13.5h12" stroke="#64748b" strokeWidth="1.2" strokeLinecap="round"/></svg>,
-                  ].map((icon, i) => (
-                    <span key={i} style={{ padding: '3px 4px', cursor: 'pointer', display: 'inline-flex' }}>{icon}</span>
-                  ))}
-                  <div style={{ width: 1, height: 16, background: '#e2e8f0', margin: '0 6px' }} />
-                  {/* Link icon */}
-                  <span style={{ padding: '3px 4px', cursor: 'pointer', display: 'inline-flex' }}>
-                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-                      <path d="M6.5 9.5l3-3M7 11l-1.5 1.5a2.12 2.12 0 01-3-3L4 8" stroke="#64748b" strokeWidth="1.2" strokeLinecap="round"/>
-                      <path d="M9 5l1.5-1.5a2.12 2.12 0 013 3L12 8" stroke="#64748b" strokeWidth="1.2" strokeLinecap="round"/>
+            {/* QuickBooks status */}
+            <div style={{ background: '#f8fafc', borderRadius: 8, padding: '16px 20px', display: 'flex', flexDirection: 'column' }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: '#0f172a', marginBottom: 12 }}>QuickBooks status</div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13, marginBottom: 12 }}>
+                <span style={{ fontWeight: 500, color: '#334155' }}>Invoice status</span>
+                <span style={{ color: '#94a3b8' }}>Not invoiced</span>
+              </div>
+              <div style={{ alignSelf: 'flex-start' }}>
+                <BdsButton
+                  displayType="secondary"
+                  text="Create invoice"
+                  icon={
+                    <svg width="18" height="18" viewBox="0 0 30 30" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M15 30C23.2843 30 30 23.2843 30 15C30 6.71573 23.2843 0 15 0C6.71573 0 0 6.71573 0 15C0 23.2843 6.71573 30 15 30Z" fill="#2CA01C"/>
+                      <path d="M4.16602 15.0001C4.16602 18.2334 6.76602 20.8334 9.99935 20.8334H10.8327V18.6667H9.99935C7.96601 18.6667 6.33268 17.0334 6.33268 15.0001C6.33268 12.9667 7.96601 11.3334 9.99935 11.3334H11.9993C11.9993 11.3334 11.9993 22.4667 11.9993 22.6667C11.9993 23.8667 12.966 24.8334 14.166 24.8334V9.16675C14.166 9.16675 11.9327 9.16675 9.99935 9.16675C6.76602 9.16675 4.16602 11.8001 4.16602 15.0001ZM19.9993 9.16675H19.166V11.3334H19.9993C22.0327 11.3334 23.666 12.9667 23.666 15.0001C23.666 17.0334 22.0327 18.6667 19.9993 18.6667H17.9993C17.9993 18.6667 17.9993 7.53341 17.9993 7.33341C17.9993 6.13341 17.0327 5.16675 15.8327 5.16675V20.8334C15.8327 20.8334 18.066 20.8334 19.9993 20.8334C23.2327 20.8334 25.8327 18.2334 25.8327 15.0001C25.8327 11.8001 23.1993 9.16675 19.9993 9.16675Z" fill="white"/>
                     </svg>
-                  </span>
-                </div>
+                  }
+                />
               </div>
             </div>
 
-            {/* Right column */}
-            <div>
-              {/* QuickBooks status */}
-              <div style={{ background: '#f8fafc', borderRadius: 8, padding: '16px 20px', marginBottom: 16 }}>
-                <div style={{ fontSize: 14, fontWeight: 700, color: '#0f172a', marginBottom: 12 }}>QuickBooks status</div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13, marginBottom: 12 }}>
-                  <span style={{ fontWeight: 500, color: '#334155' }}>Invoice status</span>
-                  <span style={{ color: '#94a3b8' }}>Not Invoiced</span>
-                </div>
-                <button style={{
-                  fontSize: 13, padding: '7px 14px', border: '1px solid #e2e8f0', borderRadius: 6,
-                  background: 'white', cursor: 'pointer', display: 'inline-flex', alignItems: 'center',
-                  gap: 8, color: '#334155', fontFamily: 'inherit', fontWeight: 500,
-                }}>
-                  <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-                    <circle cx="9" cy="9" r="9" fill="#22c55e"/>
-                    <text x="9" y="12.5" textAnchor="middle" fontSize="8" fontWeight="700" fill="white" fontFamily="Arial">qb</text>
+            {/* Invoice description */}
+            <div style={{ background: '#f8fafc', borderRadius: 8, padding: '16px 20px', display: 'flex', flexDirection: 'column' }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: '#0f172a', marginBottom: 12 }}>Invoice description</div>
+              <BdsTextArea
+                id="aia-invoice-description"
+                placeholder="Describe the work invoiced..."
+                rows={4}
+                style={{ flex: 1, minHeight: 96, resize: 'vertical', borderRadius: '6px 6px 0 0', borderBottom: 'none' }}
+              />
+              {/* Rich text toolbar */}
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 2, padding: '6px 10px', flexWrap: 'wrap',
+                border: '1px solid #e2e8f0', borderRadius: '0 0 6px 6px', background: 'white',
+              }}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 8px', fontSize: 12, color: '#26292E', cursor: 'pointer' }}>
+                  Font
+                  <svg width="8" height="8" viewBox="0 0 8 6" fill="none"><path d="M1 1l3 3 3-3" stroke="#64748b" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                </span>
+                <div style={{ width: 1, height: 16, background: '#e2e8f0', margin: '0 4px' }} />
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 8px', fontSize: 12, color: '#26292E', cursor: 'pointer' }}>
+                  Size
+                  <svg width="8" height="8" viewBox="0 0 8 6" fill="none"><path d="M1 1l3 3 3-3" stroke="#64748b" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                </span>
+                <div style={{ width: 1, height: 16, background: '#e2e8f0', margin: '0 4px' }} />
+                <span style={{ padding: '3px 6px', fontSize: 13, cursor: 'pointer', color: '#26292E', display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+                  A<svg width="6" height="6" viewBox="0 0 6 4" fill="none"><path d="M0.5 0.5l2.5 2.5 2.5-2.5" stroke="#64748b" strokeWidth="1" strokeLinecap="round"/></svg>
+                </span>
+                <span style={{ padding: '3px 6px', fontSize: 13, cursor: 'pointer', background: '#fef3c7', borderRadius: 2, color: '#26292E', display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+                  A<svg width="6" height="6" viewBox="0 0 6 4" fill="none"><path d="M0.5 0.5l2.5 2.5 2.5-2.5" stroke="#64748b" strokeWidth="1" strokeLinecap="round"/></svg>
+                </span>
+                <div style={{ width: 1, height: 16, background: '#e2e8f0', margin: '0 6px' }} />
+                {['B', 'I', 'U', 'S'].map(c => (
+                  <span key={c} style={{
+                    padding: '3px 7px', fontSize: 13, cursor: 'pointer', color: '#26292E',
+                    fontWeight: c === 'B' ? 700 : 400,
+                    fontStyle: c === 'I' ? 'italic' : 'normal',
+                    textDecoration: c === 'U' ? 'underline' : c === 'S' ? 'line-through' : 'none',
+                  }}>{c}</span>
+                ))}
+                <div style={{ width: 1, height: 16, background: '#e2e8f0', margin: '0 6px' }} />
+                {[
+                  <svg key="al" width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 3h12M2 6.5h8M2 10h12M2 13.5h8" stroke="#64748b" strokeWidth="1.2" strokeLinecap="round"/></svg>,
+                  <svg key="ac" width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 3h12M4 6.5h8M2 10h12M4 13.5h8" stroke="#64748b" strokeWidth="1.2" strokeLinecap="round"/></svg>,
+                  <svg key="ar" width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 3h12M6 6.5h8M2 10h12M6 13.5h8" stroke="#64748b" strokeWidth="1.2" strokeLinecap="round"/></svg>,
+                  <svg key="aj" width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 3h12M2 6.5h12M2 10h12M2 13.5h12" stroke="#64748b" strokeWidth="1.2" strokeLinecap="round"/></svg>,
+                ].map((icon, i) => (
+                  <span key={i} style={{ padding: '3px 4px', cursor: 'pointer', display: 'inline-flex' }}>{icon}</span>
+                ))}
+                <div style={{ width: 1, height: 16, background: '#e2e8f0', margin: '0 6px' }} />
+                <span style={{ padding: '3px 4px', cursor: 'pointer', display: 'inline-flex' }}>
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                    <path d="M6.5 9.5l3-3M7 11l-1.5 1.5a2.12 2.12 0 01-3-3L4 8" stroke="#64748b" strokeWidth="1.2" strokeLinecap="round"/>
+                    <path d="M9 5l1.5-1.5a2.12 2.12 0 013 3L12 8" stroke="#64748b" strokeWidth="1.2" strokeLinecap="round"/>
                   </svg>
-                  Create invoice
-                </button>
+                </span>
               </div>
+            </div>
 
-              {/* Attachments */}
-              <div style={{ background: '#f8fafc', borderRadius: 8, padding: '16px 20px' }}>
-                <div style={{ fontSize: 14, fontWeight: 700, color: '#0f172a', marginBottom: 12 }}>Attachments</div>
-                <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
-                  <button style={{
-                    fontSize: 13, padding: '6px 14px', border: '1px solid #e2e8f0', borderRadius: 6,
-                    background: 'white', cursor: 'pointer', color: '#334155', fontFamily: 'inherit',
-                  }}>Button</button>
-                  <button style={{
-                    fontSize: 13, padding: '6px 14px', border: '1px solid #e2e8f0', borderRadius: 6,
-                    background: 'white', cursor: 'pointer', color: '#334155', fontFamily: 'inherit',
-                  }}>Button</button>
-                </div>
-                {/* Attachment thumbnails */}
-                <div style={{ display: 'flex', gap: 10 }}>
-                  {[1, 2, 3, 4].map(i => (
-                    <div key={i} style={{
-                      width: 80, height: 100, borderRadius: 6, border: '1px solid #e2e8f0',
-                      background: 'white', overflow: 'hidden', display: 'flex', alignItems: 'center',
-                      justifyContent: 'center', flexShrink: 0,
-                    }}>
-                      <div style={{ width: '100%', height: '100%', background: `linear-gradient(135deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%)`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <svg width="24" height="28" viewBox="0 0 24 28" fill="none">
-                          <rect x="1" y="1" width="22" height="26" rx="2" stroke="#cbd5e1" strokeWidth="1"/>
-                          <path d="M6 8h12M6 12h12M6 16h8" stroke="#cbd5e1" strokeWidth="1" strokeLinecap="round"/>
-                        </svg>
+            {/* Attachments */}
+            <div style={{ background: '#f8fafc', borderRadius: 8, padding: '16px 20px', display: 'flex', flexDirection: 'column' }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: '#0f172a', marginBottom: 12 }}>Attachments</div>
+              <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+                <BdsButton
+                  displayType="secondary"
+                  text="Add"
+                  icon={<svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 2v8M2 6h8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>}
+                />
+                <BdsButton
+                  displayType="secondary"
+                  text="Create new doc"
+                  icon={<svg width="12" height="14" viewBox="0 0 12 14" fill="none"><path d="M1.5 1.5h6L10.5 4.5v8a0 0 0 0 1 0 0h-9a0 0 0 0 1 0 0v-11a0 0 0 0 1 0 0z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/><path d="M7 1.5v3h3.5M6 7v4M4 9h4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>}
+                />
+              </div>
+              {/* Attachment thumbnails - fake bill images */}
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                {[
+                  { vendor: 'ABC Lumber Co.', number: '#10472', amount: '2,450.00', date: '04/18/26' },
+                  { vendor: 'Midwest Electric', number: '#88219', amount: '1,180.50', date: '04/20/26' },
+                ].map((bill, i) => (
+                  <div key={i} style={{
+                    width: 80, height: 100, borderRadius: 6, border: '1px solid #e2e8f0',
+                    background: 'white', overflow: 'hidden', flexShrink: 0, position: 'relative',
+                    boxShadow: '0 1px 2px rgba(15,23,42,0.04)',
+                  }}>
+                    <div style={{ padding: '6px 6px 0 6px' }}>
+                      <div style={{ fontSize: 5, fontWeight: 700, color: '#0f172a', letterSpacing: 0.3 }}>BILL</div>
+                      <div style={{ fontSize: 4, color: '#64748b', marginTop: 1, lineHeight: 1.2 }}>{bill.vendor}</div>
+                      <div style={{ fontSize: 3.5, color: '#94a3b8', marginTop: 1 }}>{bill.number}</div>
+                      <div style={{ marginTop: 4, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                        {[...Array(5)].map((_, j) => (
+                          <div key={j} style={{ height: 2, background: '#f1f5f9', borderRadius: 1, width: `${90 - j * 8}%` }} />
+                        ))}
                       </div>
+                      <div style={{ marginTop: 6, borderTop: '1px solid #e2e8f0', paddingTop: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: 3.5, color: '#64748b' }}>Total</span>
+                        <span style={{ fontSize: 5, fontWeight: 700, color: '#0f172a' }}>${bill.amount}</span>
+                      </div>
+                      <div style={{ fontSize: 3.5, color: '#94a3b8', marginTop: 2, textAlign: 'right' }}>{bill.date}</div>
                     </div>
-                  ))}
-                </div>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
 
-          {/* Custom Fields */}
-          <div style={{ marginTop: 20, background: '#f8fafc', borderRadius: 8, padding: '12px 16px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14, fontWeight: 700, color: '#0f172a', cursor: 'pointer' }}>
-              <svg width="10" height="10" viewBox="0 0 10 10"><path d="M2.5 4L5 6.5L7.5 4" stroke="#0f172a" strokeWidth="1.5" fill="none" strokeLinecap="round"/></svg>
-              Custom Fields (0)
-            </div>
-          </div>
-
-          {/* ─── Contractor Certification ─── */}
-          <div style={{ marginTop: 24, borderTop: '1px solid #e2e8f0', paddingTop: 20 }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: '#0f172a', marginBottom: 8 }}>Contractor certification</div>
-            <div style={{ fontSize: 12, color: '#64748b', lineHeight: 1.7, marginBottom: 14 }}>
-              By submitting this invoice, the Contractor certifies to the best of their knowledge that:
-              <ul style={{ margin: '6px 0 0 18px', paddingLeft: 0 }}>
-                <li>All work billed has been delivered or performed in accordance with the contract documents and applicable standards;</li>
-                <li>The amounts stated accurately reflect work completed and are due under the contract;</li>
-                <li>All prior payments received have been properly applied to subcontractors, suppliers, and other obligations related to previous work;</li>
-                <li>There are no liens, claims, or encumbrances against the work covered by this invoice; and</li>
-                <li>Based on completion of work and compliance with contract terms, payment in the amount stated is now due and payable.</li>
-              </ul>
-            </div>
-            <div style={{ display: 'flex', gap: 16, marginBottom: 12 }}>
-              <div style={{ flex: 1 }}><label style={labelStyle}>First name</label><input style={inputStyle} value={contractorCert.firstName} onChange={e => setContractorCert(p => ({ ...p, firstName: e.target.value }))} /></div>
-              <div style={{ flex: 1 }}><label style={labelStyle}>Last name</label><input style={inputStyle} value={contractorCert.lastName} onChange={e => setContractorCert(p => ({ ...p, lastName: e.target.value }))} /></div>
-              <div style={{ flex: 1 }}><label style={labelStyle}>Date</label><input type="date" style={inputStyle} value={contractorCert.date} onChange={e => setContractorCert(p => ({ ...p, date: e.target.value }))} /></div>
-            </div>
-            <label style={labelStyle}>Draw your signature</label>
-            <div style={{ maxWidth: 320 }}>
+          {/* ─── Certifications (Contractor | Architecture) ─── */}
+          <div className="aia-certs-row" style={{ marginTop: 20, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, alignItems: 'stretch' }}>
+            {/* Contractor certification */}
+            <div className="aia-cert" style={{ background: '#f8fafc', borderRadius: 8, padding: '20px 24px' }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: '#0f172a', marginBottom: 10 }}>Contractor certification</div>
+              <div style={{ fontSize: 12, color: '#64748b', lineHeight: 1.7, marginBottom: 18 }}>
+                By submitting this invoice, the Contractor certifies to the best of their knowledge that:
+                <ul style={{ margin: '6px 0 0 18px', paddingLeft: 0 }}>
+                  <li>All work billed has been delivered or performed in accordance with the contract documents and applicable standards;</li>
+                  <li>The amounts stated accurately reflect work completed and are due under the contract;</li>
+                  <li>All prior payments received have been properly applied to subcontractors, suppliers, and other obligations related to previous work;</li>
+                  <li>There are no liens, claims, or encumbrances against the work covered by this invoice; and</li>
+                  <li>Based on completion of work and compliance with contract terms, payment in the amount stated is now due and payable.</li>
+                </ul>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+                <div><label style={labelStyle}>First name</label><input style={{...inputStyle, background: 'white'}} value={contractorCert.firstName} onChange={e => setContractorCert(p => ({ ...p, firstName: e.target.value }))} /></div>
+                <div><label style={labelStyle}>Last name</label><input style={{...inputStyle, background: 'white'}} value={contractorCert.lastName} onChange={e => setContractorCert(p => ({ ...p, lastName: e.target.value }))} /></div>
+                <div style={{ gridColumn: '1 / -1' }}><label style={labelStyle}>Date</label><input type="date" style={{...inputStyle, background: 'white'}} value={contractorCert.date} onChange={e => setContractorCert(p => ({ ...p, date: e.target.value }))} /></div>
+              </div>
+              <label style={labelStyle}>Signature</label>
               <SignaturePad dataUrl={contractorCert.signature} onChange={(sig: string) => setContractorCert(p => ({ ...p, signature: sig }))} />
             </div>
-          </div>
 
-          {/* ─── Architecture Certification ─── */}
-          <div style={{ marginTop: 24, borderTop: '1px solid #e2e8f0', paddingTop: 20 }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: '#0f172a', marginBottom: 8 }}>Architecture certification</div>
-            <div style={{ fontSize: 12, color: '#64748b', lineHeight: 1.7, marginBottom: 14 }}>
-              Based on site observations and the information provided in this application, the Architect confirms that
-              the work has progressed as shown, meets the requirements of the contract documents, and that the
-              Contractor is entitled to payment of the Amount Certified.
-              <br /><br />
-              If the Amount Certified differs from the amount requested, an explanation and any revised figures is
-              attached to this application and shown on the continuation sheet.
-            </div>
-            <div style={{ display: 'flex', gap: 16, marginBottom: 12 }}>
-              <div style={{ flex: 1 }}><label style={labelStyle}>First name</label><input style={inputStyle} value={architectCert.firstName} onChange={e => setArchitectCert(p => ({ ...p, firstName: e.target.value }))} /></div>
-              <div style={{ flex: 1 }}><label style={labelStyle}>Last name</label><input style={inputStyle} value={architectCert.lastName} onChange={e => setArchitectCert(p => ({ ...p, lastName: e.target.value }))} /></div>
-              <div style={{ flex: 1 }}><label style={labelStyle}>Date</label><input type="date" style={inputStyle} value={architectCert.date} onChange={e => setArchitectCert(p => ({ ...p, date: e.target.value }))} /></div>
-            </div>
-            <label style={labelStyle}>Draw your signature</label>
-            <div style={{ maxWidth: 320 }}>
+            {/* Architecture certification */}
+            <div className="aia-cert" style={{ background: '#f8fafc', borderRadius: 8, padding: '20px 24px' }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: '#0f172a', marginBottom: 10 }}>Architecture certification</div>
+              <div style={{ fontSize: 12, color: '#64748b', lineHeight: 1.7, marginBottom: 18 }}>
+                Based on site observations and the information provided in this application, the Architect confirms that
+                the work has progressed as shown, meets the requirements of the contract documents, and that the
+                Contractor is entitled to payment of the Amount Certified.
+                <br /><br />
+                If the Amount Certified differs from the amount requested, an explanation and any revised figures is
+                attached to this application and shown on the continuation sheet.
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+                <div><label style={labelStyle}>First name</label><input style={{...inputStyle, background: 'white'}} value={architectCert.firstName} onChange={e => setArchitectCert(p => ({ ...p, firstName: e.target.value }))} /></div>
+                <div><label style={labelStyle}>Last name</label><input style={{...inputStyle, background: 'white'}} value={architectCert.lastName} onChange={e => setArchitectCert(p => ({ ...p, lastName: e.target.value }))} /></div>
+                <div style={{ gridColumn: '1 / -1' }}><label style={labelStyle}>Date</label><input type="date" style={{...inputStyle, background: 'white'}} value={architectCert.date} onChange={e => setArchitectCert(p => ({ ...p, date: e.target.value }))} /></div>
+              </div>
+              <label style={labelStyle}>Signature</label>
               <SignaturePad dataUrl={architectCert.signature} onChange={(sig: string) => setArchitectCert(p => ({ ...p, signature: sig }))} />
             </div>
           </div>
+
         </div>
 
         {/* Footer */}
@@ -2327,6 +2376,7 @@ export default function AIAPayApp({ onNavigate, approvedCOIds, addedCostIds: ext
             id: ma.id,
             type: 'allowance' as const,
             name: ma.name,
+            scenarioNote: ma.scenarioNote,
             revisedPrice: selectionsTotal,
             previouslyInvoiced: ma.previouslyInvoiced,
             invoiceBalance: selectionsTotal - ma.previouslyInvoiced,

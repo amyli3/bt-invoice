@@ -33,7 +33,7 @@ export const JOBS: Job[] = [
 ];
 
 export const defaultInvoice: Invoice = {
-  title: 'Deposit',
+  title: '',
   invoiceNumber: '0001',
   date: new Date().toISOString().split('T')[0],
   dueDate: '2026-04-03',

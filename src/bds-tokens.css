@@ -1,0 +1,1009 @@
+/* Blueprint design tokens (copied from ~/Blueprint/design-tokens/dist/css)
+   Scoped to elements with .bds-scope — only applied on the Prototype (BDS) persona
+   of the Client Selections page. */
+
+:root {
+  /* Color — full ramps */
+  --bds-color-red-5: #FFF8F7; --bds-color-red-10: #FFEEEA; --bds-color-red-15: #FDDDD5; --bds-color-red-20: #FFCDC1;
+  --bds-color-red-25: #FFB9A8; --bds-color-red-30: #FF9886; --bds-color-red-40: #FD756A; --bds-color-red-50: #EF5963;
+  --bds-color-red-60: #D33A5A; --bds-color-red-70: #B5254C; --bds-color-red-80: #8B1439; --bds-color-red-90: #61002F; --bds-color-red-100: #260314;
+
+  --bds-color-yellow-5: #FFFBEF; --bds-color-yellow-10: #FDF3D3; --bds-color-yellow-15: #FBE9B1; --bds-color-yellow-20: #F8DC83;
+  --bds-color-yellow-25: #EFCF61; --bds-color-yellow-30: #E2BA2B; --bds-color-yellow-40: #C99A0D; --bds-color-yellow-50: #B78200;
+  --bds-color-yellow-60: #9F6600; --bds-color-yellow-70: #854D00; --bds-color-yellow-80: #653200; --bds-color-yellow-90: #3D1A00; --bds-color-yellow-100: #1E0A01;
+
+  --bds-color-gray-0: #FFFFFF; --bds-color-gray-5: #F7F9FC; --bds-color-gray-10: #F1F4FA; --bds-color-gray-15: #E2E7F0;
+  --bds-color-gray-20: #D3DBE2; --bds-color-gray-25: #C7D0D9; --bds-color-gray-30: #ACB8C3; --bds-color-gray-40: #8F9BA8;
+  --bds-color-gray-50: #7B8493; --bds-color-gray-60: #666D7C; --bds-color-gray-70: #4E555F; --bds-color-gray-80: #383C45;
+  --bds-color-gray-90: #202227; --bds-color-gray-100: #0E0F10;
+
+  --bds-color-teal-40: #00D8D8;
+  --bds-color-orange-25: #FFC26F;
+
+  --bds-color-green-5: #F5FFFB; --bds-color-green-10: #DDFDEF; --bds-color-green-60: #06A260; --bds-color-green-70: #057E4B; --bds-color-green-80: #005C35;
+
+  --bds-color-blue-5: #FAFDFF; --bds-color-blue-10: #E6F6FF; --bds-color-blue-60: #0763FB; --bds-color-blue-70: #004FD6; --bds-color-blue-80: #0038A3; --bds-color-blue-90: #001A43;
+
+  /* Semantic */
+  --bds-color-base-background: #FFFFFF;
+  --bds-color-base-foreground: #202227;
+  --bds-color-brand-primary1: #001A43;
+  --bds-color-brand-primary2: #00D8D8;
+  --bds-color-brand-secondary1: #EF5963;
+  --bds-color-brand-secondary2: #FFC26F;
+  --bds-color-brand-secondary3: #0763FB;
+  --bds-color-warning-background: #FDF3D3;
+  --bds-color-warning-foreground: #854D00;
+  --bds-color-danger-background: #FFEEEA;
+  --bds-color-danger-foreground: #B5254C;
+  --bds-color-info-background: #E6F6FF;
+  --bds-color-info-foreground: #004FD6;
+  --bds-color-success-background: #DDFDEF;
+  --bds-color-success-foreground: #057E4B;
+  --bds-color-default-background: #F1F4FA;
+  --bds-color-default-foreground: #4E555F;
+
+  /* Spacing */
+  --bds-spacing-0: 0px; --bds-spacing-025: 1px; --bds-spacing-05: 2px; --bds-spacing-1: 4px;
+  --bds-spacing-1-5: 6px; --bds-spacing-2: 8px; --bds-spacing-3: 12px;
+  --bds-spacing-4: 16px; --bds-spacing-5: 20px; --bds-spacing-6: 24px;
+  --bds-spacing-7: 28px; --bds-spacing-8: 32px; --bds-spacing-9: 36px; --bds-spacing-10: 40px;
+  --bds-spacing-12: 48px; --bds-spacing-16: 64px; --bds-spacing-20: 80px;
+
+  /* Radius */
+  --bds-radius-none: 0; --bds-radius-xs: 2px; --bds-radius-sm: 4px; --bds-radius-md: 8px;
+  --bds-radius-lg: 12px; --bds-radius-xl: 16px; --bds-radius-2xl: 20px; --bds-radius-half: 50%;
+
+  /* Type */
+  --bds-font-product: 'Inter', 'Arial', sans-serif;
+  --bds-font-size-sm: 12px; --bds-font-size-md: 14px; --bds-font-size-lg: 16px;
+  --bds-font-size-xl: 20px; --bds-font-size-2xl: 24px; --bds-font-size-3xl: 30px;
+  --bds-font-size-4xl: 34px; --bds-font-size-5xl: 42px;
+  --bds-font-weight-normal: 400; --bds-font-weight-medium: 500;
+  --bds-font-weight-semibold: 600; --bds-font-weight-bold: 700;
+  --bds-font-line-height-sm: 16px; --bds-font-line-height-md: 20px;
+  --bds-font-line-height-lg: 24px; --bds-font-line-height-xl: 32px;
+}
+
+/* Scope: when this class is present, map the prototype's existing
+   CSS variables to BDS equivalents so the page picks up BDS look/feel
+   without touching inline styles. */
+.bds-scope {
+  --bt-midnight: var(--bds-color-brand-primary1);
+  --bt-cyan: var(--bds-color-brand-primary2);
+  --bt-gold: var(--bds-color-brand-secondary2);
+  --bt-blue: var(--bds-color-blue-60);
+  --bt-blue-light: var(--bds-color-blue-10);
+  --bt-blue-hover: var(--bds-color-blue-70);
+
+  --g50: var(--bds-color-gray-5);
+  --g100: var(--bds-color-gray-10);
+  --g200: var(--bds-color-gray-15);
+  --g300: var(--bds-color-gray-20);
+  --g400: var(--bds-color-gray-40);
+  --g500: var(--bds-color-gray-50);
+  --g600: var(--bds-color-gray-60);
+  --g700: var(--bds-color-gray-70);
+  --g800: var(--bds-color-gray-90);
+
+  --red: var(--bds-color-danger-foreground);
+  --green: var(--bds-color-success-foreground);
+  --green-bg: var(--bds-color-success-background);
+
+  font-family: var(--bds-font-product);
+}
+
+
+/* Hero — tighten vertical rhythm */
+.bds-scope .cs-hero { margin-bottom: 12px; padding: 0; }
+.bds-scope .cs-hero-title { font-family: var(--bds-font-product); color: var(--bds-color-base-foreground); font-size: 22px; margin: 0 0 2px; }
+.bds-scope .cs-hero-sub { color: var(--bds-color-gray-50); font-size: 12px; }
+.bds-scope .cs-hero-desc { color: var(--bds-color-gray-70); font-size: 13px; line-height: 1.45; }
+
+/* Cards — larger radii, BDS border + shadow */
+.bds-scope .cs-card,
+.bds-scope .cs-section,
+.bds-scope .cs-hero-stats { border-radius: var(--bds-radius-lg); border-color: var(--bds-color-gray-15); }
+.bds-scope .cs-card:hover { box-shadow: 0 4px 12px rgba(14, 15, 16, 0.06); }
+.bds-scope .cs-card-expanded { border-color: var(--bds-color-info-foreground); box-shadow: 0 4px 16px rgba(7, 99, 251, 0.10); }
+.bds-scope .cs-card-name { font-size: var(--bds-font-size-md); font-weight: var(--bds-font-weight-semibold); color: var(--bds-color-base-foreground); }
+
+/* Filter chips — BDS pill style */
+.bds-scope .cs-filter-btn { border-radius: 999px; border-color: var(--bds-color-gray-15); color: var(--bds-color-gray-70); font-weight: var(--bds-font-weight-medium); padding: 6px 16px; }
+.bds-scope .cs-filter-btn:hover { background: var(--bds-color-gray-5); }
+.bds-scope .cs-filter-active { background: var(--bds-color-info-background); border-color: var(--bds-color-info-foreground); color: var(--bds-color-info-foreground); }
+
+/* Status badges — BDS uses fully rounded pills */
+.bds-scope .cs-status-badge { border-radius: 999px; font-size: var(--bds-font-size-sm); font-weight: var(--bds-font-weight-semibold); padding: 2px 10px; }
+
+/* Thumbs */
+.bds-scope .cs-card-thumb { border-radius: var(--bds-radius-sm); }
+
+/* Persona bar — pill style consistent with BDS */
+.bds-scope .cs-persona-btn { border-radius: var(--bds-radius-sm); }
+
+/* Option cards — ensure radius */
+.bds-scope .cs-opt-card,
+.bds-scope .cs-opt-group,
+.bds-scope .cs-row { border-radius: var(--bds-radius-md); }
+
+/* BDS button system — align all variants to BDS tokens */
+.bds-scope .bds-button {
+  font-family: var(--bds-font-product);
+  font-size: var(--bds-font-size-md);
+  line-height: var(--bds-font-line-height-md);
+  font-weight: var(--bds-font-weight-semibold);
+  border-radius: var(--bds-radius-sm);
+  min-height: 36px;
+  padding: 6px 14px;
+  border: 1px solid transparent;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+
+.bds-scope .bds-button-primary,
+.bds-scope .cs-submit-btn,
+.bds-scope button.cs-approve-btn {
+  background: var(--bds-color-blue-60);
+  color: var(--bds-color-gray-0);
+  border-color: var(--bds-color-blue-60);
+}
+.bds-scope .bds-button-primary:hover,
+.bds-scope .cs-submit-btn:hover,
+.bds-scope button.cs-approve-btn:hover {
+  background: var(--bds-color-blue-70);
+  border-color: var(--bds-color-blue-70);
+}
+.bds-scope .bds-button-primary:active,
+.bds-scope .cs-submit-btn:active,
+.bds-scope button.cs-approve-btn:active {
+  background: var(--bds-color-blue-80);
+  border-color: var(--bds-color-blue-80);
+}
+
+.bds-scope .bds-button-secondary {
+  background: var(--bds-color-base-background);
+  color: var(--bds-color-gray-90);
+  border-color: var(--bds-color-gray-20);
+}
+.bds-scope .bds-button-secondary:hover {
+  background: var(--bds-color-gray-5);
+  border-color: var(--bds-color-gray-25);
+}
+.bds-scope .bds-button-secondary:active {
+  background: var(--bds-color-gray-10);
+  border-color: var(--bds-color-gray-30);
+}
+
+.bds-scope .bds-button-tertiary {
+  background: transparent;
+  color: var(--bds-color-gray-90);
+  border-color: transparent;
+}
+.bds-scope .bds-button-tertiary:hover {
+  background: var(--bds-color-gray-5);
+}
+.bds-scope .bds-button-tertiary:active {
+  background: var(--bds-color-gray-10);
+}
+
+/* Body text baseline */
+.bds-scope { font-family: var(--bds-font-product); color: var(--bds-color-base-foreground); }
+.bds-scope .cs-page,
+.bds-scope * { font-family: inherit; }
+
+/* ───────────────────── Expanded BDS token coverage ───────────────────── */
+
+/* Page background → BDS base-background (white) */
+.bds-scope.cs-page { background: var(--bds-color-base-background); }
+
+/* Swap #EAEEF5 (prototype's soft border) → BDS gray-15 */
+.bds-scope .cs-hero-stats,
+.bds-scope .cs-stat-divider,
+.bds-scope .cs-section,
+.bds-scope .cs-section-header,
+.bds-scope .cs-section-actions,
+.bds-scope .cs-shop-card,
+.bds-scope .cs-card,
+.bds-scope .cs-impact-total,
+.bds-scope .cs-group-title,
+.bds-scope .cs-compact-list,
+.bds-scope .cs-compact-row,
+.bds-scope .cs-request-input,
+.bds-scope .cs-request-link-wrap { border-color: var(--bds-color-gray-15); }
+
+.bds-scope .cs-stat-divider { background: var(--bds-color-gray-15); }
+.bds-scope .cs-section { border-color: var(--bds-color-gray-15); }
+.bds-scope .cs-section-header { border-bottom-color: var(--bds-color-gray-15); }
+.bds-scope .cs-section-actions { border-top-color: var(--bds-color-gray-15); }
+.bds-scope .cs-impact-total { border-top-color: var(--bds-color-gray-15); }
+.bds-scope .cs-group-title { border-bottom-color: var(--bds-color-gray-15); }
+
+/* Text colors: #8E96A0 → BDS gray-40, #4E555F → gray-70, #202227 → gray-90 */
+.bds-scope .cs-hero-sub,
+.bds-scope .cs-stat-label,
+.bds-scope .cs-section-meta,
+.bds-scope .cs-card-info-item,
+.bds-scope .cs-opt-vendor,
+.bds-scope .cs-preview-name ~ * { color: var(--bds-color-gray-40); }
+
+.bds-scope .cs-hero-desc,
+.bds-scope .cs-section-allowance,
+.bds-scope .cs-impact-row,
+.bds-scope .cs-card-desc,
+.bds-scope .cs-card-approved-note { color: var(--bds-color-gray-70); }
+
+.bds-scope .cs-hero-title,
+.bds-scope .cs-stat-value,
+.bds-scope .cs-section-name,
+.bds-scope .cs-card-name,
+.bds-scope .cs-opt-name,
+.bds-scope .cs-opt-price,
+.bds-scope .cs-preview-name,
+.bds-scope .cs-group-title,
+.bds-scope .cs-requests-title { color: var(--bds-color-gray-90); }
+
+/* Primary accent blue: #004FD6 → BDS blue-60 (more saturated) */
+.bds-scope .cs-filter-active,
+.bds-scope .cs-tier-upgrade,
+.bds-scope .cs-card-expanded,
+.bds-scope .cs-prev-request,
+.bds-scope .cs-show-declined,
+.bds-scope .cs-group-request-link,
+.bds-scope .cs-request-item-link { color: var(--bds-color-blue-60); }
+
+.bds-scope .cs-filter-active,
+.bds-scope .cs-card-expanded { border-color: var(--bds-color-blue-60); }
+
+.bds-scope .cs-request-input:focus,
+.bds-scope .cs-request-link-wrap:focus-within { border-color: var(--bds-color-blue-60); box-shadow: 0 0 0 3px rgba(7, 99, 251, 0.12); }
+
+.bds-scope .cs-request-auto input { accent-color: var(--bds-color-blue-60); }
+
+/* Success green tones → BDS success */
+.bds-scope .cs-card-thumb-on,
+.bds-scope .cs-shop-card-selected,
+.bds-scope .cs-opt-on,
+.bds-scope .cs-preview-on .cs-preview-img { border-color: var(--bds-color-success-foreground); outline-color: var(--bds-color-success-foreground); }
+
+.bds-scope .cs-shop-badge-selected,
+.bds-scope .cs-preview-check { background: var(--bds-color-success-foreground); }
+
+.bds-scope .cs-opt-on { background: var(--bds-color-green-5); }
+.bds-scope .cs-opt-on:hover { background: var(--bds-color-green-10); }
+
+.bds-scope .cs-preview-on.cs-preview-clickable { background: var(--bds-color-green-5); }
+.bds-scope .cs-preview-on.cs-preview-clickable:hover { background: var(--bds-color-green-10); }
+
+.bds-scope .cs-shop-approved-badge,
+.bds-scope .cs-tier-base { background: var(--bds-color-success-background); color: var(--bds-color-success-foreground); }
+
+.bds-scope .cs-card-approved-note { background: var(--bds-color-success-background); }
+
+.bds-scope .cs-tier-upgrade { background: var(--bds-color-info-background); }
+
+/* Warning (yellow) treatments */
+.bds-scope .cs-alert,
+.bds-scope .cs-request-item,
+.bds-scope .cs-request-pending-badge { background: var(--bds-color-warning-background); color: var(--bds-color-warning-foreground); border-color: var(--bds-color-warning-background); }
+
+/* Danger (red) treatments */
+.bds-scope .cs-card-over-budget { background: var(--bds-color-red-5); border-color: var(--bds-color-red-15); }
+.bds-scope .cs-shop-badge-declined { background: var(--bds-color-danger-foreground); }
+.bds-scope .cs-preview-x,
+.bds-scope .cs-request-image-remove:hover { background: var(--bds-color-danger-foreground) !important; }
+.bds-scope .cs-group-overdue { color: var(--bds-color-danger-foreground); }
+
+/* Neutral background tints */
+.bds-scope .cs-card-impact,
+.bds-scope .cs-filter-btn:hover,
+.bds-scope .cs-request-upload:hover,
+.bds-scope .cs-preview-clickable:hover,
+.bds-scope .cs-opt:hover,
+.bds-scope .cs-compact-row:hover { background: var(--bds-color-gray-5); }
+
+.bds-scope .cs-preview-img,
+.bds-scope .cs-opt-img,
+.bds-scope .cs-card-thumb,
+.bds-scope .cs-card-thumb-more,
+.bds-scope .cs-compact-thumb { background-color: var(--bds-color-gray-10); }
+
+/* Radii: push consistency with BDS scale */
+.bds-scope .cs-shop-card,
+.bds-scope .cs-opt,
+.bds-scope .cs-preview-img,
+.bds-scope .cs-request-input,
+.bds-scope .cs-request-link-wrap,
+.bds-scope .cs-request-upload,
+.bds-scope .cs-compact-list,
+.bds-scope .cs-preview-grid-grouped,
+.bds-scope .cs-all-declined { border-radius: var(--bds-radius-md); }
+
+.bds-scope .cs-alert,
+.bds-scope .cs-card-impact,
+.bds-scope .cs-card-approved-note,
+.bds-scope .cs-request-item { border-radius: var(--bds-radius-md); }
+
+.bds-scope .cs-card-thumb,
+.bds-scope .cs-card-thumb-more,
+.bds-scope .cs-opt-img,
+.bds-scope .cs-compact-thumb { border-radius: var(--bds-radius-sm); }
+
+/* Shadows: BDS-style soft elevation */
+.bds-scope .cs-shop-card:hover { box-shadow: 0 4px 12px rgba(14, 15, 16, 0.08); }
+.bds-scope .cs-request-modal { box-shadow: 0 12px 40px rgba(14, 15, 16, 0.18); border-radius: var(--bds-radius-xl); }
+
+/* ───────────────────── Two-card hero layout ───────────────────── */
+/* When the two-card layout is inside cs-hero-stats, strip the wrapper chrome so cards go full width */
+.bds-scope .cs-hero-stats:has(.cs-hero-cards),
+.bds-scope .cs-hero-stats:has(.cs-hero-strip) {
+  background: none;
+  border: none;
+  padding: 0;
+  border-radius: 0;
+  display: block;
+}
+
+/* Slim stat strip — money group on left, progress group on right, vertical divider between */
+.bds-scope .cs-hero-strip {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 24px;
+  padding: 14px 0;
+  border-top: 1px solid var(--bds-color-gray-15);
+  border-bottom: 1px solid var(--bds-color-gray-15);
+  margin-bottom: 16px;
+}
+.bds-scope .cs-hero-strip-group {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  flex-wrap: wrap;
+}
+.bds-scope .cs-hero-strip-group-end {
+  margin-left: auto;
+}
+.bds-scope .cs-hero-strip-divider {
+  width: 1px;
+  align-self: stretch;
+  background: var(--bds-color-gray-15);
+}
+.bds-scope .cs-hero-strip-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  line-height: 1.2;
+}
+.bds-scope .cs-hero-strip-stat strong {
+  font-weight: var(--bds-font-weight-bold);
+  font-size: 18px;
+  color: var(--bds-color-gray-90);
+  letter-spacing: -0.02em;
+}
+.bds-scope .cs-hero-strip-label {
+  color: var(--bds-color-gray-50);
+  font-weight: var(--bds-font-weight-medium);
+  font-size: var(--bds-font-size-sm);
+}
+@media (max-width: 720px) {
+  .bds-scope .cs-hero-strip { gap: 16px; }
+  .bds-scope .cs-hero-strip-group { gap: 16px; }
+  .bds-scope .cs-hero-strip-group-end { margin-left: 0; }
+  .bds-scope .cs-hero-strip-divider { display: none; }
+}
+
+.bds-scope .cs-hero-cards { display: grid; grid-template-columns: 1.4fr 1fr; gap: 12px; margin-bottom: 0; width: 100%; }
+@media (max-width: 720px) {
+  .bds-scope .cs-hero-cards { grid-template-columns: 1fr; }
+}
+
+.bds-scope .cs-hero-card {
+  background: var(--bds-color-gray-0);
+  border: 1px solid var(--bds-color-gray-15);
+  border-radius: var(--bds-radius-lg);
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.bds-scope .cs-hero-card-hero {
+  font-size: 24px;
+  font-weight: var(--bds-font-weight-bold);
+  color: var(--bds-color-gray-90);
+  line-height: 1.2;
+}
+.bds-scope .cs-hero-card-hero-unit {
+  font-size: var(--bds-font-size-md);
+  font-weight: var(--bds-font-weight-medium);
+  color: var(--bds-color-gray-50);
+  margin-left: 2px;
+}
+
+.bds-scope .cs-hero-card-sub {
+  font-size: var(--bds-font-size-sm);
+  color: var(--bds-color-gray-50);
+  margin-bottom: 2px;
+}
+
+/* Combined hero card — pill row + stat row, single divider between them */
+.bds-scope .cs-hero-card-stack {
+  flex: 1;
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+}
+.bds-scope .cs-hero-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--bds-color-gray-15);
+}
+.bds-scope .cs-hero-card-progress {
+  font-size: var(--bds-font-size-sm);
+  color: var(--bds-color-gray-50);
+  font-weight: var(--bds-font-weight-medium);
+}
+.bds-scope .cs-hero-stat-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  padding: 14px 18px;
+}
+.bds-scope .cs-hero-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.bds-scope .cs-hero-stat:not(:last-child) {
+  border-right: 1px solid var(--bds-color-gray-15);
+  padding-right: 16px;
+  margin-right: 16px;
+}
+.bds-scope .cs-hero-stat-label {
+  font-size: var(--bds-font-size-sm);
+  color: var(--bds-color-gray-50);
+  font-weight: var(--bds-font-weight-medium);
+}
+.bds-scope .cs-hero-stat-value {
+  font-size: 22px;
+  font-weight: var(--bds-font-weight-bold);
+  color: var(--bds-color-gray-90);
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}
+
+/* Side-by-side hero layout — title block on left, stat card on right */
+.bds-scope .cs-hero-split-row {
+  display: grid;
+  grid-template-columns: 1fr 1.4fr;
+  gap: 24px;
+  align-items: stretch;
+  margin-bottom: 16px;
+}
+.bds-scope .cs-hero-split-row .cs-hero {
+  margin-bottom: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.bds-scope .cs-hero-desc {
+  font-size: var(--bds-font-size-md);
+  color: var(--bds-color-gray-60);
+  margin: 6px 0 0;
+  line-height: 1.5;
+  max-width: 42ch;
+}
+.bds-scope .cs-hero-stats-split {
+  margin-bottom: 0;
+  align-self: stretch;
+}
+@media (max-width: 900px) {
+  .bds-scope .cs-hero-split-row {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+}
+
+/* Budget bar */
+.bds-scope .cs-budget-bar {
+  height: 6px;
+  background: var(--bds-color-gray-10);
+  border-radius: 999px;
+  overflow: hidden;
+  margin-top: 8px;
+}
+.bds-scope .cs-budget-bar-fill {
+  height: 100%;
+  background: var(--bds-color-success-foreground);
+  border-radius: 999px;
+  transition: width 0.25s ease;
+}
+.bds-scope .cs-budget-bar-fill-over {
+  background: var(--bds-color-warning-foreground);
+}
+
+.bds-scope .cs-budget-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 4px;
+  font-size: var(--bds-font-size-sm);
+  color: var(--bds-color-gray-50);
+}
+.bds-scope .cs-budget-meta-pct { font-weight: var(--bds-font-weight-medium); }
+
+.bds-scope .cs-budget-pill {
+  font-size: var(--bds-font-size-sm);
+  font-weight: var(--bds-font-weight-semibold);
+  padding: 3px 10px;
+  border-radius: 999px;
+}
+.bds-scope .cs-budget-pill-under { background: var(--bds-color-success-background); color: var(--bds-color-success-foreground); }
+.bds-scope .cs-budget-pill-over { background: var(--bds-color-warning-background); color: var(--bds-color-warning-foreground); }
+
+/* Stacked variant — number on top, qualifier below — used in the slim header strip */
+.bds-scope .cs-budget-pill.cs-budget-pill-stack {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  line-height: 1.15;
+  padding: 6px 12px;
+  border-radius: 12px;
+}
+.bds-scope .cs-budget-pill.cs-budget-pill-stack strong {
+  font-size: 18px;
+  font-weight: var(--bds-font-weight-bold);
+  letter-spacing: -0.02em;
+}
+.bds-scope .cs-budget-pill.cs-budget-pill-stack .cs-budget-pill-sub {
+  font-size: var(--bds-font-size-sm);
+  font-weight: var(--bds-font-weight-medium);
+  opacity: 0.85;
+}
+
+/* Budget card: relative positioning so corner pill can absolute-position */
+.bds-scope .cs-hero-card-budget { position: relative; }
+.bds-scope .cs-budget-pill.cs-budget-pill-corner {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+}
+
+/* Favorite heart button on option images */
+.bds-scope .cs-shop-fav {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--bds-radius-half);
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(4px);
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--bds-color-gray-60);
+  transition: background 0.15s, color 0.15s, transform 0.1s;
+  z-index: 3;
+  box-shadow: 0 1px 3px rgba(14, 15, 16, 0.12);
+}
+.bds-scope .cs-shop-fav:hover { background: #fff; transform: scale(1.05); color: var(--bds-color-danger-foreground); }
+.bds-scope .cs-shop-fav.cs-shop-fav-on {
+  color: var(--bds-color-danger-foreground);
+  background: #fff;
+}
+
+/* Move selected/declined badges to top-left to make room for favorite */
+.bds-scope .cs-shop-badge-selected,
+.bds-scope .cs-shop-badge-declined { left: 10px; right: auto; }
+
+/* Progress dots */
+.bds-scope .cs-progress-dots {
+  display: flex;
+  gap: 6px;
+  margin-top: 12px;
+}
+.bds-scope .cs-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--bds-color-gray-15);
+  flex-shrink: 0;
+}
+.bds-scope .cs-dot.cs-dot-done { background: var(--bds-color-success-foreground); }
+
+.bds-scope .cs-progress-meta { margin-top: auto; justify-content: flex-start; }
+
+.bds-scope .cs-hero-card-footnote {
+  margin-top: auto;
+  padding-top: 8px;
+  font-size: var(--bds-font-size-sm);
+  color: var(--bds-color-gray-50);
+  line-height: 1.4;
+}
+.bds-scope .cs-hero-card-footnote strong {
+  color: var(--bds-color-gray-90);
+  font-weight: var(--bds-font-weight-semibold);
+}
+.bds-scope .cs-hero-card-footnote.cs-hero-card-footnote-over {
+  color: var(--bds-color-danger-foreground);
+}
+.bds-scope .cs-hero-card-footnote.cs-hero-card-footnote-over strong {
+  color: var(--bds-color-danger-foreground);
+}
+
+/* Next due line — just text with optional overdue badge */
+.bds-scope .cs-next-due {
+  margin-top: 4px;
+  padding: 0;
+  font-size: var(--bds-font-size-md);
+  color: var(--bds-color-gray-70);
+  line-height: 1.4;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.bds-scope .cs-next-due strong {
+  color: var(--bds-color-gray-90);
+  font-weight: var(--bds-font-weight-semibold);
+}
+.bds-scope .cs-next-due-tag {
+  font-size: var(--bds-font-size-sm);
+  font-weight: var(--bds-font-weight-semibold);
+  background: var(--bds-color-danger-background);
+  color: var(--bds-color-danger-foreground);
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+/* Clickable next-due selection name — scrolls to card */
+.bds-scope .cs-next-due-link {
+  font-family: var(--bds-font-product);
+  font-size: inherit;
+  font-weight: var(--bds-font-weight-semibold);
+  color: var(--bds-color-gray-90);
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-color: var(--bds-color-gray-20);
+}
+.bds-scope .cs-next-due-link:hover {
+  color: var(--bds-color-blue-60);
+  text-decoration-color: var(--bds-color-blue-60);
+}
+
+/* Overdue magnitude — shows days late */
+.bds-scope .cs-next-due-late {
+  color: var(--bds-color-danger-foreground);
+  font-weight: var(--bds-font-weight-semibold);
+}
+.bds-scope .cs-next-due-late::before {
+  content: '· ';
+  margin-right: 2px;
+  color: var(--bds-color-gray-40);
+  font-weight: var(--bds-font-weight-normal);
+}
+
+/* Summary when multiple overdue — stacked two-line layout */
+.bds-scope .cs-next-due-stack {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+.bds-scope .cs-next-due-summary {
+  font-weight: var(--bds-font-weight-semibold);
+  color: var(--bds-color-danger-foreground);
+  font-size: var(--bds-font-size-md);
+}
+.bds-scope .cs-next-due-oldest {
+  font-size: var(--bds-font-size-sm);
+  color: var(--bds-color-gray-70);
+}
+.bds-scope .cs-next-due-late-plain {
+  color: var(--bds-color-danger-foreground);
+  font-weight: var(--bds-font-weight-semibold);
+}
+.bds-scope .cs-next-due.cs-next-due-ok {
+  color: var(--bds-color-gray-50);
+}
+
+.bds-scope .cs-save-btn { display: inline-flex; align-items: center; gap: 6px; }
+
+/* Inline "Request an option" form — replaces the modal */
+.bds-scope .cs-inline-request {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--bds-spacing-3);
+  padding: var(--bds-spacing-4);
+  background: var(--bds-color-gray-5);
+  border: 1px solid var(--bds-color-gray-15);
+  border-radius: var(--bds-radius-md);
+}
+.bds-scope .cs-inline-request-label {
+  font-size: var(--bds-font-size-md);
+  font-weight: var(--bds-font-weight-semibold);
+  color: var(--bds-color-gray-90);
+}
+.bds-scope .cs-inline-request-textarea {
+  width: 100%;
+  min-height: 72px;
+  resize: vertical;
+  font-size: var(--bds-font-size-md);
+  background: var(--bds-color-base-background);
+}
+.bds-scope .cs-inline-request-extras {
+  display: flex;
+  align-items: center;
+  gap: var(--bds-spacing-2);
+  flex-wrap: wrap;
+}
+.bds-scope .cs-inline-request-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--bds-font-size-sm);
+  font-weight: var(--bds-font-weight-medium);
+  color: var(--bds-color-gray-70);
+  background: var(--bds-color-base-background);
+  border: 1px dashed var(--bds-color-gray-20);
+  border-radius: 999px;
+  padding: 4px 10px;
+  cursor: pointer;
+  font-family: var(--bds-font-product);
+}
+.bds-scope .cs-inline-request-chip:hover {
+  border-color: var(--bds-color-gray-30);
+  color: var(--bds-color-gray-90);
+  background: var(--bds-color-gray-0);
+}
+.bds-scope .cs-inline-request-link {
+  flex: 1;
+  min-width: 240px;
+  background: var(--bds-color-base-background);
+}
+.bds-scope .cs-inline-request-upload {
+  margin: 0;
+  font-size: var(--bds-font-size-sm);
+  color: var(--bds-color-gray-70);
+  padding: 6px 10px;
+  background: var(--bds-color-base-background);
+  border: 1px dashed var(--bds-color-gray-20);
+  border-radius: 999px;
+}
+.bds-scope .cs-inline-request-photo {
+  position: relative;
+  display: inline-block;
+}
+.bds-scope .cs-inline-request-photo img {
+  width: 72px;
+  height: 56px;
+  object-fit: cover;
+  border-radius: var(--bds-radius-sm);
+  border: 1px solid var(--bds-color-gray-15);
+}
+.bds-scope .cs-inline-request-remove {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--bds-radius-half);
+  background: var(--bds-color-base-background);
+  border: 1px solid var(--bds-color-gray-20);
+  color: var(--bds-color-gray-60);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.bds-scope .cs-inline-request-link .cs-inline-request-remove {
+  position: static;
+  border: none;
+  background: transparent;
+}
+.bds-scope .cs-inline-request-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--bds-spacing-2);
+}
+
+/* Spinner shown while fetching link preview */
+.bds-scope .cs-link-spinner {
+  width: 14px;
+  height: 14px;
+  border-radius: var(--bds-radius-half);
+  border: 2px solid var(--bds-color-gray-20);
+  border-top-color: var(--bds-color-blue-60);
+  animation: cs-spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+@keyframes cs-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Label shown over auto-extracted image */
+.bds-scope .cs-photo-source-tag {
+  position: absolute;
+  bottom: 4px;
+  left: 4px;
+  font-size: 10px;
+  font-weight: var(--bds-font-weight-semibold);
+  background: rgba(14, 15, 16, 0.78);
+  color: var(--bds-color-gray-0);
+  padding: 1px 6px;
+  border-radius: var(--bds-radius-sm);
+  letter-spacing: 0.02em;
+}
+
+/* Sticky footer actions cluster — gap uses BDS spacing token */
+.bds-scope .cs-sticky-actions { display: flex; align-items: center; gap: var(--bds-spacing-3); }
+
+/* BDS-style toast — elevated notification with success icon */
+.bds-scope .cs-toast.cs-toast-bds {
+  position: fixed;
+  top: 24px;
+  bottom: auto;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--bds-color-base-background);
+  color: var(--bds-color-base-foreground);
+  font-family: var(--bds-font-product);
+  font-size: var(--bds-font-size-md);
+  line-height: 1.3;
+  padding: 8px 14px;
+  border-radius: var(--bds-radius-md);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  box-shadow: 0 8px 24px rgba(14, 15, 16, 0.12), 0 1px 4px rgba(14, 15, 16, 0.06);
+  border: 1px solid var(--bds-color-gray-15);
+  z-index: 2000;
+  animation: bds-toast-in 0.22s ease;
+  max-width: min(480px, calc(100vw - 32px));
+  white-space: nowrap;
+}
+.bds-scope .cs-toast.cs-toast-bds .cs-toast-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: var(--bds-radius-half);
+  background: var(--bds-color-success-background);
+  color: var(--bds-color-success-foreground);
+  flex-shrink: 0;
+}
+.bds-scope .cs-toast.cs-toast-bds .cs-toast-icon svg { width: 12px; height: 12px; }
+.bds-scope .cs-toast.cs-toast-bds .cs-toast-text {
+  font-weight: var(--bds-font-weight-medium);
+}
+@keyframes bds-toast-in {
+  from { opacity: 0; transform: translate(-50%, -8px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+
+/* ═══════════════════════ Job Price Summary — BDS re-theme ═══════════════════════ */
+
+.bds-scope.jps-page { background: var(--bds-color-base-background); font-family: var(--bds-font-product); }
+
+.bds-scope .pg-hdr { background: var(--bds-color-base-background); border-bottom-color: var(--bds-color-gray-15); }
+.bds-scope .pg-hdr-sub { color: var(--bds-color-gray-50); font-size: var(--bds-font-size-sm); }
+.bds-scope .pg-title {
+  color: var(--bds-color-base-foreground);
+  font-family: var(--bds-font-product);
+  font-size: var(--bds-font-size-2xl);
+  font-weight: var(--bds-font-weight-bold);
+  letter-spacing: -0.01em;
+}
+
+/* Pill group wrapper — used for pricing mode + view filter */
+.bds-scope .jps-pill-group {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--bds-spacing-1);
+  padding: 3px;
+  background: var(--bds-color-gray-5);
+  border: 1px solid var(--bds-color-gray-15);
+  border-radius: 999px;
+}
+
+/* Summary cards */
+.bds-scope .jps-card {
+  background: var(--bds-color-base-background);
+  border-color: var(--bds-color-gray-15);
+  border-radius: var(--bds-radius-lg);
+}
+.bds-scope .jps-card-label { color: var(--bds-color-gray-70); font-weight: var(--bds-font-weight-semibold); }
+.bds-scope .jps-card-value-big {
+  color: var(--bds-color-base-foreground);
+  font-size: 28px;
+  font-weight: var(--bds-font-weight-bold);
+  font-family: var(--bds-font-product);
+}
+.bds-scope .jps-breakdown-line { color: var(--bds-color-gray-70); font-size: var(--bds-font-size-md); }
+.bds-scope .jps-breakdown-line span:last-child { color: var(--bds-color-base-foreground); font-weight: var(--bds-font-weight-medium); }
+.bds-scope .jps-breakdown-nested { color: var(--bds-color-gray-50); font-size: var(--bds-font-size-sm); }
+.bds-scope .jps-breakdown-nested span:last-child { color: var(--bds-color-gray-60); font-weight: var(--bds-font-weight-normal); }
+.bds-scope .jps-underline-hint { text-decoration-color: var(--bds-color-gray-25); }
+.bds-scope .jps-popover {
+  background: var(--bds-color-base-background);
+  border-color: var(--bds-color-gray-15);
+  border-radius: var(--bds-radius-md);
+  color: var(--bds-color-gray-70);
+  box-shadow: 0 8px 24px rgba(14,15,16,0.12);
+}
+
+/* Forecast chip backgrounds */
+.bds-scope .jps-forecast-amount { border-radius: var(--bds-radius-md); font-family: var(--bds-font-product); font-weight: var(--bds-font-weight-bold); }
+.bds-scope .jps-forecast-up { background: var(--bds-color-warning-background); color: var(--bds-color-warning-foreground); }
+.bds-scope .jps-forecast-down { background: var(--bds-color-success-background); color: var(--bds-color-success-foreground); }
+.bds-scope .jps-forecast-neutral { background: var(--bds-color-gray-5); color: var(--bds-color-gray-50); }
+
+/* Section titles */
+.bds-scope .jps-section-title {
+  color: var(--bds-color-base-foreground);
+  font-family: var(--bds-font-product);
+  font-weight: var(--bds-font-weight-semibold);
+}
+
+/* Collapsible category headers */
+.bds-scope .jps-cat-header {
+  background: var(--bds-color-base-background);
+  border-color: var(--bds-color-gray-15);
+  border-radius: var(--bds-radius-md);
+  font-family: var(--bds-font-product);
+}
+.bds-scope .jps-cat-header:hover { background: var(--bds-color-gray-5); }
+.bds-scope .jps-cat-header-open { border-color: var(--bds-color-gray-20); }
+.bds-scope .jps-cat-name { color: var(--bds-color-base-foreground); font-weight: var(--bds-font-weight-semibold); }
+.bds-scope .jps-cat-count { color: var(--bds-color-gray-50); font-size: var(--bds-font-size-sm); }
+.bds-scope .jps-cat-budget { color: var(--bds-color-gray-70); font-size: var(--bds-font-size-sm); }
+.bds-scope .jps-cat-from-co { color: var(--bds-color-gray-50); font-size: var(--bds-font-size-sm); }
+.bds-scope .jps-allowance-summary { color: var(--bds-color-gray-70); font-size: var(--bds-font-size-sm); font-weight: var(--bds-font-weight-medium); }
+
+/* Category impact badges (chips with color) */
+.bds-scope .jps-cat-impact { font-family: var(--bds-font-product); font-weight: var(--bds-font-weight-semibold); border-radius: 999px; }
+.bds-scope .jps-impact-up { color: var(--bds-color-warning-foreground); }
+.bds-scope .jps-impact-down { color: var(--bds-color-success-foreground); }
+.bds-scope .jps-impact-neutral { color: var(--bds-color-gray-50); }
+
+/* Tables */
+.bds-scope .jps-table { font-family: var(--bds-font-product); }
+.bds-scope .jps-table-header { color: var(--bds-color-gray-50); font-size: var(--bds-font-size-sm); border-bottom-color: var(--bds-color-gray-15); }
+.bds-scope .jps-table-row { border-bottom-color: var(--bds-color-gray-10); }
+.bds-scope .jps-table-row:hover { background: var(--bds-color-gray-5); }
+.bds-scope .jps-row-total { background: var(--bds-color-gray-5); font-weight: var(--bds-font-weight-semibold); color: var(--bds-color-base-foreground); }
+.bds-scope .jps-row-allowance-summary { background: var(--bds-color-gray-5); }
+.bds-scope .jps-item-name { color: var(--bds-color-base-foreground); font-weight: var(--bds-font-weight-medium); }
+.bds-scope .jps-col-date { color: var(--bds-color-gray-60); font-size: var(--bds-font-size-md); }
+.bds-scope .jps-col-price,
+.bds-scope .jps-col-amount { color: var(--bds-color-base-foreground); font-variant-numeric: tabular-nums; }
+
+/* Impact pill chips in rows */
+.bds-scope .jps-impact-chip {
+  font-family: var(--bds-font-product);
+  font-weight: var(--bds-font-weight-semibold);
+  border-radius: 999px;
+  font-size: var(--bds-font-size-sm);
+}
+.bds-scope .jps-impact-chip-up { background: var(--bds-color-warning-background); color: var(--bds-color-warning-foreground); }
+.bds-scope .jps-impact-chip-down { background: var(--bds-color-success-background); color: var(--bds-color-success-foreground); }
+.bds-scope .jps-impact-none { background: var(--bds-color-gray-5); color: var(--bds-color-gray-50); }
+.bds-scope .jps-summary-impact { color: var(--bds-color-gray-70); font-weight: var(--bds-font-weight-semibold); }
+
+/* Progress bar */
+.bds-scope .jps-progress-bar { background: var(--bds-color-gray-10); border-radius: 999px; }
+.bds-scope .jps-progress-filled { background: var(--bds-color-blue-60); }
+.bds-scope .jps-progress-credit { background: var(--bds-color-brand-primary1); }

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { INVOICE_SELECTION_SCENARIOS } from '../selectionsData';
 
 interface SelectionData {
   name: string;
@@ -11,22 +12,133 @@ interface SelectionData {
 interface Props {
   onBack: () => void;
   selectionData?: SelectionData | null;
+  prefilledAllowance?: string | null;
 }
 
-export default function OptionDetailPage({ onBack, selectionData }: Props) {
+function inferCategory(name: string): string {
+  const n = name.toLowerCase();
+  if (/bath|shower|tub|toilet|vanity/.test(n)) return 'Bathroom';
+  if (/floor|hardwood|vinyl|carpet|tile/.test(n)) return 'Flooring';
+  if (/light|pendant|sconce|chandelier/.test(n)) return 'Lighting';
+  if (/paint|wall/.test(n)) return 'Interior';
+  if (/door|mailbox|hardware/.test(n)) return 'Exterior';
+  return 'Kitchen';
+}
+
+function inferLocation(name: string): string {
+  const n = name.toLowerCase();
+  if (/basement|lower/.test(n)) return 'Basement';
+  if (/master|bedroom/.test(n)) return 'Upper floor';
+  return 'Main floor';
+}
+
+export default function OptionDetailPage({ onBack, selectionData, prefilledAllowance }: Props) {
   const isViewing = !!selectionData;
   const isPending = selectionData?.status === 'pending';
   const [title, setTitle] = useState(selectionData?.name || '');
   const [description, setDescription] = useState('');
-  const [allowance, setAllowance] = useState(selectionData?.allowanceName || 'None');
-  const [category, setCategory] = useState(selectionData?.category || 'None');
-  const [location, setLocation] = useState('None');
+  const [allowance, setAllowance] = useState(
+    selectionData?.allowanceName || prefilledAllowance || 'None'
+  );
+  const [category, setCategory] = useState(
+    selectionData?.category && selectionData.category !== '' && selectionData.category !== 'None'
+      ? selectionData.category
+      : selectionData
+        ? inferCategory(selectionData.name)
+        : 'None'
+  );
+  const [location, setLocation] = useState(selectionData ? inferLocation(selectionData.name) : 'None');
   const [productUrl, setProductUrl] = useState('');
   const [optionStatus, setOptionStatus] = useState(selectionData?.status || 'draft');
 
   const [lineItems, setLineItems] = useState<{ title: string; description: string; quantity: string; unit: string; unitCost: string; costType: string; costCode: string; touched: boolean }[]>(
     selectionData ? [{ title: selectionData.name, description: '', quantity: '1.0000', unit: '', unitCost: selectionData.price.toFixed(4), costType: 'Material', costCode: '', touched: false }] : []
   );
+
+  // Sample specs are seeded based on the inferred category so the section shows
+  // realistic detail for prototypes. Real data would come from the catalog/PIM.
+  const seedSpecs = (): { label: string; value: string }[] => {
+    if (!isViewing) return [];
+    const cat = (selectionData?.category || inferCategory(selectionData?.name || '')).toLowerCase();
+    if (cat.includes('plumb') || cat.includes('bath') || cat.includes('fixture')) {
+      return [
+        { label: 'Brand', value: 'Kohler' },
+        { label: 'Model number', value: 'K-22972-CP' },
+        { label: 'Finish', value: 'Polished chrome' },
+        { label: 'Material', value: 'Brass' },
+        { label: 'Dimensions', value: '8" spread, 6.5" spout reach' },
+        { label: 'Flow rate', value: '1.2 GPM' },
+        { label: 'Mount type', value: 'Deck mount, 3-hole' },
+        { label: 'Warranty', value: 'Lifetime limited' },
+        { label: 'Certifications', value: 'WaterSense, ADA, cUPC' },
+        { label: 'Lead time', value: '2–3 weeks' },
+      ];
+    }
+    if (cat.includes('floor') || cat.includes('tile')) {
+      return [
+        { label: 'Brand', value: 'Shaw Floors' },
+        { label: 'Collection', value: 'Natural Classics' },
+        { label: 'Material', value: 'Solid hardwood — White Oak' },
+        { label: 'Finish', value: 'Wire-brushed, matte' },
+        { label: 'Plank size', value: '5" × 3/4"' },
+        { label: 'Coverage', value: '24.5 sq ft per box' },
+        { label: 'Janka hardness', value: '1,360' },
+        { label: 'Installation', value: 'Nail-down or glue' },
+        { label: 'Warranty', value: '50-year residential' },
+        { label: 'Lead time', value: '3–4 weeks' },
+      ];
+    }
+    if (cat.includes('light')) {
+      return [
+        { label: 'Brand', value: 'Visual Comfort' },
+        { label: 'Model number', value: 'CHC-1610-AI' },
+        { label: 'Finish', value: 'Aged iron' },
+        { label: 'Dimensions', value: '24"W × 28"H' },
+        { label: 'Bulb type', value: '6 × E26 / max 60W' },
+        { label: 'Bulbs included', value: 'No' },
+        { label: 'Damp rated', value: 'Yes (covered outdoor)' },
+        { label: 'Voltage', value: '120V' },
+        { label: 'Dimmable', value: 'Yes — TRIAC compatible' },
+        { label: 'Lead time', value: '4–6 weeks' },
+      ];
+    }
+    if (cat.includes('kitchen') || cat.includes('cabinet') || cat.includes('appliance')) {
+      return [
+        { label: 'Brand', value: 'Bosch' },
+        { label: 'Model number', value: 'SHP65CM5N' },
+        { label: 'Series', value: '500 Series' },
+        { label: 'Color', value: 'Stainless steel' },
+        { label: 'Dimensions', value: '23.56"W × 33.875"H × 23.75"D' },
+        { label: 'Capacity', value: '16 place settings' },
+        { label: 'Energy use', value: '269 kWh/yr — Energy Star' },
+        { label: 'Decibel rating', value: '44 dBA' },
+        { label: 'Warranty', value: '1-year full / 2-year limited' },
+        { label: 'Lead time', value: '1–2 weeks' },
+      ];
+    }
+    if (cat.includes('paint') || cat.includes('interior')) {
+      return [
+        { label: 'Brand', value: 'Benjamin Moore' },
+        { label: 'Product line', value: 'Aura — interior' },
+        { label: 'Color code', value: 'OC-117 Simply White' },
+        { label: 'Sheen', value: 'Eggshell' },
+        { label: 'Coverage', value: '350–400 sq ft per gallon' },
+        { label: 'VOC', value: '< 50 g/L' },
+        { label: 'Dry to touch', value: '1 hour' },
+        { label: 'Recoat', value: '4 hours' },
+        { label: 'Cleanup', value: 'Soap and water' },
+      ];
+    }
+    return [
+      { label: 'Brand', value: '—' },
+      { label: 'Model number', value: '—' },
+      { label: 'Material', value: '—' },
+      { label: 'Finish', value: '—' },
+      { label: 'Dimensions', value: '—' },
+      { label: 'Warranty', value: '—' },
+    ];
+  };
+  const [specs, setSpecs] = useState(seedSpecs);
 
   return (
     <div className="jps-page">
@@ -87,9 +199,9 @@ export default function OptionDetailPage({ onBack, selectionData }: Props) {
                 <label className="fl">Allowance</label>
                 <select className="fi" value={allowance} onChange={e => setAllowance(e.target.value)}>
                   <option value="None">None</option>
-                  <option value="Tiles">Tiles</option>
-                  <option value="Cabinets">Cabinets</option>
-                  <option value="Kitchen allowance">Kitchen allowance</option>
+                  {INVOICE_SELECTION_SCENARIOS.map(ma => (
+                    <option key={ma.id} value={ma.name}>{ma.name}</option>
+                  ))}
                 </select>
               </div>
 
@@ -101,6 +213,10 @@ export default function OptionDetailPage({ onBack, selectionData }: Props) {
                       <option value="None">None</option>
                       <option value="Kitchen">Kitchen</option>
                       <option value="Bathroom">Bathroom</option>
+                      <option value="Flooring">Flooring</option>
+                      <option value="Lighting">Lighting</option>
+                      <option value="Interior">Interior</option>
+                      <option value="Exterior">Exterior</option>
                     </select>
                     <button className="od-field-action" title="Add">
                       <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 3V13M3 8H13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
@@ -116,6 +232,7 @@ export default function OptionDetailPage({ onBack, selectionData }: Props) {
                     <select className="fi" value={location} onChange={e => setLocation(e.target.value)}>
                       <option value="None">None</option>
                       <option value="Main floor">Main floor</option>
+                      <option value="Upper floor">Upper floor</option>
                       <option value="Basement">Basement</option>
                     </select>
                     <button className="od-field-action" title="Add">
@@ -142,7 +259,76 @@ export default function OptionDetailPage({ onBack, selectionData }: Props) {
             {/* Right: Specs + Images */}
             <div>
               <h3 className="od-section-title">Specs</h3>
-              <p className="od-placeholder-text">Save to add specs</p>
+              {specs.length === 0 ? (
+                <p className="od-placeholder-text">Save to add specs</p>
+              ) : (
+                <div style={{
+                  border: '1px solid var(--g200)', borderRadius: 'var(--radius)',
+                  overflow: 'hidden', marginBottom: 12, background: 'white',
+                }}>
+                  {specs.map((s, i) => (
+                    <div key={i} style={{
+                      display: 'grid', gridTemplateColumns: '40% 1fr 32px',
+                      borderBottom: i === specs.length - 1 ? 'none' : '1px solid var(--g100)',
+                      alignItems: 'stretch',
+                    }}>
+                      <input
+                        value={s.label}
+                        onChange={e => {
+                          const next = [...specs];
+                          next[i] = { ...next[i], label: e.target.value };
+                          setSpecs(next);
+                        }}
+                        placeholder="Label"
+                        style={{
+                          padding: '8px 10px', fontSize: 13, fontWeight: 500,
+                          color: 'var(--g700)', border: 'none', background: 'var(--g50)',
+                          borderRight: '1px solid var(--g100)', fontFamily: 'inherit',
+                          outline: 'none',
+                        }}
+                      />
+                      <input
+                        value={s.value}
+                        onChange={e => {
+                          const next = [...specs];
+                          next[i] = { ...next[i], value: e.target.value };
+                          setSpecs(next);
+                        }}
+                        placeholder="Value"
+                        style={{
+                          padding: '8px 10px', fontSize: 13,
+                          color: 'var(--g800)', border: 'none', background: 'white',
+                          fontFamily: 'inherit', outline: 'none',
+                        }}
+                      />
+                      <button
+                        onClick={() => setSpecs(specs.filter((_, j) => j !== i))}
+                        title="Remove"
+                        style={{
+                          padding: 0, border: 'none', background: 'white',
+                          color: 'var(--g400)', cursor: 'pointer',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          borderLeft: '1px solid var(--g100)',
+                        }}
+                      >
+                        <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                          <path d="M3 3L11 11M3 11L11 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+                        </svg>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <button
+                className="btn btn-s"
+                onClick={() => setSpecs([...specs, { label: '', value: '' }])}
+                style={{ gap: 4 }}
+              >
+                <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
+                  <path d="M7 2V12M2 7H12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                </svg>
+                Add spec
+              </button>
 
               <h3 className="od-section-title" style={{ marginTop: 24 }}>Images and attachments</h3>
               <div style={{ display: 'flex', gap: 8 }}>
