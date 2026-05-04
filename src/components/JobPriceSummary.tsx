@@ -2313,8 +2313,70 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                 })}
               </div>
 
-              {/* Bills section intentionally not rendered in JPS body — bill variances stay in the
-                  rolled-up "Approved changes" math + the v3 side panel detail. */}
+              {/* ─── Bills ─── */}
+              <div className="jps-breakdown-section">
+                <div className="jps-section-header">
+                  <BdsText as="h2" size="heavy-lg" className="jps-section-title">Bills</BdsText>
+                </div>
+
+                {costCodeVariances.map(cc => {
+                  const groupKey = `s4-bill-${cc.name}`;
+                  const isOpen = expandedGroups[groupKey];
+                  const expandable = true;
+                  const over = cc.variance > 0;
+                  return (
+                    <div key={cc.name} className="jps-cat-group">
+                      <button
+                        className={`jps-cat-header ${isOpen && expandable ? 'jps-cat-header-open' : ''} ${expandable ? '' : 'jps-cat-header-static'}`}
+                        onClick={expandable ? () => toggleGroup(groupKey) : undefined}
+                        disabled={!expandable}
+                      >
+                        <div className="jps-cat-header-left">
+                          {expandable && <BdsIcon name={isOpen ? 'chevron-down' : 'chevron-right'} size={16} />}
+                          <span className="jps-cat-name">{cc.name}</span>
+                        </div>
+                        <div className="jps-cat-header-right">
+                          <span className="jps-allowance-flow">
+                            <span className="jps-flow-part"><span>Budget</span><strong>{fmt(cc.budget)}</strong></span>
+                            <span className="jps-flow-part"><span>Spent</span><strong>{fmt(cc.spent)}</strong></span>
+                            <span className="jps-flow-sep">·</span>
+                            <span className={over ? 'jps-flow-over' : 'jps-flow-remaining'}>
+                              {over ? <><span>Overage</span><strong>{fmt(cc.variance)}</strong></> : <><span>Remaining</span><strong>{fmt(-cc.variance)}</strong></>}
+                            </span>
+                          </span>
+                        </div>
+                      </button>
+
+                      {isOpen && expandable && (
+                        <div className="jps-cat-body">
+                          <div className="jps-table">
+                            <div className="jps-table-header jps-table-bills">
+                              <div className="jps-col-title">Bill</div>
+                              <div className="jps-col-vendor">Vendor</div>
+                              <div className="jps-col-date">Date</div>
+                              <div className="jps-col-amount">Amount</div>
+                            </div>
+                            {cc.bills.map((b, i) => (
+                              <div key={i} className="jps-table-row jps-table-bills">
+                                <div className="jps-col-title"><span className="jps-item-name">{b.name}</span></div>
+                                <div className="jps-col-vendor">{b.vendor}</div>
+                                <div className="jps-col-date">{b.date}</div>
+                                <div className="jps-col-amount">{fmt(b.amount)}</div>
+                              </div>
+                            ))}
+                            <div className="jps-table-row jps-table-bills jps-row-allowance-summary">
+                              <div className="jps-col-title"><span className="jps-item-name">Total spent</span></div>
+                              <div className="jps-col-vendor"></div>
+                              <div className="jps-col-date"></div>
+                              <div className="jps-col-amount">{fmt(cc.spent)}</div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
 
               {/* ─── Selections ─── */}
               {(() => {
