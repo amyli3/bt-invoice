@@ -4,7 +4,6 @@ import './ClientSelections2.css';
 
 /* ── Mock data ── */
 type Tier = 'base' | 'upgrade';
-type Status = 'overdue' | 'action_needed' | 'pending' | 'approved' | 'in_progress' | 'sent';
 interface Option {
   id: string; name: string; vendor: string; price: number; image: string;
   group: string; tier: Tier; images?: string[];
