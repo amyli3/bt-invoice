@@ -386,9 +386,9 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
               Omaha, NE 68114
             </div>
             <div className="jps-print-summary-values">
-              <div><span>Revised price:</span><strong>{fmt(revisedClientPrice)}</strong></div>
+              <div><span>Revised price:</span><strong>{fmt(revisedClientPrice + (activeSlice === 'slice4' ? billVarianceTotal : 0))}</strong></div>
               <div><span>Amount paid:</span><strong>{fmt(paymentsReceived)}</strong></div>
-              <div><span>Remaining to pay:</span><strong>{fmt(remainingBalance)}</strong></div>
+              <div><span>Remaining to pay:</span><strong>{fmt(remainingBalance + (activeSlice === 'slice4' ? billVarianceTotal : 0))}</strong></div>
             </div>
           </div>
 
@@ -645,14 +645,24 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
             </section>
           )}
 
-          {/* Totals block — bottom right */}
+          {/* Totals block — bottom right. Openbook slice rolls bill contributions into the math. */}
+          {(() => {
+            const isOpenbook = activeSlice === 'slice4';
+            const billsContrib = isOpenbook ? billVarianceTotal : 0;
+            const approvedChangesPrint = changeOrdersTotal + approvedSelectionsTotal + billsContrib;
+            const revisedPricePrint = revisedClientPrice + billsContrib;
+            const remainingPrint = revisedPricePrint - paymentsReceived - creditMemos;
+            return (
           <div className="jps-print-totals">
             <div className="jps-print-totals-group">
-              <div className="jps-print-totals-line jps-print-totals-heading"><span>Revised price total</span><strong>{fmt(revisedClientPrice)}</strong></div>
+              <div className="jps-print-totals-line jps-print-totals-heading"><span>Revised price total</span><strong>{fmt(revisedPricePrint)}</strong></div>
               <div className="jps-print-totals-line jps-print-totals-nested"><span>Original price total</span><span>{fmt(originalContractPrice)}</span></div>
-              <div className="jps-print-totals-line jps-print-totals-nested"><span>Approved changes</span><span>{fmt(changeOrdersTotal + approvedSelectionsTotal)}</span></div>
+              <div className="jps-print-totals-line jps-print-totals-nested"><span>Approved changes</span><span>{fmt(approvedChangesPrint)}</span></div>
               <div className="jps-print-totals-line jps-print-totals-nested-2"><span>Change orders</span><span>{fmt(changeOrdersTotal)}</span></div>
               <div className="jps-print-totals-line jps-print-totals-nested-2"><span>Selection and allowance changes</span><span>{fmt(approvedSelectionsTotal)}</span></div>
+              {isOpenbook && (
+                <div className="jps-print-totals-line jps-print-totals-nested-2"><span>Bills</span><span>{fmt(billVarianceTotal)}</span></div>
+              )}
               <div className="jps-print-totals-line jps-print-totals-nested"><span>Tax</span><span>{fmt(totalTax)}</span></div>
             </div>
             <div className="jps-print-totals-group">
@@ -661,7 +671,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
               <div className="jps-print-totals-line jps-print-totals-nested"><span>Credit memos</span><span>{fmt(creditMemos)}</span></div>
             </div>
             <div className="jps-print-totals-group">
-              <div className="jps-print-totals-line jps-print-totals-heading"><span>Remaining to pay</span><strong>{fmt(remainingBalance)}</strong></div>
+              <div className="jps-print-totals-line jps-print-totals-heading"><span>Remaining to pay</span><strong>{fmt(remainingPrint)}</strong></div>
             </div>
 
             {/* Pending footer — Slice 2 + 3 only */}
@@ -677,6 +687,8 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
               </div>
             )}
           </div>
+            );
+          })()}
         </div>
       </div>
     );
@@ -2021,7 +2033,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                         <span>{fmt(approvedSelectionsTotal)}</span>
                       </div>
                       <div className="jps-breakdown-line jps-breakdown-nested">
-                        <span>Bill variances</span>
+                        <span>Bills</span>
                         <span className={billVarianceTotal >= 0 ? 'jps-impact-up' : 'jps-impact-down'}>{fmtSigned(billVarianceTotal)}</span>
                       </div>
                     </>
@@ -2067,7 +2079,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                   <div className="jps-breakdown-line jps-breakdown-nested"><span>Change Orders</span><span>{fmt(changeOrdersTotal)}</span></div>
                   <div className="jps-breakdown-line jps-breakdown-nested"><span>Selection and allowance changes</span><span>{fmt(approvedSelectionsTotal)}</span></div>
                   <div className="jps-breakdown-line jps-breakdown-nested">
-                    <span>Bill variances</span>
+                    <span>Bills</span>
                     <span className={billVarianceTotal >= 0 ? 'jps-impact-up' : 'jps-impact-down'}>{fmtSigned(billVarianceTotal)}</span>
                   </div>
                   <div className="jps-breakdown-line"><span>Tax</span><span>{fmt(totalTax)}</span></div>
@@ -2598,7 +2610,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
 
                       {costCodeVariances.length > 0 && (
                         <BdsSection
-                          title="Bill variances"
+                          title="Bills"
                           slot={<span className="jps-s4-modal-section-total">{fmt(billVarianceTotal)}</span>}
                           className="jps-s4-modal-section"
                         >

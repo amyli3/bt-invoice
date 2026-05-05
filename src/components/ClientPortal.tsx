@@ -315,7 +315,7 @@ export default function ClientPortal({ onNavigate }: { onNavigate?: (page: strin
                   <div className="cp-fin-row cp-fin-row-parent"><BdsText size="normal-md">Approved changes</BdsText><span className="cp-dots" /><BdsText size="distinct-sm">{fmtUsd(approvedChanges)}</BdsText></div>
                   <div className="cp-fin-row cp-fin-row-nested"><BdsText size="normal-sm">Change orders</BdsText><span className="cp-dots" /><BdsText size="normal-sm">{fmtUsd(fin.changeOrders)}</BdsText></div>
                   <div className="cp-fin-row cp-fin-row-nested"><BdsText size="normal-sm">Selection changes</BdsText><span className="cp-dots" /><BdsText size="normal-sm">{fmtUsd(fin.selectionsApprovedImpact)}</BdsText></div>
-                  <div className="cp-fin-row cp-fin-row-nested"><BdsText size="normal-sm">Bill variances</BdsText><span className="cp-dots" /><BdsText size="normal-sm">{fmtUsd(fin.billVariance)}</BdsText></div>
+                  <div className="cp-fin-row cp-fin-row-nested"><BdsText size="normal-sm">Bills</BdsText><span className="cp-dots" /><BdsText size="normal-sm">{fmtUsd(fin.billVariance)}</BdsText></div>
                   <div className="cp-fin-row"><BdsText size="normal-md">Tax</BdsText><span className="cp-dots" /><BdsText size="distinct-sm">{fmtUsd(fin.tax)}</BdsText></div>
                   <div className="cp-fin-row cp-fin-total"><BdsText size="distinct-sm">Current price</BdsText><span className="cp-dots" /><BdsText size="distinct-sm">{fmtUsd(currentPrice)}</BdsText></div>
                 </div>
@@ -349,7 +349,7 @@ export default function ClientPortal({ onNavigate }: { onNavigate?: (page: strin
                     <>
                       <div className="cp-fin-row cp-fin-row-nested"><BdsText size="normal-sm">Change orders</BdsText><span className="cp-dots" /><BdsText size="normal-sm">{fmtUsd(fin.changeOrders)}</BdsText></div>
                       <div className="cp-fin-row cp-fin-row-nested"><BdsText size="normal-sm">Selection changes</BdsText><span className="cp-dots" /><BdsText size="normal-sm">{fmtUsd(fin.selectionsApprovedImpact)}</BdsText></div>
-                      <div className="cp-fin-row cp-fin-row-nested"><BdsText size="normal-sm">Bill variances</BdsText><span className="cp-dots" /><BdsText size="normal-sm">{fmtUsd(fin.billVariance)}</BdsText></div>
+                      <div className="cp-fin-row cp-fin-row-nested"><BdsText size="normal-sm">Bills</BdsText><span className="cp-dots" /><BdsText size="normal-sm">{fmtUsd(fin.billVariance)}</BdsText></div>
                     </>
                   )}
                   <div className="cp-fin-row"><BdsText size="normal-md">Tax</BdsText><span className="cp-dots" /><BdsText size="distinct-sm">{fmtUsd(fin.tax)}</BdsText></div>
@@ -410,7 +410,7 @@ export default function ClientPortal({ onNavigate }: { onNavigate?: (page: strin
                   </div>
                   <div className="cp-fin-panel-section">
                     <div className="cp-fin-panel-section-header">
-                      <BdsText size="distinct-sm">Bill variances</BdsText>
+                      <BdsText size="distinct-sm">Bills</BdsText>
                       <BdsText size="distinct-sm">{fmtUsd(fin.billVariance)}</BdsText>
                     </div>
                     <div className="cp-fin-panel-line"><span>Framing · spent $26,500 of $25,000</span><span>{fmtUsd(1500)}</span></div>
