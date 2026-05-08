@@ -12,8 +12,46 @@ interface Props {
   clientVis: ClientColumnVisibility;
 }
 
+// Collapse line items added from the same allowance/selection group into one
+// row per cost code, so the client sees a single net amount per category
+// instead of the allowance reversal + individual selections side-by-side.
+// When the selection bills under a different cost code than the allowance
+// (e.g. a built-in upgrade), the two cost codes stay as separate rows.
+function rollUpByGroup(lineItems: LineItem[]): LineItem[] {
+  const result: LineItem[] = [];
+  const keyIndex: Record<string, number> = {};
+  for (const item of lineItems) {
+    const gid = item.relatedItem?.groupId;
+    if (!gid) {
+      result.push(item);
+      continue;
+    }
+    const lineTotal = item.unitCost * item.quantity * (1 + item.markup / 100);
+    const key = `${gid}::${item.costCode}`;
+    if (keyIndex[key] === undefined) {
+      keyIndex[key] = result.length;
+      result.push({
+        ...item,
+        description: item.costCode || item.relatedItem!.name,
+        unitCost: lineTotal,
+        quantity: 1,
+        markup: 0,
+        unit: '--',
+      });
+    } else {
+      const existing = result[keyIndex[key]];
+      result[keyIndex[key]] = {
+        ...existing,
+        unitCost: existing.unitCost + lineTotal,
+      };
+    }
+  }
+  return result;
+}
+
 export default function ClientPreview({ invoice, clientVis }: Props) {
   const isFlatFee = invoice.mode === 'flatFee';
+  const displayLineItems = isFlatFee ? invoice.lineItems : rollUpByGroup(invoice.lineItems);
   const subtotal = isFlatFee
     ? (invoice.flatFeeAmount || 0)
     : invoice.lineItems.reduce((s, i) => s + i.unitCost * i.quantity * (1 + i.markup / 100), 0);
@@ -114,8 +152,8 @@ export default function ClientPreview({ invoice, clientVis }: Props) {
             <table className="paper-tbl">
               <thead><tr>{cols.map(c => <th key={c.key} style={{textAlign: c.align as 'left'|'right'|'center'}}>{c.label}</th>)}</tr></thead>
               <tbody>
-                {invoice.lineItems.map(item => <tr key={item.id}>{cols.map(c => renderCell(item, c))}</tr>)}
-                {invoice.lineItems.length === 0 && <tr><td colSpan={cols.length} style={{padding: 24, textAlign: 'center', color: 'var(--g300)', fontStyle: 'italic'}}>No line items</td></tr>}
+                {displayLineItems.map(item => <tr key={item.id}>{cols.map(c => renderCell(item, c))}</tr>)}
+                {displayLineItems.length === 0 && <tr><td colSpan={cols.length} style={{padding: 24, textAlign: 'center', color: 'var(--g300)', fontStyle: 'italic'}}>No line items</td></tr>}
               </tbody>
             </table>
           </div>

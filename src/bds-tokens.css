@@ -975,8 +975,8 @@
 
 /* Category impact badges (chips with color) */
 .bds-scope .jps-cat-impact { font-family: var(--bds-font-product); font-weight: var(--bds-font-weight-semibold); border-radius: 999px; }
-.bds-scope .jps-impact-up { color: var(--bds-color-warning-foreground); }
-.bds-scope .jps-impact-down { color: var(--bds-color-success-foreground); }
+.bds-scope .jps-impact-up { color: var(--bds-color-base-foreground); }
+.bds-scope .jps-impact-down { color: var(--bds-color-base-foreground); }
 .bds-scope .jps-impact-neutral { color: var(--bds-color-gray-50); }
 
 /* Tables */

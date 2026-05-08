@@ -25,12 +25,14 @@ import EstimatePage from './components/EstimatePage';
 import ClientSelections from './components/ClientSelections';
 import ClientSelections3 from './components/ClientSelections3';
 import ClientPortal, { ClientTopNav } from './components/ClientPortal';
+import MobileBudget from './components/MobileBudget';
+import JobCostingBudget from './components/JobCostingBudget';
 import { JOBS } from './mockData';
 import { getNextId } from './mockData';
 
-type PageType = 'invoice' | 'job-price-summary' | 'selections' | 'option-detail' | 'progress-invoice' | 'change-order' | 'change-order-list' | 'client-portal' | 'client-jps' | 'estimate' | 'client-selections' | 'client-selections-2' | 'client-selections-3';
+type PageType = 'invoice' | 'job-price-summary' | 'selections' | 'option-detail' | 'progress-invoice' | 'change-order' | 'change-order-list' | 'client-portal' | 'client-jps' | 'estimate' | 'client-selections' | 'client-selections-2' | 'client-selections-3' | 'mobile-budget' | 'job-costing-budget';
 
-const validPages: PageType[] = ['invoice', 'job-price-summary', 'selections', 'option-detail', 'progress-invoice', 'change-order', 'change-order-list', 'client-portal', 'client-jps', 'estimate', 'client-selections', 'client-selections-2', 'client-selections-3'];
+const validPages: PageType[] = ['invoice', 'job-price-summary', 'selections', 'option-detail', 'progress-invoice', 'change-order', 'change-order-list', 'client-portal', 'client-jps', 'estimate', 'client-selections', 'client-selections-2', 'client-selections-3', 'mobile-budget', 'job-costing-budget'];
 
 function getInitialPage(): PageType {
   // Support ?page=X query param (used when hash is occupied by Figma capture)
@@ -313,6 +315,24 @@ export default function App() {
     );
   }
 
+  if (activePage === 'mobile-budget') {
+    return <MobileBudget onBack={() => setActivePage('invoice')} />;
+  }
+
+  if (activePage === 'job-costing-budget') {
+    return (
+      <div style={{display: 'flex', flexDirection: 'column', height: '100vh'}}>
+        <TopNav onNavigate={(page) => setActivePage(page as PageType)} />
+        <div style={{display: 'flex', flex: 1, minHeight: 0}}>
+          <JobSidebar open={jobOpen} onToggle={() => setJobOpen(false)} selectedJob={selectedJob} onSelectJob={(id) => { setSelectedJob(id); if (isNarrow) setJobOpen(false); }} onHomeClick={() => setActivePage('client-portal')} />
+          <div className="content-area" style={{overflowY: 'auto'}}>
+            <JobCostingBudget onBack={() => setActivePage('invoice')} onOpenJPS={() => setActivePage('job-price-summary')} />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (activePage === 'job-price-summary') {
     return (
       <div style={{display: 'flex', flexDirection: 'column', height: '100vh'}}>
@@ -455,14 +475,23 @@ export default function App() {
                 price: ma.budgetAmount,
                 newInvoiceAmt: allowanceNewInvoiceAmt,
               },
-              ...ma.selections.map(sel => ({
-                id: sel.id,
-                lineItem: sel.name,
-                costCode: `${sel.costCode} - ${sel.costType}`,
-                selection: sel.name,
-                price: sel.approvedPrice,
-                newInvoiceAmt: sel.status === 'invoiced' ? null : sel.approvedPrice,
-              })),
+              ...ma.selections.map(sel => {
+                // If the selection's costCode already includes a label (e.g.
+                // "9075 - Built-in Appliances"), it lives at a different cost
+                // code than the allowance and stays distinct on the invoice.
+                // Bare codes ("9030") inherit the allowance's labeled costCode.
+                const selectionCostCode = sel.costCode.includes(' ')
+                  ? sel.costCode
+                  : ma.costCode;
+                return {
+                  id: sel.id,
+                  lineItem: sel.name,
+                  costCode: selectionCostCode,
+                  selection: sel.name,
+                  price: sel.approvedPrice,
+                  newInvoiceAmt: sel.status === 'invoiced' ? null : sel.approvedPrice,
+                };
+              }),
             ],
           };
         }).filter(row => {

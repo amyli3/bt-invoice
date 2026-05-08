@@ -171,6 +171,27 @@ const costCodeVariances = costCodes.map(c => {
 });
 const billVarianceTotal = costCodeVariances.reduce((s, c) => s + c.variance, 0);
 
+// ─── Slice 4 · v5 — JCB-correct customer-payable cost variance ───
+// References:
+//   - btwiki.atlassian.net/wiki/spaces/TG/pages/4481384935 (internal JCB breakdown)
+//   - buildertrend.com/help-article/job-costing-budget-overview ("Revised vs
+//     Projected ... projected overage or savings compared to the revised estimate")
+//
+// Open Book passes the cost trajectory through to the client's Revised Owner Price:
+//   1) Cost-side delta = Projected Costs − Revised Budget − Builder Variance
+//   2) Markup on delta = cost-side delta × markup%
+//   3) Customer impact  = (1) + (2)
+//
+// Splitting (1) and (2) into separate JPS rows keeps openbook's transparency
+// promise intact: the client sees raw cost movement and markup separately,
+// never one number that hides both.
+const REVISED_BUDGET_TOTAL = costCodes.reduce((s, c) => s + c.budget, 0);
+const MOCK_PROJECTED_COSTS = costCodeVariances.reduce((s, c) => s + c.spent, 0) + 5500; // demo: actuals + a forecast pad
+const MOCK_BUILDER_VARIANCE = 1200; // builder-only, never billed to client
+const MOCK_MARKUP_PCT = 0.15; // default markup applied to customer-payable variance
+const costSideDelta = MOCK_PROJECTED_COSTS - REVISED_BUDGET_TOTAL - MOCK_BUILDER_VARIANCE;
+const markupOnDelta = costSideDelta * MOCK_MARKUP_PCT;
+
 // Location list kept for reference — not currently used for top-level grouping in any slice.
 const LOCATIONS = ['Kitchen', 'Master Bath', 'Foyer', 'Exterior', 'Whole house'];
 void LOCATIONS;
@@ -201,8 +222,10 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
   const [activeSlice, setActiveSlice] = useState<'slice1' | 'slice2' | 'slice3' | 'slice4'>('slice1');
   // Slice 4 = sandbox for Kendall's open book client financials brief (page 7003570340).
-  // v1 inline expandable, v2 always-on list, v3 drill-through, v4 builder/client variants.
-  const [slice4Version, setSlice4Version] = useState<'v1' | 'v2' | 'v3' | 'v4'>('v1');
+  // v1 inline expandable, v2 always-on list, v3 drill-through, v4 grouped sections,
+  // v5 visual contribution bar — iteration of v2 that swaps three nested rows for a stacked
+  // bar + decision callout (Sarah review, May 2026).
+  const [slice4Version, setSlice4Version] = useState<'v1' | 'v2' | 'v3' | 'v4' | 'v5'>('v1');
   const [slice4DrillOpen, setSlice4DrillOpen] = useState(false);
   const [showPrint, setShowPrint] = useState(false);
   const [printOptions, setPrintOptions] = useState({
@@ -829,7 +852,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                               <span className="jps-flow-part"><span>Spent</span><strong>{fmt(withTax(approvedUsed))}</strong></span>
                               <span className="jps-flow-sep">·</span>
                               <span className={over ? 'jps-flow-over' : 'jps-flow-remaining'}>
-                                {over ? <><span>Overage</span><strong>{fmt(withTax(approvedUsed - group.budget))}</strong></> : <><span>Remaining</span><strong>{fmt(withTax(remaining))}</strong></>}
+                                {over ? <><span>Overage</span><strong>{fmtSigned(withTax(approvedUsed - group.budget))}</strong></> : <><span>Remaining</span><strong>{fmt(withTax(remaining))}</strong></>}
                               </span>
                             </span>
                           );
@@ -894,7 +917,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                                 <div className="jps-col-price">{fmt(withTax(approvedTotal))}</div>
                                 {hasImpact && (
                                   <div className="jps-col-impact">
-                                    {diff > 0 && <span className="jps-summary-impact">{fmt(withTax(diff))} overage</span>}
+                                    {diff > 0 && <span className="jps-summary-impact">{fmtSigned(withTax(diff))} overage</span>}
                                   </div>
                                 )}
                               </div>
@@ -1191,7 +1214,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                               <span className="jps-flow-part"><span>Spent</span><strong>{fmt(approvedUsed)}</strong></span>
                               <span className="jps-flow-sep">·</span>
                               <span className={over ? 'jps-flow-over' : 'jps-flow-remaining'}>
-                                {over ? <><span>Overage</span><strong>{fmt(approvedUsed - group.budget)}</strong></> : <><span>Remaining</span><strong>{fmt(remaining)}</strong></>}
+                                {over ? <><span>Overage</span><strong>{fmtSigned(approvedUsed - group.budget)}</strong></> : <><span>Remaining</span><strong>{fmt(remaining)}</strong></>}
                               </span>
                             </span>
                           );
@@ -1290,7 +1313,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                                 <div className="jps-col-price">{fmt(approvedTotal)}</div>
                                 {hasImpact && (
                                   <div className="jps-col-impact">
-                                    {diff > 0 && <span className="jps-summary-impact">{fmt(diff)} overage</span>}
+                                    {diff > 0 && <span className="jps-summary-impact">{fmtSigned(diff)} overage</span>}
                                   </div>
                                 )}
                               </div>
@@ -1453,7 +1476,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                                   Includes {fmt(co.includesAllowance.budget)} {co.includesAllowance.name} allowance
                                   {summary && (
                                     isOver
-                                      ? <span style={{ color: 'var(--bt-midnight)', fontWeight: 600 }}> · {fmt(Math.abs(remaining))} overage</span>
+                                      ? <span style={{ color: 'var(--bt-midnight)', fontWeight: 600 }}> · +{fmt(Math.abs(remaining))} overage</span>
                                       : <span style={{ color: 'var(--g500)', fontWeight: 500 }}> · {fmt(remaining)} remaining</span>
                                   )}
                                 </span>
@@ -1648,7 +1671,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                           <span className="jps-flow-part"><span>Spent</span><strong>{fmt(approvedUsed)}</strong></span>
                           <span className="jps-flow-sep">·</span>
                           <span className={over ? 'jps-flow-over' : 'jps-flow-remaining'}>
-                            {over ? <><span>Overage</span><strong>{fmt(approvedUsed - group.budget)}</strong></> : <><span>Remaining</span><strong>{fmt(remaining)}</strong></>}
+                            {over ? <><span>Overage</span><strong>{fmtSigned(approvedUsed - group.budget)}</strong></> : <><span>Remaining</span><strong>{fmt(remaining)}</strong></>}
                           </span>
                         </span>
                       );
@@ -1715,7 +1738,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                             <div className="jps-col-price">{fmt(approvedTotal)}</div>
                             {hasImpact && (
                               <div className="jps-col-impact">
-                                {diff > 0 && <span className="jps-summary-impact">{fmt(diff)} overage</span>}
+                                {diff > 0 && <span className="jps-summary-impact">{fmtSigned(diff)} overage</span>}
                               </div>
                             )}
                           </div>
@@ -2061,6 +2084,41 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                 </div>
               </div>
             );
+          } else if (slice4Version === 'v5') {
+            // v5: one-row collapse. Cost trajectory rolls up Projected − Revised − Builder
+            // Variance + Markup into a single client-facing number. Math is correct under
+            // the hood; UI stays at v2's density. Breakdown can move to a tooltip later.
+            const cv = costSideDelta + markupOnDelta;
+            const isOver = cv > 0;
+            const trajLabel = 'Budget difference';
+            const priceAdjustmentV5 = changeOrdersTotal + approvedSelectionsTotal + cv;
+            const revisedPriceV5 = originalContractPrice + priceAdjustmentV5 + totalTax;
+
+            totalPriceCard = (
+              <div className="jps-pane">
+                <div className="jps-pane-label">Total price</div>
+                <div className="jps-pane-big" style={{ marginTop: 4 }}>{fmt(revisedPriceV5)}</div>
+                <div className="jps-pane-breakdown" style={{ marginTop: 16 }}>
+                  <div className="jps-breakdown-line">
+                    <span>Original client price</span>
+                    <span>{fmt(originalContractPrice)}</span>
+                  </div>
+                  <div className="jps-breakdown-line jps-breakdown-parent">
+                    <span>Approved changes</span>
+                    <span>{fmt(priceAdjustmentV5)}</span>
+                  </div>
+                  <div className="jps-breakdown-line jps-breakdown-nested"><span>Change orders</span><span>{fmt(changeOrdersTotal)}</span></div>
+                  <div className="jps-breakdown-line jps-breakdown-nested"><span>Selections and allowances</span><span>{fmt(approvedSelectionsTotal)}</span></div>
+                  {cv !== 0 && (
+                    <div className="jps-breakdown-line jps-breakdown-nested">
+                      <button type="button" className="jps-s4-link-label" onClick={() => setSlice4DrillOpen(true)}>{trajLabel}</button>
+                      <span className={isOver ? 'jps-impact-up' : 'jps-impact-down'}>{fmtSigned(cv)}</span>
+                    </div>
+                  )}
+                  <div className="jps-breakdown-line"><span>Tax</span><span>{fmt(totalTax)}</span></div>
+                </div>
+              </div>
+            );
           } else {
             // v2: full always-on breakdown including bill variances.
             totalPriceCard = (
@@ -2118,6 +2176,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
             v2: 'No discovery friction — the answer is on the page. Already close to today\'s Slice 1 default; question is whether this is too much density for the client view.',
             v3: 'Cleanest landing page — keeps the rollup feeling unchanged. Extra click for anyone who wants the answer. Best when most users don\'t drill in but the few who do need a focused detail surface.',
             v4: 'No separate detail surface — the contributing sections (Allowances, Bills, Selections, Change Orders) are visually grouped under one "Approved changes" container in the JPS body itself. Reuses what\'s already there instead of duplicating it in a panel.',
+            v5: 'One-row cost trajectory. Same density as v2, but the row rolls up the JCB-correct Open Book math: (Projected − Revised − Builder Variance) × (1 + markup). Direction-aware label ("Projected cost overage" / "Projected cost savings"), hidden when zero. Step-by-step breakdown can live in a tooltip if needed. References: btwiki.atlassian.net/wiki/spaces/TG/pages/4481384935 + buildertrend.com/help-article/job-costing-budget-overview',
           };
 
           return (
@@ -2174,12 +2233,13 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                 <BdsTabs
                   ariaLabel="Direction"
                   activeKey={slice4Version}
-                  onChange={(k) => setSlice4Version(k as 'v1' | 'v2' | 'v3' | 'v4')}
+                  onChange={(k) => setSlice4Version(k as 'v1' | 'v2' | 'v3' | 'v4' | 'v5')}
                   tabs={[
                     { key: 'v1', label: 'v1 · Inline expandable' },
                     { key: 'v2', label: 'v2 · Always-on list' },
                     { key: 'v3', label: 'v3 · Drill-through' },
                     { key: 'v4', label: 'v4 · Grouped sections' },
+                    { key: 'v5', label: 'v5 · Visual contribution' },
                   ]}
                 />
                 <button
@@ -2250,7 +2310,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                                 <span className="jps-flow-part"><span>Spent</span><strong>{fmt(withTax(approvedUsed))}</strong></span>
                                 <span className="jps-flow-sep">·</span>
                                 <span className={over ? 'jps-flow-over' : 'jps-flow-remaining'}>
-                                  {over ? <><span>Overage</span><strong>{fmt(withTax(approvedUsed - group.budget))}</strong></> : <><span>Remaining</span><strong>{fmt(withTax(remaining))}</strong></>}
+                                  {over ? <><span>Overage</span><strong>{fmtSigned(withTax(approvedUsed - group.budget))}</strong></> : <><span>Remaining</span><strong>{fmt(withTax(remaining))}</strong></>}
                                 </span>
                               </span>
                             );
@@ -2310,7 +2370,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                                     <div className="jps-col-price">{fmt(withTax(approvedTotal))}</div>
                                     {hasImpact && (
                                       <div className="jps-col-impact">
-                                        {diff > 0 && <span className="jps-summary-impact">{fmt(withTax(diff))} overage</span>}
+                                        {diff > 0 && <span className="jps-summary-impact">{fmtSigned(withTax(diff))} overage</span>}
                                       </div>
                                     )}
                                   </div>
@@ -2626,6 +2686,100 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                   </div>
                 </div>
               )}
+
+              {/* ─── v5 drill-through modal — math walkthrough using JCB column terms
+                       so each row reconciles back to the Job Costing Budget. ─── */}
+              {slice4Version === 'v5' && slice4DrillOpen && (() => {
+                const projOverage = MOCK_PROJECTED_COSTS - REVISED_BUDGET_TOTAL;
+                const builderStrip = -MOCK_BUILDER_VARIANCE;
+                const cvTotal = costSideDelta + markupOnDelta;
+                const isOver = cvTotal > 0;
+                return (
+                  <div className="jps-s4-modal-scrim" onClick={() => setSlice4DrillOpen(false)}>
+                    <div className="jps-s4-modal" onClick={(e) => e.stopPropagation()}>
+                      <BdsActionBar align="space-between" className="jps-s4-modal-bar">
+                        <BdsText as="h3" size="heavy-lg">Budget difference</BdsText>
+                        <BdsButton displayType="tertiary" icon={<BdsIcon name="x" size={14} />} ariaLabel="Close" onClick={() => setSlice4DrillOpen(false)} />
+                      </BdsActionBar>
+
+                      <div className="jps-s4-modal-body">
+                        <BdsSection
+                          title="Revised vs Projected"
+                          slot={<span className="jps-s4-modal-section-total">{fmtSigned(projOverage)}</span>}
+                          className="jps-s4-modal-section"
+                        >
+                          <div className="jps-s4-modal-line">
+                            <span className="jps-s4-modal-line-name">Projected Costs</span>
+                            <span className="jps-s4-modal-line-amt">{fmt(MOCK_PROJECTED_COSTS)}</span>
+                          </div>
+                          <div className="jps-s4-modal-line">
+                            <span className="jps-s4-modal-line-name">Revised Budget Costs</span>
+                            <span className="jps-s4-modal-line-amt">{fmt(REVISED_BUDGET_TOTAL)}</span>
+                          </div>
+                          <div className="jps-s4-modal-line">
+                            <span className="jps-s4-modal-line-name jps-item-parent">
+                              From the "Revised vs Projected" column on the Job Costing Budget.
+                            </span>
+                          </div>
+                        </BdsSection>
+
+                        {builderStrip !== 0 && (
+                          <BdsSection
+                            title="Builder Variance"
+                            slot={<span className="jps-s4-modal-section-total">{fmtSigned(builderStrip)}</span>}
+                            className="jps-s4-modal-section"
+                          >
+                            <div className="jps-s4-modal-line">
+                              <span className="jps-s4-modal-line-name">Builder Variance</span>
+                              <span className="jps-s4-modal-line-amt">{fmt(MOCK_BUILDER_VARIANCE)}</span>
+                            </div>
+                            <div className="jps-s4-modal-line">
+                              <span className="jps-s4-modal-line-name jps-item-parent">
+                                From the "Builder Variance" column on the Job Costing Budget — bills coded as builder-absorbed, never billed to the client.
+                              </span>
+                            </div>
+                          </BdsSection>
+                        )}
+
+                        {markupOnDelta !== 0 && (
+                          <BdsSection
+                            title="Markup on projection"
+                            slot={<span className="jps-s4-modal-section-total">{fmtSigned(markupOnDelta)}</span>}
+                            className="jps-s4-modal-section"
+                          >
+                            <div className="jps-s4-modal-line">
+                              <span className="jps-s4-modal-line-name">Customer-payable cost change</span>
+                              <span className="jps-s4-modal-line-amt">{fmt(costSideDelta)}</span>
+                            </div>
+                            <div className="jps-s4-modal-line">
+                              <span className="jps-s4-modal-line-name">Markup rate</span>
+                              <span className="jps-s4-modal-line-amt">{(MOCK_MARKUP_PCT * 100).toFixed(0)}%</span>
+                            </div>
+                            <div className="jps-s4-modal-line">
+                              <span className="jps-s4-modal-line-name jps-item-parent">
+                                Open Book markup applied per cost code + cost type, from your job's Markup/Margin settings.
+                              </span>
+                            </div>
+                          </BdsSection>
+                        )}
+
+                        <div className="jps-s4-modal-math">
+                          <div className="jps-s4-math-row jps-s4-math-row-total">
+                            <span>{isOver ? 'Total added to client price' : 'Total reduced from client price'}</span>
+                            <span>{fmtSigned(cvTotal)}</span>
+                          </div>
+                        </div>
+
+                        <div style={{ marginTop: 16, paddingTop: 12, borderTop: '1px solid var(--g200)', fontSize: 13 }}>
+                          <a href="#" className="jps-s4-link-label" onClick={(e) => e.preventDefault()}>
+                            View on Job Costing Budget →
+                          </a>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
             </>
           );
         })()}

@@ -59,10 +59,23 @@ export const INVOICE_SELECTION_SCENARIOS: InvoiceSelectionScenario[] = [
     costCode: '6010 - Flooring',
     budgetAmount: 8000,
     previouslyInvoiced: 8000,
-    scenarioNote: 'Scenario 4 · Allowance placeholder previously invoiced ($8,000 via Add from estimate), selections come in under at $7,200 → wizard auto-reverses the placeholder and bills the actuals, netting to a -$800 credit.',
+    closeoutMode: 'credit',
+    scenarioNote: 'Scenario 4 · Allowance placeholder previously invoiced ($8,000 via Add from estimate), allowance marked complete with selections at $7,200 → wizard fully reverses the placeholder and bills the actuals, netting to a -$800 credit.',
     selections: [
       { id: 'ms-5', name: 'Engineered Hardwood — Living Room', costCode: '6010', costType: 'Material', originalPrice: 5000, approvedPrice: 4500, status: 'approved' },
       { id: 'ms-6', name: 'Luxury Vinyl Plank — Entryway', costCode: '6010', costType: 'Labor', originalPrice: 3000, approvedPrice: 2700, status: 'approved' },
+    ],
+  },
+  {
+    id: 'ma-9',
+    name: 'Appliances Allowance',
+    costCode: '9070 - Appliances',
+    budgetAmount: 4000,
+    previouslyInvoiced: 4000,
+    closeoutMode: 'credit',
+    scenarioNote: 'Scenario 7 · Allowance previously invoiced at one cost code, but the chosen selection bills under a different cost code (e.g., a built-in upgrade tracked separately). Marked complete → full reversal at the original code, plus the selection at its own code, netting to a -$1,500 credit. On the client invoice this stays as two rows so the categories remain transparent.',
+    selections: [
+      { id: 'ms-21', name: 'Sub-Zero Built-in Refrigerator', costCode: '9075 - Built-in Appliances', costType: 'Material', originalPrice: 4000, approvedPrice: 2500, status: 'approved' },
     ],
   },
   {

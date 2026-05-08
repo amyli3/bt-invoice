@@ -32,6 +32,55 @@ function inferLocation(name: string): string {
   return 'Main floor';
 }
 
+// Mock schedule items for the prototype. Real data comes from the project's schedule.
+const SCHEDULE_ITEMS = [
+  { id: 'sch-0', name: 'Cabinet shop drawings', start: '2026-05-15', end: '2026-05-20' },
+  { id: 'sch-1', name: 'Plumbing rough-in',     start: '2026-06-20', end: '2026-06-25' },
+  { id: 'sch-2', name: 'Tile install',          start: '2026-07-25', end: '2026-08-05' },
+  { id: 'sch-3', name: 'Flooring install',      start: '2026-08-15', end: '2026-08-22' },
+  { id: 'sch-4', name: 'Cabinet install',       start: '2026-08-25', end: '2026-09-01' },
+  { id: 'sch-5', name: 'Final paint',           start: '2026-09-15', end: '2026-09-22' },
+];
+
+function computeAutoDueDate(
+  itemId: string,
+  offsetDays: number,
+  direction: 'before' | 'after',
+  anchor: 'start' | 'end'
+): string {
+  const item = SCHEDULE_ITEMS.find(s => s.id === itemId);
+  if (!item) return '';
+  const base = new Date((anchor === 'start' ? item.start : item.end) + 'T00:00:00');
+  base.setDate(base.getDate() + (direction === 'before' ? -offsetDays : offsetDays));
+  return base.toISOString().split('T')[0];
+}
+
+function formatLongDate(d: string): string {
+  if (!d) return '';
+  const date = new Date(d + 'T00:00:00');
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function getStatusBadge(optionStatus: string, dueDate: string): {
+  label: string;
+  className: string;
+} {
+  if (optionStatus === 'approved') return { label: 'Approved', className: 'sp-badge-success' };
+  if (optionStatus === 'declined') return { label: 'Declined', className: 'sp-badge-danger' };
+  if (optionStatus === 'draft') return { label: 'Draft', className: 'sp-badge-default' };
+  // Pending — derive from due date
+  if (dueDate) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const due = new Date(dueDate + 'T00:00:00');
+    const diffDays = Math.floor((due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+    if (diffDays < 0) return { label: 'Overdue', className: 'sp-badge-danger' };
+    if (diffDays <= 7) return { label: 'Due soon', className: 'sp-badge-warning' };
+  }
+  return { label: 'Pending', className: 'sp-badge-warning' };
+}
+
+
 export default function OptionDetailPage({ onBack, selectionData, prefilledAllowance }: Props) {
   const isViewing = !!selectionData;
   const isPending = selectionData?.status === 'pending';
@@ -49,7 +98,17 @@ export default function OptionDetailPage({ onBack, selectionData, prefilledAllow
   );
   const [location, setLocation] = useState(selectionData ? inferLocation(selectionData.name) : 'None');
   const [productUrl, setProductUrl] = useState('');
+  const [dueDate, setDueDate] = useState('');
+  const [linkedScheduleId, setLinkedScheduleId] = useState('');
+  const [offsetDays, setOffsetDays] = useState('5');
+  const [offsetDirection, setOffsetDirection] = useState<'before' | 'after'>('before');
+  const [offsetAnchor, setOffsetAnchor] = useState<'start' | 'end'>('start');
   const [optionStatus, setOptionStatus] = useState(selectionData?.status || 'draft');
+
+  const isLinkedToSchedule = !!linkedScheduleId;
+  const autoDueDate = isLinkedToSchedule
+    ? computeAutoDueDate(linkedScheduleId, parseInt(offsetDays) || 0, offsetDirection, offsetAnchor)
+    : '';
 
   const [lineItems, setLineItems] = useState<{ title: string; description: string; quantity: string; unit: string; unitCost: string; costType: string; costCode: string; touched: boolean }[]>(
     selectionData ? [{ title: selectionData.name, description: '', quantity: '1.0000', unit: '', unitCost: selectionData.price.toFixed(4), costType: 'Material', costCode: '', touched: false }] : []
@@ -139,6 +198,34 @@ export default function OptionDetailPage({ onBack, selectionData, prefilledAllow
     ];
   };
   const [specs, setSpecs] = useState(seedSpecs);
+  const [slice, setSlice] = useState<1 | 2 | 3 | 4>(1);
+
+  const effectiveDueDate = (slice === 2 && isLinkedToSchedule) ? autoDueDate : dueDate;
+  const statusBadge = getStatusBadge(optionStatus, effectiveDueDate);
+
+  // Slice 3 / 4 — email notification mocks. Fixed offsets keep the prototype
+  // readable regardless of today's date.
+  const isEmailSlice = slice === 3 || slice === 4;
+  const isOverdueEmail = slice === 3;
+  const emailDayOffset = isOverdueEmail ? 5 : 3;
+  const emailDueDate = (() => {
+    const d = new Date();
+    d.setDate(d.getDate() + (isOverdueEmail ? -emailDayOffset : emailDayOffset));
+    return d.toISOString().slice(0, 10);
+  })();
+  const emailHeadline = isOverdueEmail ? 'Selection overdue' : 'Selection due soon';
+  const emailBody = isOverdueEmail
+    ? `is ${emailDayOffset} days overdue. Make your choice to keep the project on schedule.`
+    : `is due in ${emailDayOffset} days. Make your choice to keep the project on schedule.`;
+  const emailDaysLabel = isOverdueEmail ? 'Days overdue' : 'Days remaining';
+  const emailDaysValue = `${emailDayOffset} days`;
+  const emailSelectionTitle = title || 'Kitchen faucet';
+  const emailJobName = 'Amy - selections test job';
+  const emailAllowance = allowance && allowance !== 'None' ? allowance : 'Plumbing fixtures';
+  const emailTotalPrice = lineItems.reduce(
+    (s, li) => s + (parseFloat(li.unitCost) || 0) * (parseFloat(li.quantity) || 0),
+    0
+  );
 
   return (
     <div className="jps-page">
@@ -149,16 +236,22 @@ export default function OptionDetailPage({ onBack, selectionData, prefilledAllow
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <div>
               <div className="pg-hdr-sub">Amy - selections test job &bull; Selection Option</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                 <span className="pg-title">{isViewing ? title : 'Add Option'}</span>
-                <span className={`sp-badge ${optionStatus === 'approved' ? 'sp-badge-success' : optionStatus === 'pending' ? 'sp-badge-warning' : 'sp-badge-default'}`}>
-                  {optionStatus === 'approved' ? 'Approved' : optionStatus === 'pending' ? 'Pending' : 'Draft'}
+                <span className={`sp-badge ${statusBadge.className}`}>
+                  {statusBadge.label}
                 </span>
               </div>
               <button className="od-back-link" onClick={onBack}>&larr; Back</button>
             </div>
           </div>
           <div className="pg-hdr-right" style={{ gap: 8 }}>
+            <div className="tabs" style={{ marginRight: 4 }}>
+              <button type="button" className={`tab${slice === 1 ? ' on' : ''}`} onClick={() => setSlice(1)}>Slice 1</button>
+              <button type="button" className={`tab${slice === 2 ? ' on' : ''}`} onClick={() => setSlice(2)}>Slice 2</button>
+              <button type="button" className={`tab${slice === 3 ? ' on' : ''}`} onClick={() => setSlice(3)}>Slice 3</button>
+              <button type="button" className={`tab${slice === 4 ? ' on' : ''}`} onClick={() => setSlice(4)}>Slice 4</button>
+            </div>
             {isPending && optionStatus === 'pending' && (
               <>
                 <button className="btn btn-danger" onClick={() => setOptionStatus('declined')}>Decline</button>
@@ -178,6 +271,146 @@ export default function OptionDetailPage({ onBack, selectionData, prefilledAllow
 
       <div className="od-body">
         <div className="od-content">
+
+          {isEmailSlice && (
+            <div style={{
+              background: 'var(--g50, #F5F6F8)',
+              padding: '32px 24px',
+              borderRadius: 'var(--radius)',
+              display: 'flex',
+              justifyContent: 'center',
+            }}>
+              <div style={{
+                background: 'white',
+                width: '100%',
+                maxWidth: 600,
+                borderRadius: 6,
+                overflow: 'hidden',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+                fontFamily: 'inherit',
+              }}>
+                {/* Email body */}
+                <div style={{ padding: '32px 40px 24px' }}>
+                  {/* Logo */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 28 }}>
+                    <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+                      <circle cx="16" cy="16" r="14" stroke="#00B4D8" strokeWidth="2" fill="none" />
+                      <path d="M11 9h7a4 4 0 0 1 0 8h-7V9zm0 8h8a4 4 0 0 1 0 8h-8v-8z" fill="#0B1F3A" />
+                    </svg>
+                    <span style={{ fontSize: 22, fontWeight: 700, color: '#0B1F3A', letterSpacing: -0.2 }}>Buildertrend</span>
+                  </div>
+
+                  <h1 style={{ fontSize: 24, fontWeight: 700, color: '#0B1F3A', margin: '0 0 20px' }}>
+                    {emailHeadline}
+                  </h1>
+
+                  <p style={{ fontSize: 15, color: '#1F2937', margin: '0 0 16px', lineHeight: 1.5 }}>
+                    Hi Sadie,
+                  </p>
+
+                  <p style={{ fontSize: 15, color: '#1F2937', margin: '0 0 24px', lineHeight: 1.5 }}>
+                    The selection <strong>{emailSelectionTitle}</strong> for <strong>{emailJobName}</strong> {emailBody}
+                  </p>
+
+                  {/* Details card */}
+                  <div style={{
+                    border: '1px solid #E5E7EB',
+                    borderRadius: 6,
+                    padding: '20px 24px',
+                    marginBottom: 24,
+                  }}>
+                    <div style={{
+                      fontSize: 16,
+                      fontWeight: 700,
+                      color: '#0B1F3A',
+                      paddingBottom: 12,
+                      marginBottom: 12,
+                      borderBottom: '1px solid #E5E7EB',
+                    }}>
+                      Selection
+                    </div>
+                    {[
+                      { label: 'Title', value: emailSelectionTitle },
+                      { label: 'Allowance', value: emailAllowance },
+                      { label: 'Due date', value: formatLongDate(emailDueDate) },
+                      { label: emailDaysLabel, value: emailDaysValue },
+                      ...(emailTotalPrice > 0 ? [{
+                        label: 'Price',
+                        value: emailTotalPrice.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 }),
+                      }] : []),
+                    ].map((row) => (
+                      <div key={row.label} style={{ display: 'flex', padding: '6px 0', fontSize: 14 }}>
+                        <div style={{ width: 160, fontWeight: 600, color: '#1F2937' }}>{row.label}</div>
+                        <div style={{ flex: 1, color: '#1F2937' }}>{row.value}</div>
+                      </div>
+                    ))}
+                    <button
+                      type="button"
+                      style={{
+                        marginTop: 16,
+                        background: '#1357DF',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: 6,
+                        padding: '10px 20px',
+                        fontSize: 14,
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        fontFamily: 'inherit',
+                      }}
+                    >
+                      Make selection
+                    </button>
+                  </div>
+
+                  <p style={{ fontSize: 12, color: '#6B7280', textAlign: 'center', lineHeight: 1.5, margin: '0 0 8px' }}>
+                    You received this email because Brothers Grimm Construction Company uses Buildertrend for project communication and you are following this feature in your notification preferences. If you need help, visit our FAQs or contact us.
+                  </p>
+                </div>
+
+                {/* Footer */}
+                <div style={{
+                  background: '#EEF1F6',
+                  padding: '24px 40px',
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  justifyContent: 'space-between',
+                  gap: 16,
+                  flexWrap: 'wrap',
+                }}>
+                  <div style={{ display: 'flex', gap: 12 }}>
+                    <svg width="32" height="32" viewBox="0 0 32 32" fill="none" style={{ flexShrink: 0 }}>
+                      <circle cx="16" cy="16" r="14" stroke="#00B4D8" strokeWidth="2" fill="none" />
+                      <path d="M11 9h7a4 4 0 0 1 0 8h-7V9zm0 8h8a4 4 0 0 1 0 8h-8v-8z" fill="#0B1F3A" />
+                    </svg>
+                    <div style={{ fontSize: 13, color: '#1F2937', lineHeight: 1.5 }}>
+                      <div style={{ fontWeight: 700, marginBottom: 2 }}>Buildertrend Solutions</div>
+                      <div>11818 I Street</div>
+                      <div>Omaha, NE, 68137 U.S.</div>
+                      <div>(886) 584-2038</div>
+                    </div>
+                  </div>
+                  <a href="#" style={{ fontSize: 13, color: '#0B1F3A', textDecoration: 'underline', fontWeight: 600 }}>Contact us</a>
+                </div>
+                <div style={{
+                  background: '#EEF1F6',
+                  borderTop: '1px solid #D6DCE5',
+                  padding: '14px 40px',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  fontSize: 12,
+                  flexWrap: 'wrap',
+                  gap: 12,
+                }}>
+                  <a href="#" style={{ color: '#0B1F3A', textDecoration: 'underline' }}>Privacy Policy</a>
+                  <a href="#" style={{ color: '#0B1F3A', textDecoration: 'underline' }}>Change notification preferences</a>
+                  <a href="#" style={{ color: '#0B1F3A', textDecoration: 'underline' }}>Unsubscribe</a>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {!isEmailSlice && (<>
 
           {/* Details + Specs/Images */}
           <div className="od-two-col">
@@ -245,6 +478,7 @@ export default function OptionDetailPage({ onBack, selectionData, prefilledAllow
                 </div>
               </div>
 
+
               <div className="od-field">
                 <label className="fl">Product URL</label>
                 <div className="od-field-with-actions">
@@ -256,9 +490,121 @@ export default function OptionDetailPage({ onBack, selectionData, prefilledAllow
               </div>
             </div>
 
-            {/* Right: Specs + Images */}
+            {/* Right: Due date + Specs + Images */}
             <div>
-              <h3 className="od-section-title">Specs</h3>
+              <h3 className="od-section-title">Due date</h3>
+              {slice === 2 && (
+                <div className="tabs" style={{ marginBottom: 12 }}>
+                  <button
+                    type="button"
+                    className={`tab${!isLinkedToSchedule ? ' on' : ''}`}
+                    onClick={() => setLinkedScheduleId('')}
+                  >
+                    Due date
+                  </button>
+                  <button
+                    type="button"
+                    className={`tab${isLinkedToSchedule ? ' on' : ''}`}
+                    onClick={() => {
+                      if (!isLinkedToSchedule) setLinkedScheduleId(SCHEDULE_ITEMS[0].id);
+                    }}
+                  >
+                    Link to schedule item
+                  </button>
+                </div>
+              )}
+              {(slice === 1 || !isLinkedToSchedule) ? (
+                <div className="od-field">
+                  <label className="fl">Due date</label>
+                  <input
+                    type="date"
+                    className="fi"
+                    value={dueDate}
+                    onChange={e => setDueDate(e.target.value)}
+                    style={{ maxWidth: 220 }}
+                  />
+                </div>
+              ) : (
+                <>
+                  <div className="od-field">
+                    <label className="fl">Schedule item</label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                      <select
+                        className="fi"
+                        value={linkedScheduleId}
+                        onChange={e => setLinkedScheduleId(e.target.value)}
+                        style={{ maxWidth: 320, flex: '1 1 220px' }}
+                      >
+                        {SCHEDULE_ITEMS.map(item => (
+                          <option key={item.id} value={item.id}>{item.name}</option>
+                        ))}
+                      </select>
+                      <button type="button" className="btn-g" style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>Add</button>
+                      <button type="button" className="btn-g" style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>Edit</button>
+                    </div>
+                  </div>
+                  <div className="od-field" style={{ display: 'flex', gap: 16, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+                    {(() => {
+                      const item = SCHEDULE_ITEMS.find(s => s.id === linkedScheduleId);
+                      return (
+                        <>
+                          <div>
+                            <label className="fl">Schedule date</label>
+                            {item && (
+                              <div className="tabs">
+                                <button
+                                  type="button"
+                                  className={`tab${offsetAnchor === 'start' ? ' on' : ''}`}
+                                  onClick={() => setOffsetAnchor('start')}
+                                >
+                                  {formatLongDate(item.start)}
+                                </button>
+                                <button
+                                  type="button"
+                                  className={`tab${offsetAnchor === 'end' ? ' on' : ''}`}
+                                  onClick={() => setOffsetAnchor('end')}
+                                >
+                                  {formatLongDate(item.end)}
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                          <div>
+                            <label className="fl">Offset</label>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                              <input
+                                className="fi"
+                                type="number"
+                                min={0}
+                                value={offsetDays}
+                                onChange={e => setOffsetDays(e.target.value)}
+                                style={{ width: 56 }}
+                              />
+                              <select
+                                className="fi"
+                                value={offsetDirection}
+                                onChange={e => setOffsetDirection(e.target.value as 'before' | 'after')}
+                                style={{ width: 140 }}
+                              >
+                                <option value="before">days before</option>
+                                <option value="after">days after</option>
+                              </select>
+                            </div>
+                          </div>
+                        </>
+                      );
+                    })()}
+                  </div>
+                  <div className="od-field">
+                    <label className="fl">Due date</label>
+                    <div style={{ padding: '8px 0', fontSize: 14, color: 'var(--g700)', fontWeight: 500 }}>
+                      {formatLongDate(autoDueDate)}
+                    </div>
+                  </div>
+                </>
+              )}
+
+              <h3 className="od-section-title" style={{ marginTop: 24 }}>Specs</h3>
               {specs.length === 0 ? (
                 <p className="od-placeholder-text">Save to add specs</p>
               ) : (
@@ -454,6 +800,8 @@ export default function OptionDetailPage({ onBack, selectionData, prefilledAllow
             <div><strong>Total price: {lineItems.reduce((s, li) => s + (parseFloat(li.unitCost) || 0) * (parseFloat(li.quantity) || 0), 0).toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 })}</strong></div>
             <a href="#" className="btn-g">See full price breakdown</a>
           </div>
+
+          </>)}
 
         </div>
       </div>

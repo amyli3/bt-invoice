@@ -46,9 +46,7 @@ export const defaultInvoice: Invoice = {
   lineItems: [],
   flatFeeAmount: 0,
   datePaid: '',
-  payments: [
-    { id: 'p1', date: '2026-02-15', method: 'Credit Card', amount: 2000, refund: false },
-  ],
+  payments: [],
   notes: '',
   invoiceDescription: '',
   emailMessage: '',

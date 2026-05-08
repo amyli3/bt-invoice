@@ -2,9 +2,7 @@ import { useMemo, useState } from 'react';
 import { INVOICE_SELECTION_SCENARIOS, INVOICE_STANDALONE_SELECTIONS } from '../selectionsData';
 import { BTRelatedItemTag, RelatedItemType } from '../bds';
 
-type RowStatus = 'Pending' | 'Approved' | 'Declined' | 'Draft';
-type ViewMode = 'allowance' | 'location' | 'vendor';
-type ViewLayout = 'list' | 'grid';
+type RowStatus = 'Pending' | 'Approved' | 'Declined';
 
 interface InvoiceRef { subject: string; }
 
@@ -18,7 +16,6 @@ interface SelectionOption {
   invoicedAmount: number;
   invoiceRef?: InvoiceRef;
   status: RowStatus;
-  dueDate?: string;
 }
 
 interface AllowanceGroup {
@@ -36,6 +33,7 @@ interface AllowanceGroup {
 }
 
 type SelectionRow = SelectionOption | AllowanceGroup;
+type ViewMode = 'allowance' | 'location' | 'vendor';
 
 function isAllowance(row: SelectionRow): row is AllowanceGroup {
   return 'options' in row;
@@ -47,17 +45,13 @@ function statusFromScenario(s: 'approved' | 'invoiced' | 'declined' | 'pending' 
   return 'Approved';
 }
 
-// Mock locations per selection / allowance for the prototype.
-// In production this comes from the selection's location field.
 const LOCATION_MAP: Record<string, string> = {
-  // Allowances
   'ma-5': 'Master Bath',
   'ma-6': 'Living Room',
   'ma-8': 'Whole house',
   'ma-1': 'Kitchen',
   'ma-2': 'Living areas',
   'ma-7': 'Master Bath',
-  // Allowance children
   'ms-12': 'Master Bath',
   'ms-13': 'Master Bath',
   'ms-14': 'Living Room',
@@ -70,34 +64,16 @@ const LOCATION_MAP: Record<string, string> = {
   'ms-16': 'Master Bath',
   'ms-17': 'Master Bath',
   'ms-18': 'Master Bath',
-  // Standalones
   'ss-1': 'Front entry',
   'ss-2': 'Exterior',
 };
 
-// Sample due dates and pending overrides so the prototype shows the
-// new Deadline column with realistic Due soon / Overdue states.
-// Today's reference date is 2026-05-07.
-const DUE_DATE_MAP: Record<string, string> = {
-  'ms-12': '2026-05-10', // Due soon (3 days)
-  'ms-13': '2026-05-04', // Overdue (3 days past)
-  'ms-14': '2026-05-25', // Pending (>7 days out)
-  'ms-1':  '2026-05-12', // Due soon (5 days)
-  'ms-18': '2026-06-15', // Pending (>7 days)
-  'ss-1':  '2026-05-08', // Due soon (1 day)
-};
-
-// Override status to Pending so the due-date logic has rows to surface.
-const PENDING_OVERRIDES = new Set(['ms-12', 'ms-13', 'ms-14', 'ss-1']);
-
-// The invoice each item was billed on. Keyed by selection id and allowance id.
-// Subject is what shows after the "Invoice:" label rendered by BTRelatedItemTag.
 const INVOICE_REF_SEED: Record<string, InvoiceRef> = {
-  'ms-19': { subject: '1' },       // Interior wall paint
-  'ma-1':  { subject: '2' },       // Kitchen Allowance placeholder
-  'ma-2':  { subject: '3' },       // Flooring Allowance placeholder
-  'ms-16': { subject: '4' },       // Custom cabinetry
-  'ms-17': { subject: 'Draft 1' }, // Cabinet install (still a draft)
+  'ms-19': { subject: '1' },
+  'ma-1':  { subject: '2' },
+  'ma-2':  { subject: '3' },
+  'ms-16': { subject: '4' },
+  'ms-17': { subject: 'Draft 1' },
 };
 
 function rollupInvoiceRef(refs: InvoiceRef[]): InvoiceRef | undefined {
@@ -107,10 +83,6 @@ function rollupInvoiceRef(refs: InvoiceRef[]): InvoiceRef | undefined {
   return { subject: 'Multiple' };
 }
 
-// Build the page's row layout from the shared invoice scenario data
-// so the Selections page and the invoice's "Add from selections" wizard
-// stay in sync.
-// Extract the vendor type (e.g., "Plumbing") from a cost code string ("4010 - Plumbing")
 const vendorFromCostCode = (cc: string): string => {
   const idx = cc.indexOf(' - ');
   return idx >= 0 ? cc.slice(idx + 3) : cc;
@@ -125,14 +97,12 @@ const mockData: SelectionRow[] = [
     clientPrice: ss.approvedPrice,
     approvedPrice: ss.approvedPrice,
     invoicedAmount: 0,
-    status: PENDING_OVERRIDES.has(ss.id) ? 'Pending' : 'Approved',
-    dueDate: DUE_DATE_MAP[ss.id],
+    status: 'Approved',
   })),
   ...INVOICE_SELECTION_SCENARIOS.map((ma): AllowanceGroup => {
     const vendor = vendorFromCostCode(ma.costCode);
     const options = ma.selections.map((sel): SelectionOption => {
       const invoicedAmount = sel.status === 'invoiced' ? sel.approvedPrice : 0;
-      const baseStatus = statusFromScenario(sel.status as string);
       return {
         id: sel.id,
         title: sel.name,
@@ -142,8 +112,7 @@ const mockData: SelectionRow[] = [
         approvedPrice: sel.approvedPrice,
         invoicedAmount,
         invoiceRef: invoicedAmount > 0 ? INVOICE_REF_SEED[sel.id] : undefined,
-        status: PENDING_OVERRIDES.has(sel.id) ? 'Pending' : baseStatus,
-        dueDate: DUE_DATE_MAP[sel.id],
+        status: statusFromScenario(sel.status as string),
       };
     });
     const invoicedFromSelections = options.reduce((s, o) => s + o.invoicedAmount, 0);
@@ -171,51 +140,15 @@ const mockData: SelectionRow[] = [
 
 const fmt = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 });
 
-const fmtDate = (d?: string) => {
-  if (!d) return '';
-  const date = new Date(d + 'T00:00:00');
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-};
-
-const dueDaysFromNow = (d?: string): number | null => {
-  if (!d) return null;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const due = new Date(d + 'T00:00:00');
-  return Math.floor((due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-};
-
-// Derive the displayed status for a row from its decision state + due date.
-// Only Pending rows surface Due soon / Overdue — Draft, Approved, Declined are unaffected.
-const deriveRowStatus = (status: string, dueDate?: string): string => {
-  if (status !== 'Pending') return status;
-  const diff = dueDaysFromNow(dueDate);
-  if (diff === null) return 'Pending';
-  if (diff < 0) return 'Overdue';
-  if (diff <= 7) return 'Due soon';
-  return 'Pending';
-};
-
 const StatusBadge = ({ status }: { status: string }) => {
   const cls = status === 'Approved' || status === 'Completed'
     ? 'sp-badge-success'
-    : status === 'Pending' || status === 'Due soon'
+    : status === 'Pending'
       ? 'sp-badge-warning'
-      : status === 'Open' || status === 'Draft'
+      : status === 'Open'
         ? 'sp-badge-default'
         : 'sp-badge-danger';
   return <span className={`sp-badge ${cls}`}>{status}</span>;
-};
-
-const DeadlineCell = ({ dueDate, status }: { dueDate?: string; status: string }) => {
-  if (!dueDate) return <span style={{ color: 'var(--g400)' }}>—</span>;
-  const diff = dueDaysFromNow(dueDate);
-  const overdue = status === 'Pending' && diff !== null && diff < 0;
-  return (
-    <span className={overdue ? 'sp-col-deadline-overdue' : ''}>
-      {fmtDate(dueDate)}
-    </span>
-  );
 };
 
 const InvoicedCell = ({ amount, invoiceRef, onOpen }: { amount: number; invoiceRef?: InvoiceRef; onOpen?: () => void }) => {
@@ -259,7 +192,13 @@ const MoreIcon = () => (
   </svg>
 );
 
-interface SelectionsPageProps {
+const UndoIcon = () => (
+  <svg width="24" height="24" viewBox="0 0 36 36" fill="none">
+    <path fillRule="evenodd" clipRule="evenodd" d="M20.8727 11.0703C19.5019 10.5028 17.9936 10.3547 16.5385 10.6446C15.0837 10.9344 13.7475 11.6492 12.6989 12.6984L12.6985 12.6989L11.1094 14.2833V12.0393C11.1094 11.6941 10.8296 11.4143 10.4844 11.4143C10.1392 11.4143 9.85938 11.6941 9.85938 12.0393L9.85938 15.789C9.85938 15.789 9.85938 15.7891 9.85938 15.7892L9.85938 15.7893C9.85938 16.1345 10.1392 16.4143 10.4844 16.4143H14.2344C14.5796 16.4143 14.8594 16.1345 14.8594 15.7893C14.8594 15.4441 14.5796 15.1643 14.2344 15.1643H11.9962L13.5819 13.5832L13.5827 13.5824C14.4566 12.7078 15.5703 12.112 16.7828 11.8705C17.9953 11.6289 19.2522 11.7524 20.3946 12.2253C21.5369 12.6982 22.5133 13.4992 23.2003 14.5272C23.8873 15.5551 24.254 16.7637 24.254 18C24.254 19.2364 23.8873 20.4449 23.2003 21.4728C22.5133 22.5008 21.5369 23.3018 20.3946 23.7747C19.2522 24.2476 17.9953 24.3711 16.7828 24.1295C15.5703 23.888 14.4566 23.2922 13.5827 22.4176C13.3388 22.1734 12.943 22.1733 12.6989 22.4173C12.4547 22.6612 12.4545 23.057 12.6985 23.3011C13.7472 24.3506 15.0835 25.0656 16.5385 25.3554C17.9936 25.6453 19.5019 25.4972 20.8727 24.9297C22.2435 24.3622 23.4152 23.4009 24.2396 22.1674C25.0639 20.9339 25.504 19.4836 25.504 18C25.504 16.5164 25.0639 15.0661 24.2396 13.8326C23.4152 12.5991 22.2435 11.6378 20.8727 11.0703Z" fill="#202227"/>
+  </svg>
+);
+
+interface SelectionsPage2Props {
   jobOpen?: boolean;
   onToggleJob?: () => void;
   onOpenOption?: (sel?: { name: string; category: string; price: number; status: string }) => void;
@@ -269,7 +208,7 @@ interface SelectionsPageProps {
   onOpenInvoice?: () => void;
 }
 
-export default function SelectionsPage({
+export default function SelectionsPage2({
   jobOpen,
   onToggleJob,
   onOpenOption,
@@ -277,10 +216,8 @@ export default function SelectionsPage({
   completedAllowanceIds,
   onToggleAllowanceComplete,
   onOpenInvoice,
-}: SelectionsPageProps) {
+}: SelectionsPage2Props) {
   const [viewMode, setViewMode] = useState<ViewMode>('allowance');
-  const [viewLayout, setViewLayout] = useState<ViewLayout>('list');
-  const [searchQuery, setSearchQuery] = useState('');
   const [expanded, setExpanded] = useState<Record<string, boolean>>(() => {
     const e: Record<string, boolean> = {};
     mockData.forEach(row => { if (isAllowance(row)) e[row.id] = true; });
@@ -340,81 +277,25 @@ export default function SelectionsPage({
     setChecked(next);
   };
 
-  const filteredData = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
-    if (!q) return mockData;
-    const matches = (text?: string) => !!text && text.toLowerCase().includes(q);
-    return mockData.reduce<SelectionRow[]>((acc, row) => {
-      if (isAllowance(row)) {
-        const headerHit = matches(row.name) || matches(row.fullName) || matches(row.category) || matches(row.location);
-        const matchingOptions = row.options.filter(o => matches(o.title) || matches(o.category) || matches(o.location));
-        if (headerHit) {
-          acc.push(row);
-        } else if (matchingOptions.length > 0) {
-          acc.push({ ...row, options: matchingOptions });
-        }
-      } else if (matches(row.title) || matches(row.category) || matches(row.location)) {
-        acc.push(row);
-      }
-      return acc;
-    }, []);
-  }, [searchQuery]);
+  const totalsClientPrice = mockData.reduce((s, row) => s + row.clientPrice, 0);
 
-  const totalsClientPrice = filteredData.reduce((s, row) => s + row.clientPrice, 0);
+  const allowanceRows = mockData.filter(isAllowance) as AllowanceGroup[];
+  const standaloneRows = mockData.filter(r => !isAllowance(r)) as SelectionOption[];
 
-  const allowanceRows = filteredData.filter(isAllowance) as AllowanceGroup[];
-  const standaloneRows = filteredData.filter(r => !isAllowance(r)) as SelectionOption[];
-
+  // Group rows by location or vendor for the alternate views.
+  // Allowances stay as groups (with their options nested), standalones go in
+  // alongside them under whichever location/vendor key matches.
   const groupedRows = useMemo(() => {
     if (viewMode === 'allowance') return null;
     const key: 'location' | 'category' = viewMode === 'location' ? 'location' : 'category';
     const groups: Record<string, SelectionRow[]> = {};
-    filteredData.forEach(row => {
+    mockData.forEach(row => {
       const k = (row[key] || '—') as string;
       if (!groups[k]) groups[k] = [];
       groups[k].push(row);
     });
     return Object.entries(groups).sort((a, b) => a[0].localeCompare(b[0]));
-  }, [viewMode, filteredData]);
-
-  const renderGroupHeader = (label: string, rows: SelectionRow[]) => {
-    const isOpen = groupExpanded[label] !== false;
-    const groupBudget = rows.reduce((s, r) => s + r.clientPrice, 0);
-    const groupSpent = rows.reduce((s, r) => {
-      if (isAllowance(r)) return s + r.options.reduce((ss, o) => ss + (o.approvedPrice || 0), 0);
-      return s + (r.approvedPrice || 0);
-    }, 0);
-    const groupRemaining = groupBudget - groupSpent;
-    return (
-      <div key={`group-${label}`} className="sp-section">
-        <div className="sp-row sp-row-section" onClick={() => toggleGroupExpand(label)}>
-          <div className="sp-col-check"></div>
-          <div className="sp-col-title">
-            <button className="sp-expand-btn" onClick={(e) => { e.stopPropagation(); toggleGroupExpand(label); }}>
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ transform: isOpen ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s' }}>
-                <path d="M5 3L9 7L5 11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-            </button>
-            <span className="sp-section-label">{label}</span>
-            <span className="sp-section-count">
-              {rows.length} {rows.length === 1 ? 'item' : 'items'}
-            </span>
-          </div>
-          <div className="sp-col-price">{fmt(groupBudget)}</div>
-          <div className="sp-col-approved">{fmt(groupSpent)}</div>
-          <div className={`sp-col-remaining sp-section-remaining${groupRemaining < 0 ? ' sp-section-remaining-over' : ''}`}>
-            {fmt(groupRemaining)}
-          </div>
-          <div className="sp-col-status"></div>
-          <div className="sp-col-category"></div>
-          <div className="sp-col-location"></div>
-          <div className="sp-col-deadline"></div>
-          <div className="sp-col-invoiced"></div>
-          <div className="sp-col-actions"></div>
-        </div>
-      </div>
-    );
-  };
+  }, [viewMode]);
 
   const renderAllowance = (row: AllowanceGroup) => {
     const isOpen = expanded[row.id];
@@ -423,7 +304,6 @@ export default function SelectionsPage({
     const overBudget = allowanceRemaining < 0;
     return (
       <div key={row.id} className={`sp-allowance-block${isOpen ? ' sp-allowance-block-open' : ''}`}>
-        {/* Allowance group header */}
         <div className="sp-row sp-row-group">
           <div className="sp-col-check">
             <div className={`sp-checkbox ${checked[row.id] ? 'sp-checkbox-on' : ''}`} onClick={() => toggleCheck(row.id)} />
@@ -443,17 +323,16 @@ export default function SelectionsPage({
               {row.name}
             </a>
           </div>
-          <div className="sp-col-price">{fmt(row.clientPrice)}</div>
-          <div className="sp-col-approved">{fmt(spent)}</div>
+          <div className="sp-col-price"><strong>{fmt(row.clientPrice)}</strong></div>
+          <div className="sp-col-approved"><strong>{fmt(spent)}</strong></div>
           <div className={`sp-col-remaining sp-remaining-amount${overBudget ? ' sp-remaining-over' : ''}`}>
             {fmt(allowanceRemaining)}
           </div>
           <div className="sp-col-status">
-            {completedIds.has(row.id) && <StatusBadge status="Completed" />}
+            <StatusBadge status={completedIds.has(row.id) ? 'Completed' : 'Open'} />
           </div>
           <div className="sp-col-category">{row.category}</div>
           <div className="sp-col-location">{row.location}</div>
-          <div className="sp-col-deadline"><span style={{ color: 'var(--g400)' }}>—</span></div>
           <div className="sp-col-invoiced">
             <InvoicedCell amount={row.invoicedAmount} invoiceRef={row.invoiceRef} onOpen={onOpenInvoice} />
           </div>
@@ -463,7 +342,6 @@ export default function SelectionsPage({
           </div>
         </div>
 
-        {/* Expanded options */}
         {isOpen && (
           <>
             {row.options.map(opt => (
@@ -478,12 +356,9 @@ export default function SelectionsPage({
                 <div className="sp-col-price">{fmt(opt.clientPrice)}</div>
                 <div className="sp-col-approved">{opt.approvedPrice !== null ? fmt(opt.approvedPrice) : ''}</div>
                 <div className="sp-col-remaining"></div>
-                <div className="sp-col-status"><StatusBadge status={deriveRowStatus(opt.status, opt.dueDate)} /></div>
+                <div className="sp-col-status"><StatusBadge status={opt.status} /></div>
                 <div className="sp-col-category">{opt.category}</div>
                 <div className="sp-col-location">{opt.location}</div>
-                <div className="sp-col-deadline">
-                  <DeadlineCell dueDate={opt.dueDate} status={opt.status} />
-                </div>
                 <div className="sp-col-invoiced">
                   <InvoicedCell amount={opt.invoicedAmount} invoiceRef={opt.invoiceRef} onOpen={onOpenInvoice} />
                 </div>
@@ -495,7 +370,7 @@ export default function SelectionsPage({
                     </>
                   )}
                   {opt.status !== 'Pending' && (
-                    <button className="sp-action-btn" title="Undo"><svg width="24" height="24" viewBox="0 0 36 36" fill="none"><path fillRule="evenodd" clipRule="evenodd" d="M20.8727 11.0703C19.5019 10.5028 17.9936 10.3547 16.5385 10.6446C15.0837 10.9344 13.7475 11.6492 12.6989 12.6984L12.6985 12.6989L11.1094 14.2833V12.0393C11.1094 11.6941 10.8296 11.4143 10.4844 11.4143C10.1392 11.4143 9.85938 11.6941 9.85938 12.0393L9.85938 15.789C9.85938 15.789 9.85938 15.7891 9.85938 15.7892L9.85938 15.7893C9.85938 16.1345 10.1392 16.4143 10.4844 16.4143H14.2344C14.5796 16.4143 14.8594 16.1345 14.8594 15.7893C14.8594 15.4441 14.5796 15.1643 14.2344 15.1643H11.9962L13.5819 13.5832L13.5827 13.5824C14.4566 12.7078 15.5703 12.112 16.7828 11.8705C17.9953 11.6289 19.2522 11.7524 20.3946 12.2253C21.5369 12.6982 22.5133 13.4992 23.2003 14.5272C23.8873 15.5551 24.254 16.7637 24.254 18C24.254 19.2364 23.8873 20.4449 23.2003 21.4728C22.5133 22.5008 21.5369 23.3018 20.3946 23.7747C19.2522 24.2476 17.9953 24.3711 16.7828 24.1295C15.5703 23.888 14.4566 23.2922 13.5827 22.4176C13.3388 22.1734 12.943 22.1733 12.6989 22.4173C12.4547 22.6612 12.4545 23.057 12.6985 23.3011C13.7472 24.3506 15.0835 25.0656 16.5385 25.3554C17.9936 25.6453 19.5019 25.4972 20.8727 24.9297C22.2435 24.3622 23.4152 23.4009 24.2396 22.1674C25.0639 20.9339 25.504 19.4836 25.504 18C25.504 16.5164 25.0639 15.0661 24.2396 13.8326C23.4152 12.5991 22.2435 11.6378 20.8727 11.0703Z" fill="#202227"/></svg></button>
+                    <button className="sp-action-btn" title="Undo"><UndoIcon /></button>
                   )}
                   <MoreMenu rowId={opt.id} />
                 </div>
@@ -507,67 +382,6 @@ export default function SelectionsPage({
     );
   };
 
-  const renderAllowanceCard = (row: AllowanceGroup) => {
-    const spent = row.options.reduce((s, o) => s + (o.approvedPrice || 0), 0);
-    const remaining = row.clientPrice - spent;
-    const overBudget = remaining < 0;
-    const pct = row.clientPrice > 0 ? Math.min(100, Math.max(0, (spent / row.clientPrice) * 100)) : 0;
-    const isComplete = completedIds.has(row.id);
-    return (
-      <div key={row.id} className="sp-card" onClick={() => setOpenAllowance(row)}>
-        <div className="sp-card-head">
-          <div className="sp-card-title">
-            <AllowanceIcon />
-            <span className="sp-card-name">{row.name}</span>
-          </div>
-          {isComplete && <StatusBadge status="Completed" />}
-        </div>
-        <div className="sp-card-meta">
-          <span className="sp-panel-pill">{row.location ?? '—'}</span>
-          <span className="sp-panel-pill">{row.category ?? 'Allowance'}</span>
-          <span className="sp-card-count">{row.optionCount} {row.optionCount === 1 ? 'option' : 'options'}</span>
-        </div>
-        <div className="sp-card-budget">
-          <div className="sp-card-budget-amount">
-            {fmt(spent)} <span className="sp-card-budget-of">/ {fmt(row.clientPrice)}</span>
-          </div>
-          <div className={`sp-card-bar${overBudget ? ' sp-card-bar-over' : ''}`}>
-            <div className="sp-card-bar-fill" style={{ width: `${pct}%` }} />
-          </div>
-          <div className={`sp-card-remaining${overBudget ? ' sp-card-remaining-over' : ''}`}>
-            {overBudget ? `${fmt(Math.abs(remaining))} over` : `${fmt(remaining)} remaining`}
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  const renderStandaloneCard = (row: SelectionOption) => (
-    <div
-      key={row.id}
-      className="sp-card sp-card-standalone"
-      onClick={() => onOpenOption?.({ name: row.title, category: '', price: row.clientPrice, status: row.status.toLowerCase() })}
-    >
-      <div className="sp-card-head">
-        <div className="sp-card-title">
-          <SelectionIcon />
-          <span className="sp-card-name">{row.title}</span>
-        </div>
-        <StatusBadge status={row.status} />
-      </div>
-      <div className="sp-card-meta">
-        <span className="sp-panel-pill">{row.location ?? '—'}</span>
-        <span className="sp-panel-pill">{row.category ?? '—'}</span>
-      </div>
-      <div className="sp-card-budget">
-        <div className="sp-card-budget-amount">{fmt(row.clientPrice)}</div>
-        <div className="sp-card-remaining">Client price</div>
-      </div>
-    </div>
-  );
-
-  const renderCard = (row: SelectionRow) => isAllowance(row) ? renderAllowanceCard(row) : renderStandaloneCard(row);
-
   const renderStandalone = (row: SelectionOption) => (
     <div key={row.id} className="sp-row">
       <div className="sp-col-check">
@@ -578,14 +392,11 @@ export default function SelectionsPage({
         <a href="#" className="sp-link" onClick={(e) => { e.preventDefault(); onOpenOption?.({ name: row.title, category: '', price: row.clientPrice, status: row.status.toLowerCase() }); }}>{row.title}</a>
       </div>
       <div className="sp-col-price">{fmt(row.clientPrice)}</div>
-      <div className="sp-col-approved">{row.approvedPrice !== null ? fmt(row.approvedPrice) : ''}</div>
+      <div className="sp-col-approved">{row.approvedPrice !== null ? <strong>{fmt(row.approvedPrice)}</strong> : ''}</div>
       <div className="sp-col-remaining"></div>
-      <div className="sp-col-status"><StatusBadge status={deriveRowStatus(row.status, row.dueDate)} /></div>
+      <div className="sp-col-status"><StatusBadge status={row.status} /></div>
       <div className="sp-col-category">{row.category}</div>
       <div className="sp-col-location">{row.location}</div>
-      <div className="sp-col-deadline">
-        <DeadlineCell dueDate={row.dueDate} status={row.status} />
-      </div>
       <div className="sp-col-invoiced">
         <InvoicedCell amount={row.invoicedAmount} invoiceRef={row.invoiceRef} />
       </div>
@@ -597,12 +408,47 @@ export default function SelectionsPage({
           </>
         )}
         {row.status !== 'Pending' && (
-          <button className="sp-action-btn" title="Undo"><svg width="24" height="24" viewBox="0 0 36 36" fill="none"><path fillRule="evenodd" clipRule="evenodd" d="M20.8727 11.0703C19.5019 10.5028 17.9936 10.3547 16.5385 10.6446C15.0837 10.9344 13.7475 11.6492 12.6989 12.6984L12.6985 12.6989L11.1094 14.2833V12.0393C11.1094 11.6941 10.8296 11.4143 10.4844 11.4143C10.1392 11.4143 9.85938 11.6941 9.85938 12.0393L9.85938 15.789C9.85938 15.789 9.85938 15.7891 9.85938 15.7892L9.85938 15.7893C9.85938 16.1345 10.1392 16.4143 10.4844 16.4143H14.2344C14.5796 16.4143 14.8594 16.1345 14.8594 15.7893C14.8594 15.4441 14.5796 15.1643 14.2344 15.1643H11.9962L13.5819 13.5832L13.5827 13.5824C14.4566 12.7078 15.5703 12.112 16.7828 11.8705C17.9953 11.6289 19.2522 11.7524 20.3946 12.2253C21.5369 12.6982 22.5133 13.4992 23.2003 14.5272C23.8873 15.5551 24.254 16.7637 24.254 18C24.254 19.2364 23.8873 20.4449 23.2003 21.4728C22.5133 22.5008 21.5369 23.3018 20.3946 23.7747C19.2522 24.2476 17.9953 24.3711 16.7828 24.1295C15.5703 23.888 14.4566 23.2922 13.5827 22.4176C13.3388 22.1734 12.943 22.1733 12.6989 22.4173C12.4547 22.6612 12.4545 23.057 12.6985 23.3011C13.7472 24.3506 15.0835 25.0656 16.5385 25.3554C17.9936 25.6453 19.5019 25.4972 20.8727 24.9297C22.2435 24.3622 23.4152 23.4009 24.2396 22.1674C25.0639 20.9339 25.504 19.4836 25.504 18C25.504 16.5164 25.0639 15.0661 24.2396 13.8326C23.4152 12.5991 22.2435 11.6378 20.8727 11.0703Z" fill="#202227"/></svg></button>
+          <button className="sp-action-btn" title="Undo"><UndoIcon /></button>
         )}
         <MoreMenu rowId={row.id} />
       </div>
     </div>
   );
+
+  const renderGroupHeader = (label: string, rows: SelectionRow[]) => {
+    const isOpen = groupExpanded[label] !== false;
+    const groupBudget = rows.reduce((s, r) => s + r.clientPrice, 0);
+    const groupSpent = rows.reduce((s, r) => {
+      if (isAllowance(r)) return s + r.options.reduce((ss, o) => ss + (o.approvedPrice || 0), 0);
+      return s + (r.approvedPrice || 0);
+    }, 0);
+    return (
+      <div key={`group-${label}`} className="sp-allowance-block sp-allowance-block-open" style={{ marginTop: 8 }}>
+        <div className="sp-row sp-row-group" style={{ background: 'var(--g50)' }}>
+          <div className="sp-col-check"></div>
+          <div className="sp-col-title">
+            <button className="sp-expand-btn" onClick={() => toggleGroupExpand(label)}>
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ transform: isOpen ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s' }}>
+                <path d="M5 3L9 7L5 11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </button>
+            <strong>{label}</strong>
+            <span style={{ color: 'var(--g500)', fontSize: 12, marginLeft: 8 }}>
+              {rows.length} {rows.length === 1 ? 'item' : 'items'}
+            </span>
+          </div>
+          <div className="sp-col-price"><strong>{fmt(groupBudget)}</strong></div>
+          <div className="sp-col-approved"><strong>{fmt(groupSpent)}</strong></div>
+          <div className="sp-col-remaining"></div>
+          <div className="sp-col-status"></div>
+          <div className="sp-col-category"></div>
+          <div className="sp-col-location"></div>
+          <div className="sp-col-invoiced"></div>
+          <div className="sp-col-actions"></div>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="jps-page">
@@ -616,8 +462,8 @@ export default function SelectionsPage({
               </button>
             )}
             <div>
-              <div className="pg-hdr-sub"><a href="#" style={{ color: 'var(--bt-blue)', textDecoration: 'none' }}>Job: Smith Home Residence</a> / Selections</div>
-              <div className="pg-title">Selections</div>
+              <div className="pg-hdr-sub"><a href="#" style={{ color: 'var(--bt-blue)', textDecoration: 'none' }}>Job: Smith Home Residence</a> / Selection 2</div>
+              <div className="pg-title">Selection 2</div>
             </div>
           </div>
           <div className="pg-hdr-right">
@@ -630,158 +476,61 @@ export default function SelectionsPage({
       </div>
 
       <div className="sp-body">
-        <div className="sp-toolbar">
-          <div className="sp-search">
-            <svg className="sp-search-icon" width="16" height="16" viewBox="0 0 16 16" fill="none">
-              <path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001l3.85 3.85a1 1 0 0 0 1.415-1.415l-3.85-3.85a1 1 0 0 0-.017-.018Zm-5.242.656a5 5 0 1 1 0-10 5 5 0 0 1 0 10Z" fill="currentColor"/>
-            </svg>
-            <input
-              type="text"
-              className="sp-search-input"
-              placeholder="Search selections"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-            {searchQuery && (
-              <button className="sp-search-clear" onClick={() => setSearchQuery('')} aria-label="Clear search">
-                <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                  <path d="M3 3l6 6M9 3l-6 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                </svg>
-              </button>
-            )}
-          </div>
-          <div className="sp-toolbar-organize">
-            <label htmlFor="sp-groupby" style={{ fontSize: 13, color: 'var(--g600)', fontWeight: 500 }}>Group by:</label>
-            <div className="sp-select-wrap">
-              <select
-                id="sp-groupby"
-                className="sp-select"
-                value={viewMode}
-                onChange={(e) => setViewMode(e.target.value as ViewMode)}
-              >
-                <option value="allowance">Allowance</option>
-                <option value="location">Location</option>
-                <option value="vendor">Vendor</option>
-              </select>
-              <svg className="sp-select-caret" width="12" height="12" viewBox="0 0 12 12" fill="none">
-                <path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-            </div>
-          </div>
-          <div className="sp-view-toggle" role="tablist" aria-label="View layout">
-            <button
-              type="button"
-              className={`sp-view-toggle-btn${viewLayout === 'list' ? ' on' : ''}`}
-              onClick={() => setViewLayout('list')}
-              title="List view"
-              aria-label="List view"
-              aria-pressed={viewLayout === 'list'}
-            >
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                <path d="M2 4h12M2 8h12M2 12h12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-              </svg>
-            </button>
-            <button
-              type="button"
-              className={`sp-view-toggle-btn${viewLayout === 'grid' ? ' on' : ''}`}
-              onClick={() => setViewLayout('grid')}
-              title="Grid view"
-              aria-label="Grid view"
-              aria-pressed={viewLayout === 'grid'}
-            >
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                <rect x="2" y="2" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.5"/>
-                <rect x="9" y="2" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.5"/>
-                <rect x="2" y="9" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.5"/>
-                <rect x="9" y="9" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.5"/>
-              </svg>
-            </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+          <span style={{ fontSize: 13, color: 'var(--g600)', fontWeight: 500 }}>Group by:</span>
+          <div className="tabs">
+            <button className={`tab${viewMode === 'allowance' ? ' on' : ''}`} onClick={() => setViewMode('allowance')}>Allowance</button>
+            <button className={`tab${viewMode === 'location' ? ' on' : ''}`} onClick={() => setViewMode('location')}>Location</button>
+            <button className={`tab${viewMode === 'vendor' ? ' on' : ''}`} onClick={() => setViewMode('vendor')}>Vendor</button>
           </div>
         </div>
 
-        {viewLayout === 'list' && (
-          <div className="sp-table">
-            {/* Header */}
-            <div className="sp-row sp-header">
-              <div className="sp-col-check">
-                <div className={`sp-checkbox ${allChecked ? 'sp-checkbox-on' : ''}`} onClick={toggleAll} />
-              </div>
-              <div className="sp-col-title">Title</div>
-              <div className="sp-col-price">Budget</div>
-              <div className="sp-col-approved">Spent</div>
-              <div className="sp-col-remaining">Remaining</div>
-              <div className="sp-col-status">Status</div>
-              <div className="sp-col-category">Category</div>
-              <div className="sp-col-location">Location</div>
-              <div className="sp-col-deadline">Deadline</div>
-              <div className="sp-col-invoiced">Related item</div>
-              <div className="sp-col-actions">Actions</div>
+        <div className="sp-table">
+          <div className="sp-row sp-header">
+            <div className="sp-col-check">
+              <div className={`sp-checkbox ${allChecked ? 'sp-checkbox-on' : ''}`} onClick={toggleAll} />
             </div>
-
-            {viewMode === 'allowance' && (
-              <>
-                {allowanceRows.map(renderAllowance)}
-                {standaloneRows.map(renderStandalone)}
-              </>
-            )}
-
-            {viewMode !== 'allowance' && groupedRows && groupedRows.map(([label, rows]) => {
-              const isOpen = groupExpanded[label] !== false;
-              return (
-                <div key={label} className="sp-section-wrap">
-                  {renderGroupHeader(label, rows)}
-                  {isOpen && (
-                    <div className="sp-section-body">
-                      {rows.map(r => isAllowance(r) ? renderAllowance(r) : renderStandalone(r))}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-
-            {/* Totals */}
-            <div className="sp-row sp-row-total">
-              <div className="sp-col-check"></div>
-              <div className="sp-col-title"><strong>Totals</strong></div>
-              <div className="sp-col-price"><strong>{fmt(totalsClientPrice)}</strong></div>
-              <div className="sp-col-approved"></div>
-              <div className="sp-col-remaining"></div>
-              <div className="sp-col-status"></div>
-              <div className="sp-col-category"></div>
-              <div className="sp-col-location"></div>
-              <div className="sp-col-deadline"></div>
-              <div className="sp-col-invoiced sp-col-invoiced-empty">—</div>
-              <div className="sp-col-actions"></div>
-            </div>
+            <div className="sp-col-title">Title</div>
+            <div className="sp-col-price">Budget</div>
+            <div className="sp-col-approved">Spent</div>
+            <div className="sp-col-remaining">Remaining</div>
+            <div className="sp-col-status">Status</div>
+            <div className="sp-col-category">Category</div>
+            <div className="sp-col-location">Location</div>
+            <div className="sp-col-invoiced">Related item</div>
+            <div className="sp-col-actions">Actions</div>
           </div>
-        )}
 
-        {viewLayout === 'grid' && (
-          <div className="sp-grid-wrap">
-            {viewMode === 'allowance' && (
-              <div className="sp-grid">
-                {allowanceRows.map(renderAllowanceCard)}
-                {standaloneRows.map(renderStandaloneCard)}
+          {viewMode === 'allowance' && (
+            <>
+              {allowanceRows.map(renderAllowance)}
+              {standaloneRows.map(renderStandalone)}
+            </>
+          )}
+
+          {viewMode !== 'allowance' && groupedRows && groupedRows.map(([label, rows]) => {
+            const isOpen = groupExpanded[label] !== false;
+            return (
+              <div key={label}>
+                {renderGroupHeader(label, rows)}
+                {isOpen && rows.map(r => isAllowance(r) ? renderAllowance(r) : renderStandalone(r))}
               </div>
-            )}
-            {viewMode !== 'allowance' && groupedRows && groupedRows.map(([label, rows]) => (
-              <div key={label} className="sp-grid-section">
-                <div className="sp-grid-section-head">
-                  <strong>{label}</strong>
-                  <span className="sp-grid-section-count">
-                    {rows.length} {rows.length === 1 ? 'item' : 'items'}
-                  </span>
-                </div>
-                <div className="sp-grid">
-                  {rows.map(renderCard)}
-                </div>
-              </div>
-            ))}
-            {filteredData.length === 0 && (
-              <div className="sp-grid-empty">No selections match "{searchQuery}".</div>
-            )}
+            );
+          })}
+
+          <div className="sp-row sp-row-total">
+            <div className="sp-col-check"></div>
+            <div className="sp-col-title"><strong>Totals</strong></div>
+            <div className="sp-col-price"><strong>{fmt(totalsClientPrice)}</strong></div>
+            <div className="sp-col-approved"></div>
+            <div className="sp-col-remaining"></div>
+            <div className="sp-col-status"></div>
+            <div className="sp-col-category"></div>
+            <div className="sp-col-location"></div>
+            <div className="sp-col-invoiced sp-col-invoiced-empty">—</div>
+            <div className="sp-col-actions"></div>
           </div>
-        )}
+        </div>
       </div>
 
       {openAllowance && (() => {
@@ -793,7 +542,6 @@ export default function SelectionsPage({
         const pct = a.clientPrice > 0 ? Math.min(100, Math.max(0, (spent / a.clientPrice) * 100)) : 0;
         return (
           <div className="sp-panel-backdrop" onClick={(e) => { if (e.target === e.currentTarget) setOpenAllowance(null); }}>
-            {/* BDS: replace with BdsPanel side variant */}
             <aside className="sp-panel" onClick={(e) => e.stopPropagation()}>
               <div className="sp-panel-toolbar">
                 <button className="sp-panel-icon-btn" title="History"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M10 3.5a6.5 6.5 0 1 0 4.6 11.1l-.7-.7A5.5 5.5 0 1 1 15.5 10H13l3 3 3-3h-2.5A6.5 6.5 0 0 0 10 3.5Zm-.5 3v4l3 1.8.5-.8-2.5-1.5V6.5h-1Z" fill="currentColor"/></svg></button>
@@ -811,9 +559,8 @@ export default function SelectionsPage({
                   <a href="#">Smith Home</a> <span>/</span> <a href="#">Allowance</a> <span>/</span>
                 </div>
                 <div className="sp-panel-title-row">
-                  {/* BDS: BdsText variant="heading" + BdsBadge */}
                   <h2 className="sp-panel-title">{a.name}</h2>
-                  {isComplete && <StatusBadge status="Completed" />}
+                  <StatusBadge status={isComplete ? 'Completed' : 'Open'} />
                 </div>
 
                 <div className={`sp-panel-progress${overBudget ? ' sp-panel-progress-over' : ''}`}>
@@ -822,12 +569,10 @@ export default function SelectionsPage({
                   </div>
                 </div>
 
-                {/* Details */}
                 <section className="sp-panel-section">
                   <div className="sp-panel-section-title">Details</div>
                   <div className="sp-panel-field">
                     <div className="sp-panel-label">Location</div>
-                    {/* BDS: BdsPill */}
                     <span className="sp-panel-pill">{a.location ?? '—'}</span>
                   </div>
                   <div className="sp-panel-field">
@@ -836,7 +581,6 @@ export default function SelectionsPage({
                   </div>
                 </section>
 
-                {/* Selections inside this allowance */}
                 <section className="sp-panel-section">
                   <button className="sp-panel-section-toggle">
                     <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ transform: 'rotate(90deg)' }}>
@@ -855,7 +599,6 @@ export default function SelectionsPage({
                   ))}
                 </section>
 
-                {/* Selection status — budget summary */}
                 <section className="sp-panel-section">
                   <button className="sp-panel-section-toggle">
                     <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ transform: 'rotate(90deg)' }}>
@@ -873,7 +616,6 @@ export default function SelectionsPage({
                       <div className="sp-panel-stat-value">{fmt(a.clientPrice)}</div>
                     </div>
                   </div>
-                  {/* BDS: BdsProgressBar */}
                   <div className="sp-panel-bar">
                     <div
                       className={`sp-panel-bar-fill${overBudget ? ' sp-panel-bar-fill-over' : ''}`}
