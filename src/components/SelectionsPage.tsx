@@ -6,7 +6,6 @@ type RowStatus = 'Pending' | 'Approved' | 'Declined' | 'Draft';
 type ViewMode = 'allowance' | 'location' | 'vendor';
 type ViewLayout = 'list' | 'grid';
 type AudienceView = 'client' | 'builder';
-type BuilderStatus = 'Sent' | 'Draft' | 'Approved' | 'Declined' | 'Recalled';
 
 interface InvoiceRef { subject: string; }
 
