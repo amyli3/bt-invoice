@@ -69,6 +69,7 @@ export default function App() {
     window.location.hash = page;
   };
   const [selectedOption, setSelectedOption] = useState<{ name: string; category: string; price: number; allowanceName?: string; status: string } | null>(null);
+  const [optionOpenedFrom, setOptionOpenedFrom] = useState<PageType>('job-price-summary');
   const [prefilledAllowance, setPrefilledAllowance] = useState<string | null>(null);
   const [activeView, setActiveView] = useState<'builder' | 'preview'>('builder');
   const [previewTab, setPreviewTab] = useState<'client' | 'email'>('client');
@@ -182,7 +183,7 @@ export default function App() {
       <div style={{display: 'flex', flexDirection: 'column', height: '100vh'}}>
         <ClientTopNav onNavigate={(page) => setActivePage(page as PageType)} />
         <div style={{flex: 1, overflowY: 'auto'}}>
-          <JobPriceSummary jobOpen={false} onBack={() => setActivePage('client-portal')} onOpenSelection={(sel) => { setSelectedOption(sel); setActivePage('option-detail'); }} />
+          <JobPriceSummary jobOpen={false} onBack={() => setActivePage('client-portal')} onOpenSelection={(sel) => { setSelectedOption(sel); setOptionOpenedFrom('client-jps'); setActivePage('option-detail'); }} onOpenJCB={() => setActivePage('job-costing-budget')} />
         </div>
       </div>
     );
@@ -286,7 +287,7 @@ export default function App() {
         <TopNav onNavigate={(page) => setActivePage(page as PageType)} />
         <div style={{display: 'flex', flex: 1, minHeight: 0}}>
           <div className="content-area">
-            <OptionDetailPage onBack={() => { setActivePage(selectedOption ? 'job-price-summary' : 'selections'); setSelectedOption(null); setPrefilledAllowance(null); }} selectionData={selectedOption} prefilledAllowance={prefilledAllowance} />
+            <OptionDetailPage onBack={() => { setActivePage(optionOpenedFrom); setSelectedOption(null); setPrefilledAllowance(null); }} selectionData={selectedOption} prefilledAllowance={prefilledAllowance} />
           </div>
         </div>
       </div>
@@ -303,8 +304,8 @@ export default function App() {
             <SelectionsPage
               jobOpen={jobOpen}
               onToggleJob={() => setJobOpen(true)}
-              onOpenOption={(sel) => { if (sel) setSelectedOption(sel); setPrefilledAllowance(null); setActivePage('option-detail'); }}
-              onAddToAllowance={(name) => { setSelectedOption(null); setPrefilledAllowance(name); setActivePage('option-detail'); }}
+              onOpenOption={(sel) => { if (sel) setSelectedOption(sel); setPrefilledAllowance(null); setOptionOpenedFrom('selections'); setActivePage('option-detail'); }}
+              onAddToAllowance={(name) => { setSelectedOption(null); setPrefilledAllowance(name); setOptionOpenedFrom('selections'); setActivePage('option-detail'); }}
               completedAllowanceIds={completedAllowanceIds}
               onToggleAllowanceComplete={toggleAllowanceComplete}
               onOpenInvoice={() => setActivePage('invoice')}
@@ -340,7 +341,7 @@ export default function App() {
         <div style={{display: 'flex', flex: 1, minHeight: 0}}>
           <JobSidebar open={jobOpen} onToggle={() => setJobOpen(false)} selectedJob={selectedJob} onSelectJob={(id) => { setSelectedJob(id); if (isNarrow) setJobOpen(false); }} onHomeClick={() => setActivePage('client-portal')} />
           <div className="content-area">
-            <JobPriceSummary jobOpen={jobOpen} onToggleJob={() => setJobOpen(true)} onOpenSelection={(sel) => { setSelectedOption(sel); setActivePage('option-detail'); }} />
+            <JobPriceSummary jobOpen={jobOpen} onToggleJob={() => setJobOpen(true)} onOpenSelection={(sel) => { setSelectedOption(sel); setOptionOpenedFrom('job-price-summary'); setActivePage('option-detail'); }} onOpenJCB={() => setActivePage('job-costing-budget')} />
           </div>
         </div>
       </div>

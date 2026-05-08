@@ -5,6 +5,8 @@ import { BTRelatedItemTag, RelatedItemType } from '../bds';
 type RowStatus = 'Pending' | 'Approved' | 'Declined' | 'Draft';
 type ViewMode = 'allowance' | 'location' | 'vendor';
 type ViewLayout = 'list' | 'grid';
+type AudienceView = 'client' | 'builder';
+type BuilderStatus = 'Sent' | 'Draft' | 'Approved' | 'Declined' | 'Recalled';
 
 interface InvoiceRef { subject: string; }
 
@@ -196,14 +198,21 @@ const deriveRowStatus = (status: string, dueDate?: string): string => {
   return 'Pending';
 };
 
+const deriveBuilderStatus = (status: string): string => {
+  if (status === 'Pending') return 'Sent';
+  return status;
+};
+
 const StatusBadge = ({ status }: { status: string }) => {
   const cls = status === 'Approved' || status === 'Completed'
     ? 'sp-badge-success'
-    : status === 'Pending' || status === 'Due soon'
-      ? 'sp-badge-warning'
-      : status === 'Open' || status === 'Draft'
-        ? 'sp-badge-default'
-        : 'sp-badge-danger';
+    : status === 'Sent'
+      ? 'sp-badge-info'
+      : status === 'Pending' || status === 'Due soon'
+        ? 'sp-badge-warning'
+        : status === 'Open' || status === 'Draft'
+          ? 'sp-badge-default'
+          : 'sp-badge-danger';
   return <span className={`sp-badge ${cls}`}>{status}</span>;
 };
 
@@ -280,6 +289,7 @@ export default function SelectionsPage({
 }: SelectionsPageProps) {
   const [viewMode, setViewMode] = useState<ViewMode>('allowance');
   const [viewLayout, setViewLayout] = useState<ViewLayout>('list');
+  const [audience, setAudience] = useState<AudienceView>('builder');
   const [searchQuery, setSearchQuery] = useState('');
   const [expanded, setExpanded] = useState<Record<string, boolean>>(() => {
     const e: Record<string, boolean> = {};
@@ -478,7 +488,7 @@ export default function SelectionsPage({
                 <div className="sp-col-price">{fmt(opt.clientPrice)}</div>
                 <div className="sp-col-approved">{opt.approvedPrice !== null ? fmt(opt.approvedPrice) : ''}</div>
                 <div className="sp-col-remaining"></div>
-                <div className="sp-col-status"><StatusBadge status={deriveRowStatus(opt.status, opt.dueDate)} /></div>
+                <div className="sp-col-status"><StatusBadge status={audience === 'builder' ? deriveBuilderStatus(opt.status) : deriveRowStatus(opt.status, opt.dueDate)} /></div>
                 <div className="sp-col-category">{opt.category}</div>
                 <div className="sp-col-location">{opt.location}</div>
                 <div className="sp-col-deadline">
@@ -580,7 +590,7 @@ export default function SelectionsPage({
       <div className="sp-col-price">{fmt(row.clientPrice)}</div>
       <div className="sp-col-approved">{row.approvedPrice !== null ? fmt(row.approvedPrice) : ''}</div>
       <div className="sp-col-remaining"></div>
-      <div className="sp-col-status"><StatusBadge status={deriveRowStatus(row.status, row.dueDate)} /></div>
+      <div className="sp-col-status"><StatusBadge status={audience === 'builder' ? deriveBuilderStatus(row.status) : deriveRowStatus(row.status, row.dueDate)} /></div>
       <div className="sp-col-category">{row.category}</div>
       <div className="sp-col-location">{row.location}</div>
       <div className="sp-col-deadline">
@@ -621,6 +631,26 @@ export default function SelectionsPage({
             </div>
           </div>
           <div className="pg-hdr-right">
+            <div className="sp-audience-tabs" role="tablist" aria-label="View audience">
+              <button
+                type="button"
+                role="tab"
+                className={`sp-audience-tab${audience === 'builder' ? ' on' : ''}`}
+                aria-selected={audience === 'builder'}
+                onClick={() => setAudience('builder')}
+              >
+                Builder view
+              </button>
+              <button
+                type="button"
+                role="tab"
+                className={`sp-audience-tab${audience === 'client' ? ' on' : ''}`}
+                aria-selected={audience === 'client'}
+                onClick={() => setAudience('client')}
+              >
+                Client view
+              </button>
+            </div>
             <button className="btn btn-p" style={{ gap: 4 }} onClick={() => onOpenOption?.()}>
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 2V12M2 7H12" stroke="white" strokeWidth="1.5" strokeLinecap="round"/></svg>
               Option
@@ -713,7 +743,7 @@ export default function SelectionsPage({
               <div className="sp-col-status">Status</div>
               <div className="sp-col-category">Category</div>
               <div className="sp-col-location">Location</div>
-              <div className="sp-col-deadline">Deadline</div>
+              <div className="sp-col-deadline">Due date</div>
               <div className="sp-col-invoiced">Related item</div>
               <div className="sp-col-actions">Actions</div>
             </div>

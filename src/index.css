@@ -4556,15 +4556,95 @@ table { width: 100%; border-collapse: collapse; }
   .jps-s4-modal { max-width: 100%; }
 }
 .jps-s4-modal-bar {
-  padding: 16px 20px;
+  padding: 12px 18px;
   border-bottom: 1px solid var(--g200);
 }
 .jps-s4-modal-body {
-  padding: 16px 20px 20px;
+  padding: 12px 18px 16px;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 10px;
+}
+
+/* Math lines inside each modal section — label left, operator+value clustered right */
+.jps-s4-math-line {
+  display: flex !important;
+  align-items: baseline;
+  gap: 0;
+  padding: 1px 0 !important;
+  font-feature-settings: "tnum";
+  font-size: 13px;
+}
+.jps-s4-math-line + .jps-s4-math-line { border-top: none !important; }
+.jps-s4-math-name { color: var(--g700); order: 1; flex: 1; }
+.jps-s4-math-op { color: var(--g500); font-weight: 600; order: 2; margin-right: 4px; }
+.jps-s4-math-val { text-align: right; color: var(--bt-midnight); font-weight: 500; order: 3; min-width: 80px; }
+.jps-s4-math-result,
+.jps-s4-math-line + .jps-s4-math-line.jps-s4-math-result {
+  border-top: 1px solid var(--g300) !important;
+  padding-top: 6px !important;
+  margin-top: 4px;
+  font-weight: 700;
+}
+.jps-s4-math-result .jps-s4-math-val { font-weight: 700; }
+.jps-s4-math-result .jps-s4-math-name { color: var(--bt-midnight); }
+.jps-pos { color: var(--green, #137333); }
+.jps-neg { color: var(--red, #c62828); }
+
+/* Selections page audience tabs (Builder / Client) */
+.sp-audience-tabs {
+  display: inline-flex; align-items: center;
+  background: var(--g100); padding: 3px; border-radius: 8px;
+  margin-right: 12px;
+}
+.sp-audience-tab {
+  padding: 6px 12px; font-size: 13px; font-weight: 500;
+  background: transparent; border: 0; color: var(--g600);
+  border-radius: 6px; cursor: pointer;
+}
+.sp-audience-tab:hover { color: var(--bt-midnight); }
+.sp-audience-tab.on {
+  background: #fff; color: var(--bt-midnight);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+  font-weight: 600;
+}
+
+/* Builder view — selections grouped by workflow status */
+.sp-builder-view { display: flex; flex-direction: column; gap: 16px; padding: 12px 0; }
+.sp-builder-section {
+  background: #fff; border: 1px solid var(--g200); border-radius: 8px;
+  overflow: hidden;
+}
+.sp-builder-section-head {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 16px; background: var(--g50);
+  border-bottom: 1px solid var(--g100);
+}
+.sp-builder-status {
+  display: inline-flex; align-items: center;
+  padding: 3px 10px; border-radius: 999px;
+  font-size: 12px; font-weight: 600;
+}
+.sp-builder-status-sent      { background: #E3F2FD; color: #0064C1; }
+.sp-builder-status-draft     { background: #F3F4F6; color: #4B5563; }
+.sp-builder-status-approved  { background: #E6F4EA; color: #137333; }
+.sp-builder-status-declined  { background: #FCE8E8; color: #C62828; }
+.sp-builder-status-recalled  { background: #FFF4E5; color: #B26C00; }
+.sp-builder-count { color: var(--g500); font-size: 13px; }
+.sp-builder-empty {
+  padding: 14px 16px; color: var(--g500); font-size: 13px; font-style: italic;
+}
+.sp-builder-list { display: flex; flex-direction: column; }
+.sp-builder-row {
+  display: flex; justify-content: space-between; align-items: center; gap: 16px;
+  padding: 10px 16px; border-bottom: 1px solid var(--g100);
+}
+.sp-builder-row:last-child { border-bottom: 0; }
+.sp-builder-row-title { display: flex; align-items: center; gap: 8px; }
+.sp-builder-row-cat { color: var(--g500); font-size: 12px; }
+.sp-builder-row-meta {
+  display: flex; gap: 12px; font-size: 12px; color: var(--g600);
 }
 
 /* Math summary at top of modal — vertical breakdown ending in Current price total */
@@ -4595,13 +4675,13 @@ table { width: 100%; border-collapse: collapse; }
 .jps-s4-modal-section {
   border: 1px solid var(--g200);
   border-radius: 8px;
-  padding: 14px 16px;
+  padding: 10px 14px;
 }
 .jps-s4-modal-section .bds-r-section--header {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
-  margin-bottom: 10px;
+  margin-bottom: 6px;
 }
 .jps-s4-modal-section-total {
   font-size: 15px;
@@ -4613,7 +4693,7 @@ table { width: 100%; border-collapse: collapse; }
   justify-content: space-between;
   font-size: 13px;
   color: var(--g700);
-  padding: 4px 0;
+  padding: 2px 0;
 }
 .jps-s4-modal-line + .jps-s4-modal-line { border-top: 1px dashed var(--g200); }
 .jps-s4-modal-line-name { color: var(--g700); }
@@ -4984,15 +5064,18 @@ table { width: 100%; border-collapse: collapse; }
   border-radius: 0 0 8px 8px; overflow-x: auto;
 }
 .jcb-table {
-  width: 100%; border-collapse: collapse; font-size: 12.5px;
+  width: 100%; border-collapse: separate; border-spacing: 0; font-size: 12.5px;
   font-feature-settings: "tnum";
 }
 .jcb-table thead th {
-  background: var(--g50); font-weight: 600; color: var(--g600);
-  font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em;
-  padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--g200);
+  background: #fff; font-weight: 600; color: var(--g600);
+  font-size: 12px;
+  padding: 10px 12px; text-align: left;
+  border-bottom: 1px solid var(--g200);
+  border-right: 1px solid var(--g200);
   white-space: nowrap;
 }
+.jcb-table thead th:last-child { border-right: none; }
 .jcb-table tbody td {
   padding: 10px 12px; border-bottom: 1px solid var(--g100);
   vertical-align: top;
@@ -5046,18 +5129,35 @@ table { width: 100%; border-collapse: collapse; }
   letter-spacing: 0.04em;
 }
 .jcb-rollup-body { padding: 0 18px 16px; border-top: 1px solid var(--g100); padding-top: 14px; }
-.jcb-rollup-math { display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
-.jcb-math-line {
-  display: flex; justify-content: space-between; padding: 4px 0;
+.jcb-rollup-math { display: flex; flex-direction: column; gap: 16px; font-size: 13px; }
+
+.jcb-math-block {
+  background: var(--g50); border: 1px solid var(--g100);
+  border-radius: 6px; padding: 12px 16px;
   font-feature-settings: "tnum";
 }
-.jcb-math-line.jcb-math-sub {
-  border-top: 1px solid var(--g100); padding-top: 8px;
-  margin-top: 2px; font-weight: 600; color: var(--bt-midnight);
+.jcb-math-block-title {
+  font-size: 11px; font-weight: 700; color: var(--g600);
+  text-transform: uppercase; letter-spacing: 0.04em;
+  margin-bottom: 8px;
 }
-.jcb-math-line.jcb-math-total {
-  border-top: 2px solid var(--g300); padding-top: 8px;
-  margin-top: 4px; font-weight: 700; color: var(--bt-midnight);
+.jcb-math-row {
+  display: grid; grid-template-columns: 16px 110px 1fr;
+  align-items: baseline; gap: 8px;
+  padding: 2px 0; font-size: 13px;
+}
+.jcb-math-op { color: var(--g500); font-weight: 600; text-align: center; }
+.jcb-math-val { text-align: right; font-weight: 500; color: var(--bt-midnight); }
+.jcb-math-label { color: var(--g600); font-size: 12px; }
+.jcb-math-row.jcb-math-sum {
+  margin-top: 4px; padding-top: 6px;
+  border-top: 1px solid var(--g300);
+  font-weight: 700;
+}
+.jcb-math-row.jcb-math-sum .jcb-math-val { font-weight: 700; }
+.jcb-math-row.jcb-math-total {
+  border-top: 2px double var(--bt-midnight);
+  padding-top: 6px;
 }
 .jcb-rollup-link {
   display: inline-flex; align-items: center; gap: 4px;
@@ -5066,6 +5166,123 @@ table { width: 100%; border-collapse: collapse; }
   cursor: pointer;
 }
 .jcb-rollup-link:hover { text-decoration: underline; }
+.jcb-rollup-note {
+  margin-top: 12px; padding: 10px 12px; background: var(--g50);
+  border-left: 3px solid var(--bt-blue, #0064c1); border-radius: 4px;
+  font-size: 12px; color: var(--g700); line-height: 1.5;
+}
+.jcb-rollup-note strong { color: var(--bt-midnight); font-weight: 600; }
+
+/* Sticky first column (Cost codes) */
+.jcb-table th.jcb-col-code,
+.jcb-table td.jcb-col-code {
+  position: sticky; left: 0;
+  background: #fff;
+  z-index: 3;
+  box-shadow: 1px 0 0 var(--g200);
+}
+.jcb-table thead th.jcb-col-code { z-index: 25; isolation: isolate; }
+.jcb-table tfoot td.jcb-col-code,
+.jcb-table tfoot th.jcb-col-code {
+  background: var(--g50, #f5f7fa);
+}
+
+/* Column group header row */
+.jcb-group-row th {
+  font-size: 12px; font-weight: 600; color: var(--g600);
+  padding: 6px 10px; background: #fff;
+  border-bottom: 2px solid var(--g300);
+}
+.jcb-group-header {
+  text-align: center; border-left: 1px solid var(--g200);
+}
+.jcb-group-header-job      { border-bottom-color: var(--red); }
+.jcb-group-header-client   { border-bottom-color: var(--bt-blue, #0064c1); }
+.jcb-group-header-invoicing{ border-bottom-color: var(--g300); }
+.jcb-group-header-profit   { border-bottom-color: var(--green); }
+.jcb-group-header-category { border-bottom-color: var(--g300); text-align: left; }
+
+/* Category group rows in tbody — combined header + subtotal */
+.jcb-category-row th,
+.jcb-table tbody tr.jcb-category-row th.jcb-col-code {
+  background: var(--g50); color: var(--bt-midnight);
+  font-size: 13px; font-weight: 700;
+  padding: 0; text-align: left;
+  border-top: 1px solid var(--g200);
+  border-bottom: 1px solid var(--g200);
+}
+.jcb-category-row td {
+  background: var(--g50);
+  font-weight: 600; color: var(--bt-midnight);
+  font-size: 12px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--g200);
+  border-bottom: 1px solid var(--g200);
+}
+.jcb-category-toggle {
+  width: 100%; display: block;
+  padding: 0; background: transparent; border: 0;
+  font: inherit; color: inherit; text-align: left; cursor: pointer;
+}
+.jcb-category-toggle:hover { background: var(--g100); }
+.jcb-category-sticky-content {
+  position: sticky; left: 12px;
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 10px 12px;
+}
+.jcb-category-count { color: var(--g500); font-weight: 500; font-size: 12px; }
+.jcb-col-code-nested { padding-left: 16px; }
+
+/* Sticky thead — only group-row stays vertical-sticky; column-title row scrolls normally so it slides behind cost-code */
+.jcb-table thead .jcb-group-row th {
+  position: sticky; top: 0; z-index: 5; background: #fff;
+}
+.jcb-table thead tr:nth-child(2) th:not(.jcb-col-code) {
+  position: relative; z-index: 1; background: #fff;
+}
+/* Cost-code header keeps dual-axis sticky and high z-index so column titles slide under it */
+.jcb-table thead tr:nth-child(2) th.jcb-col-code {
+  position: sticky; left: 0; top: 32px; z-index: 25;
+  background: #fff;
+}
+
+/* Horizontal sticky for group headers — release when last column of group scrolls past */
+.jcb-group-header { position: sticky; left: 220px; z-index: 5; }
+
+/* Column title button + popover */
+.jcb-col-title-btn {
+  background: transparent; border: 0; padding: 0;
+  font: inherit; color: inherit;
+  border-bottom: 1px dotted var(--g400);
+  cursor: pointer;
+}
+.jcb-col-title-btn:hover { color: var(--bt-blue, #0064c1); border-bottom-color: var(--bt-blue, #0064c1); }
+.jcb-col-title-btn.is-active {
+  color: var(--bt-blue, #0064c1);
+  border-bottom-style: solid; border-bottom-color: var(--bt-blue, #0064c1);
+}
+.jcb-col-popover {
+  position: absolute; top: calc(100% + 4px); left: 12px;
+  width: 280px; background: #fff;
+  border: 1px solid var(--g200); border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+  padding: 12px; z-index: 100;
+  font-weight: 400; text-align: left; white-space: normal;
+}
+.jcb-col-popover-title {
+  font-weight: 600; color: var(--bt-midnight);
+  margin-bottom: 6px; font-size: 13px;
+}
+.jcb-col-popover-body {
+  font-size: 12px; color: var(--g700); line-height: 1.5;
+}
+.jcb-col-popover-formula {
+  margin-top: 8px; padding-top: 8px;
+  border-top: 1px solid var(--g100);
+  font-size: 12px; color: var(--g600); line-height: 1.5;
+  font-style: italic;
+}
+
 
 @media (max-width: 1100px) {
   .jcb-insights { grid-template-columns: 1fr; }

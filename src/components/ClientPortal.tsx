@@ -158,7 +158,7 @@ export default function ClientPortal({ onNavigate }: { onNavigate?: (page: strin
   // Allowance variances are intentionally NOT a separate contributor: + variances are already
   // captured inside selection impacts, and unused (− variance) allowance budget doesn't refund the client.
   const fin = {
-    contractPrice: 568078,
+    contractPrice: 568100,
     changeOrders: 21000,         // sum of approved COs in JPS
     selectionsApprovedImpact: 4470, // sum of approved selection impacts in JPS
     billVariance: 1800,          // sum of cost-code variances in JPS Openbook

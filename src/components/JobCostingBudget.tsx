@@ -1,48 +1,7 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, Fragment } from 'react';
 import '../bds-tokens.css';
-import { BdsBadge, BdsButton, BdsIcon, BdsText } from '../bds';
-
-/* ── Mock Data ──
-   Modeled on the real BTNet JobCostingBudget (Open Book variant).
-   References:
-     BTNet/Clients.App/src/entity/budget/JobCostingBudget/
-       JobCostingBudget.tsx  (top-level layout)
-       BudgetContainer/JobCostingBudgetContainer.api.types.tsx  (column headers)
-       JobCostingBudgetCostBreakdown/JobCostingBudgetCostBreakdown.tsx  (insights row)
-
-   Cost-code totals reconcile with JobPriceSummary.tsx Slice 4 v5:
-     Revised total          = $70,000
-     Projected total        = $77,300
-     Builder Variance       = $1,200
-     Revised vs Projected   = −$7,300
-     Customer-payable (cv)  = $6,100
-     With 15% markup        = $7,015
-*/
-
-interface BudgetRow {
-  code: string;
-  name: string;
-  costType: 'Labor' | 'Material' | 'Subcontractor' | 'Other';
-  category: string;
-  originalBudgetCosts: number;
-  revisedBudgetCosts: number;
-  committedCosts: number;
-  actualCosts: number;
-  builderVariance: number;
-  projectedCosts: number;
-  originalOwnerPrice: number;
-  revisedOwnerPrice: number;
-  amountInvoiced: number;
-}
-
-const ROWS: BudgetRow[] = [
-  { code: '4100', name: 'Framing',             costType: 'Subcontractor', category: 'Structural', originalBudgetCosts: 25000, revisedBudgetCosts: 25000, committedCosts: 0,    actualCosts: 26500, builderVariance: 1200, projectedCosts: 28200, originalOwnerPrice: 28750, revisedOwnerPrice: 31050, amountInvoiced: 21000 },
-  { code: '4500', name: 'HVAC',                costType: 'Subcontractor', category: 'Mechanical', originalBudgetCosts: 15000, revisedBudgetCosts: 15000, committedCosts: 0,    actualCosts: 14500, builderVariance: 0,    projectedCosts: 16100, originalOwnerPrice: 17250, revisedOwnerPrice: 18515, amountInvoiced: 10000 },
-  { code: '7400', name: 'Plumbing rough-in',   costType: 'Subcontractor', category: 'Mechanical', originalBudgetCosts: 12000, revisedBudgetCosts: 12000, committedCosts: 0,    actualCosts: 11200, builderVariance: 0,    projectedCosts: 12200, originalOwnerPrice: 13800, revisedOwnerPrice: 14030, amountInvoiced: 9000 },
-  { code: '7500', name: 'Electrical rough-in', costType: 'Subcontractor', category: 'Mechanical', originalBudgetCosts: 18000, revisedBudgetCosts: 18000, committedCosts: 0,    actualCosts: 19600, builderVariance: 0,    projectedCosts: 20800, originalOwnerPrice: 20700, revisedOwnerPrice: 23920, amountInvoiced: 14000 },
-];
-
-const MARKUP_PCT = 0.15;
+import { BdsButton, BdsIcon, BdsText } from '../bds';
+import { JCB_ROWS as ROWS, MARKUP_PCT, type BudgetRow } from '../jcbMockData';
 
 const fmt = (n: number) =>
   n.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 });
@@ -53,7 +12,33 @@ const fmtPct = (n: number) => `${n.toFixed(1)}%`;
 
 export default function JobCostingBudget({ onBack, onOpenJPS }: { onBack?: () => void; onOpenJPS?: () => void }) {
   const [search, setSearch] = useState('');
-  const [showRollup, setShowRollup] = useState(false);
+  const [showRollup, setShowRollup] = useState(true);
+  const [collapsedCats, setCollapsedCats] = useState<Set<string>>(new Set());
+  const [openPopover, setOpenPopover] = useState<string | null>(null);
+  const toggleCat = (cat: string) => setCollapsedCats(prev => {
+    const next = new Set(prev);
+    if (next.has(cat)) next.delete(cat); else next.add(cat);
+    return next;
+  });
+  const togglePopover = (id: string) => setOpenPopover(prev => prev === id ? null : id);
+
+  const COL_INFO: Record<string, { label: string; desc: string; formula?: string }> = {
+    code: { label: 'Cost codes', desc: 'Buildertrend cost code, name, and cost type. Cost codes group related budget lines.' },
+    orig: { label: 'Original budget costs', desc: 'Planned job cost baseline from the signed estimate.', formula: 'Taken from the signed proposal.' },
+    rev: { label: 'Revised budget costs', desc: 'Approved working budget after scope and change adjustments.', formula: 'Original budget costs + approved change orders + approved selections.' },
+    com: { label: 'Committed costs', desc: 'Total approved cost commitments to date.', formula: 'Approved purchase orders + approved variance POs.' },
+    act: { label: 'Actual costs', desc: 'Total costs incurred and officially recorded.', formula: 'Open and paid bills. Accounting method set to accrual.' },
+    bv: { label: 'Builder variance', desc: 'Costs absorbed by the builder, not passed to the client.', formula: 'Bills marked as variance.' },
+    proj: { label: 'Projected costs', desc: 'Forecasted total expected cost at completion.', formula: 'Based on projection reference. Adjustments are added after the initial calculation.' },
+    ctt: { label: 'Cost to complete', desc: 'Remaining forecasted spend required to complete this code.', formula: 'Projected costs − Actual costs.' },
+    rvp: { label: 'Revised vs projected', desc: 'Indicates whether you are trending over or under budget.', formula: 'Revised budget costs − Projected costs.' },
+    ocp: { label: 'Original client price', desc: 'Original client contract price, pre-tax.', formula: 'Original budget costs + markup/margin.' },
+    rcp: { label: 'Revised client price', desc: 'Current approved client contract price (excl. tax).', formula: 'Projected costs − Builder variance + markup/margin.' },
+    ai: { label: 'Amount invoiced', desc: 'Total amount invoiced to client to date.', formula: 'Sent invoices.' },
+    rti: { label: 'Remaining to invoice', desc: 'Contract value remaining to invoice to client.', formula: 'Revised client price − Amount invoiced.' },
+    pp: { label: 'Projected profit', desc: 'Forecasted profit based on projected total costs.', formula: 'Revised client price − Projected costs − applied credit memos.' },
+    pm: { label: 'Projected margin %', desc: 'Forecasted profit percentage on contract value.', formula: 'Projected profit ÷ Revised client price.' },
+  };
 
   const rows = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -90,6 +75,37 @@ export default function JobCostingBudget({ onBack, onOpenJPS }: { onBack?: () =>
     return { ...t, costToComplete, revisedVsProjected, remainingToInvoice, customerPayable, customerPayableWithMarkup };
   }, [rows]);
 
+  const grouped = useMemo(() => {
+    const byCategory = new Map<string, BudgetRow[]>();
+    for (const r of rows) {
+      if (!byCategory.has(r.category)) byCategory.set(r.category, []);
+      byCategory.get(r.category)!.push(r);
+    }
+    return Array.from(byCategory.entries()).map(([category, items]) => {
+      const sub = items.reduce(
+        (acc, r) => {
+          acc.originalBudgetCosts += r.originalBudgetCosts;
+          acc.revisedBudgetCosts += r.revisedBudgetCosts;
+          acc.committedCosts += r.committedCosts;
+          acc.actualCosts += r.actualCosts;
+          acc.builderVariance += r.builderVariance;
+          acc.projectedCosts += r.projectedCosts;
+          acc.originalOwnerPrice += r.originalOwnerPrice;
+          acc.revisedOwnerPrice += r.revisedOwnerPrice;
+          acc.amountInvoiced += r.amountInvoiced;
+          return acc;
+        },
+        { originalBudgetCosts: 0, revisedBudgetCosts: 0, committedCosts: 0, actualCosts: 0, builderVariance: 0, projectedCosts: 0, originalOwnerPrice: 0, revisedOwnerPrice: 0, amountInvoiced: 0 }
+      );
+      const costToComplete = sub.projectedCosts - sub.actualCosts;
+      const revisedVsProjected = sub.revisedBudgetCosts - sub.projectedCosts;
+      const remainingToInvoice = sub.revisedOwnerPrice - sub.amountInvoiced;
+      const projectedProfit = sub.revisedOwnerPrice - sub.projectedCosts;
+      const projectedMargin = sub.revisedOwnerPrice ? (projectedProfit / sub.revisedOwnerPrice) * 100 : 0;
+      return { category, items, sub: { ...sub, costToComplete, revisedVsProjected, remainingToInvoice, projectedProfit, projectedMargin } };
+    });
+  }, [rows]);
+
   // Insights — match real DifferenceFooter logic
   const projectedVsBudgetPct = totals.originalBudgetCosts ? ((totals.projectedCosts / totals.originalBudgetCosts) - 1) * 100 : 0;
   const profitVsEstimatedPct = totals.originalOwnerPrice ? ((totals.revisedOwnerPrice / totals.originalOwnerPrice) - 1) * 100 : 0;
@@ -110,7 +126,7 @@ export default function JobCostingBudget({ onBack, onOpenJPS }: { onBack?: () =>
             </button>
           )}
           <div>
-            <BdsText as="h1" size="heavy-lg" className="jcb-title">Job Costing Budget</BdsText>
+            <BdsText as="h1" size="heavy-lg" className="jcb-title">Job costing budget</BdsText>
             <div className="jcb-sub">Sample Job · Open Book contract · 15% markup</div>
           </div>
         </div>
@@ -126,23 +142,23 @@ export default function JobCostingBudget({ onBack, onOpenJPS }: { onBack?: () =>
       <div className="jcb-insights">
         {/* Card 1 — Projected Total Costs */}
         <div className="jcb-insight-card">
-          <div className="jcb-insight-title">Projected Total Costs</div>
+          <div className="jcb-insight-title">Projected total costs</div>
           <div className="jcb-insight-big">{fmt(totals.projectedCosts)}</div>
           <div className="jcb-insight-footer">
             {projectedVsBudgetPct > 0 ? (
               <>
                 <BdsIcon name="arrow-up" size={12} className="jcb-icon-red" />
                 <span className="jcb-neg">{fmtPct(Math.abs(projectedVsBudgetPct))}</span>
-                <span className="jcb-insight-label">MORE THAN BUDGETED</span>
+                <span className="jcb-insight-label">More than budgeted</span>
               </>
             ) : projectedVsBudgetPct < 0 ? (
               <>
                 <BdsIcon name="arrow-down" size={12} className="jcb-icon-green" />
                 <span className="jcb-pos">{fmtPct(Math.abs(projectedVsBudgetPct))}</span>
-                <span className="jcb-insight-label">LESS THAN BUDGETED</span>
+                <span className="jcb-insight-label">Less than budgeted</span>
               </>
             ) : (
-              <span className="jcb-insight-label">EQUAL TO BUDGETED</span>
+              <span className="jcb-insight-label">Equal to budgeted</span>
             )}
           </div>
           <div className="jcb-pbar">
@@ -167,23 +183,23 @@ export default function JobCostingBudget({ onBack, onOpenJPS }: { onBack?: () =>
 
         {/* Card 2 — Revised Client Price */}
         <div className="jcb-insight-card">
-          <div className="jcb-insight-title">Revised Client Price</div>
+          <div className="jcb-insight-title">Revised client price</div>
           <div className="jcb-insight-big">{fmt(totals.revisedOwnerPrice)}</div>
           <div className="jcb-insight-footer">
             {profitVsEstimatedPct > 0 ? (
               <>
                 <BdsIcon name="arrow-up" size={12} className="jcb-icon-green" />
                 <span className="jcb-pos">{fmtPct(Math.abs(profitVsEstimatedPct))}</span>
-                <span className="jcb-insight-label">HIGHER THAN ESTIMATED</span>
+                <span className="jcb-insight-label">Higher than estimated</span>
               </>
             ) : profitVsEstimatedPct < 0 ? (
               <>
                 <BdsIcon name="arrow-down" size={12} className="jcb-icon-red" />
                 <span className="jcb-neg">{fmtPct(Math.abs(profitVsEstimatedPct))}</span>
-                <span className="jcb-insight-label">LOWER THAN ESTIMATED</span>
+                <span className="jcb-insight-label">Lower than estimated</span>
               </>
             ) : (
-              <span className="jcb-insight-label">EQUAL TO ESTIMATED</span>
+              <span className="jcb-insight-label">Equal to estimated</span>
             )}
           </div>
           <div className="jcb-pbar">
@@ -216,7 +232,6 @@ export default function JobCostingBudget({ onBack, onOpenJPS }: { onBack?: () =>
           </label>
         </div>
         <div className="jcb-toolbar-right">
-          <BdsBadge text={`${rows.length} cost codes`} displayType="default" textOnly />
         </div>
       </div>
 
@@ -224,44 +239,99 @@ export default function JobCostingBudget({ onBack, onOpenJPS }: { onBack?: () =>
       <div className="jcb-table-wrap">
         <table className="jcb-table">
           <thead>
+            <tr className="jcb-group-row">
+              <th colSpan={1} className="jcb-group-header jcb-group-header-category">Cost categories</th>
+              <th colSpan={8} className="jcb-group-header jcb-group-header-job">Job costing</th>
+              <th colSpan={2} className="jcb-group-header jcb-group-header-client">Client pricing</th>
+              <th colSpan={2} className="jcb-group-header jcb-group-header-invoicing">Invoicing</th>
+              <th colSpan={2} className="jcb-group-header jcb-group-header-profit">Profit</th>
+            </tr>
             <tr>
-              <th className="jcb-col-code">Cost codes</th>
-              <th className="jcb-num">Original budget costs</th>
-              <th className="jcb-num jcb-emph">Revised budget costs</th>
-              <th className="jcb-num">Committed costs</th>
-              <th className="jcb-num">Actual costs</th>
-              <th className="jcb-num">Builder variance</th>
-              <th className="jcb-num">Projected costs</th>
-              <th className="jcb-num">Cost to complete</th>
-              <th className="jcb-num jcb-emph">Revised vs projected</th>
-              <th className="jcb-num">Revised client price</th>
+              {(['code','orig','rev','com','act','bv','proj','ctt','rvp','ocp','rcp','ai','rti','pp','pm'] as const).map((id) => {
+                const c = COL_INFO[id];
+                const cls = id === 'code' ? 'jcb-col-code' : (id === 'rev' || id === 'rvp') ? 'jcb-num jcb-emph' : 'jcb-num';
+                if (id === 'code') {
+                  return <th key={id} className={cls}>{c.label}</th>;
+                }
+                return (
+                  <th key={id} className={cls}>
+                    <button type="button" className={`jcb-col-title-btn ${openPopover === id ? 'is-active' : ''}`} onClick={() => togglePopover(id)} aria-expanded={openPopover === id}>
+                      {c.label}
+                    </button>
+                    {openPopover === id && (
+                      <div className="jcb-col-popover" role="dialog" onClick={(e) => e.stopPropagation()}>
+                        <div className="jcb-col-popover-title">{c.label}</div>
+                        <div className="jcb-col-popover-body">{c.desc}</div>
+                        {c.formula && <div className="jcb-col-popover-formula">{c.formula}</div>}
+                      </div>
+                    )}
+                  </th>
+                );
+              })}
             </tr>
           </thead>
           <tbody>
-            {rows.map(r => {
-              const rvp = rvpFor(r);
-              const ctt = cttFor(r);
+            {grouped.map(({ category, items, sub }) => {
+              const collapsed = collapsedCats.has(category);
               return (
-                <tr key={r.code}>
-                  <td className="jcb-col-code">
-                    <div className="jcb-col-code-inner">
-                      <span className="jcb-code-num">{r.code}</span>
-                      <span className="jcb-code-name">{r.name}</span>
-                      <span className="jcb-cost-type">{r.costType}</span>
-                    </div>
-                  </td>
-                  <td className="jcb-num">{fmt(r.originalBudgetCosts)}</td>
-                  <td className="jcb-num jcb-emph">{fmt(r.revisedBudgetCosts)}</td>
-                  <td className="jcb-num jcb-muted">{r.committedCosts === 0 ? '—' : fmt(r.committedCosts)}</td>
-                  <td className="jcb-num">{fmt(r.actualCosts)}</td>
-                  <td className="jcb-num">{r.builderVariance === 0 ? <span className="jcb-muted">—</span> : fmt(r.builderVariance)}</td>
-                  <td className="jcb-num">{fmt(r.projectedCosts)}</td>
-                  <td className="jcb-num">{fmt(ctt)}</td>
-                  <td className={`jcb-num jcb-emph ${rvp < 0 ? 'jcb-neg' : rvp > 0 ? 'jcb-pos' : ''}`}>
-                    {rvp === 0 ? fmt(0) : fmtSigned(rvp)}
-                  </td>
-                  <td className="jcb-num">{fmt(r.revisedOwnerPrice)}</td>
+              <Fragment key={category}>
+                <tr className="jcb-category-row">
+                  <th className="jcb-col-code">
+                    <button type="button" className="jcb-category-toggle" onClick={() => toggleCat(category)} aria-expanded={!collapsed}>
+                      <span className="jcb-category-sticky-content">
+                        <BdsIcon name={collapsed ? 'chevron-right' : 'chevron-down'} size={12} />
+                        {category}
+                        <span className="jcb-category-count">({items.length})</span>
+                      </span>
+                    </button>
+                  </th>
+                  <td className="jcb-num">{fmt(sub.originalBudgetCosts)}</td>
+                  <td className="jcb-num jcb-emph">{fmt(sub.revisedBudgetCosts)}</td>
+                  <td className="jcb-num">{sub.committedCosts === 0 ? '—' : fmt(sub.committedCosts)}</td>
+                  <td className="jcb-num">{fmt(sub.actualCosts)}</td>
+                  <td className="jcb-num">{fmt(sub.builderVariance)}</td>
+                  <td className="jcb-num">{fmt(sub.projectedCosts)}</td>
+                  <td className="jcb-num">{fmt(sub.costToComplete)}</td>
+                  <td className={`jcb-num jcb-emph ${sub.revisedVsProjected < 0 ? 'jcb-neg' : 'jcb-pos'}`}>{fmtSigned(sub.revisedVsProjected)}</td>
+                  <td className="jcb-num">{fmt(sub.originalOwnerPrice)}</td>
+                  <td className="jcb-num">{fmt(sub.revisedOwnerPrice)}</td>
+                  <td className="jcb-num">{fmt(sub.amountInvoiced)}</td>
+                  <td className="jcb-num">{fmt(sub.remainingToInvoice)}</td>
+                  <td className="jcb-num">{fmt(sub.projectedProfit)}</td>
+                  <td className="jcb-num">{sub.revisedOwnerPrice ? fmtPct(sub.projectedMargin) : '—'}</td>
                 </tr>
+                {!collapsed && items.map(r => {
+                  const rvp = rvpFor(r);
+                  const ctt = cttFor(r);
+                  return (
+                    <tr key={r.code}>
+                      <td className="jcb-col-code">
+                        <div className="jcb-col-code-inner jcb-col-code-nested">
+                          <span className="jcb-code-num">{r.code}</span>
+                          <span className="jcb-code-name">{r.name}</span>
+                          <span className="jcb-cost-type">{r.costType}</span>
+                        </div>
+                      </td>
+                      <td className="jcb-num">{fmt(r.originalBudgetCosts)}</td>
+                      <td className="jcb-num jcb-emph">{fmt(r.revisedBudgetCosts)}</td>
+                      <td className="jcb-num jcb-muted">{r.committedCosts === 0 ? '—' : fmt(r.committedCosts)}</td>
+                      <td className="jcb-num">{fmt(r.actualCosts)}</td>
+                      <td className="jcb-num">{r.builderVariance === 0 ? <span className="jcb-muted">—</span> : fmt(r.builderVariance)}</td>
+                      <td className="jcb-num">{fmt(r.projectedCosts)}</td>
+                      <td className="jcb-num">{fmt(ctt)}</td>
+                      <td className={`jcb-num jcb-emph ${rvp < 0 ? 'jcb-neg' : rvp > 0 ? 'jcb-pos' : ''}`}>
+                        {rvp === 0 ? fmt(0) : fmtSigned(rvp)}
+                      </td>
+                      <td className="jcb-num">{fmt(r.originalOwnerPrice)}</td>
+                      <td className="jcb-num">{fmt(r.revisedOwnerPrice)}</td>
+                      <td className="jcb-num">{fmt(r.amountInvoiced)}</td>
+                      <td className="jcb-num">{fmt(r.revisedOwnerPrice - r.amountInvoiced)}</td>
+                      <td className="jcb-num">{fmt(r.revisedOwnerPrice - r.projectedCosts)}</td>
+                      <td className="jcb-num">{r.revisedOwnerPrice ? fmtPct(((r.revisedOwnerPrice - r.projectedCosts) / r.revisedOwnerPrice) * 100) : '—'}</td>
+                    </tr>
+                  );
+                })}
+              </Fragment>
               );
             })}
           </tbody>
@@ -278,7 +348,12 @@ export default function JobCostingBudget({ onBack, onOpenJPS }: { onBack?: () =>
               <td className={`jcb-num jcb-emph ${totals.revisedVsProjected < 0 ? 'jcb-neg' : 'jcb-pos'}`}>
                 {fmtSigned(totals.revisedVsProjected)}
               </td>
+              <td className="jcb-num">{fmt(totals.originalOwnerPrice)}</td>
               <td className="jcb-num">{fmt(totals.revisedOwnerPrice)}</td>
+              <td className="jcb-num">{fmt(totals.amountInvoiced)}</td>
+              <td className="jcb-num">{fmt(totals.remainingToInvoice)}</td>
+              <td className="jcb-num">{fmt(totals.revisedOwnerPrice - totals.projectedCosts)}</td>
+              <td className="jcb-num">{totals.revisedOwnerPrice ? fmtPct(((totals.revisedOwnerPrice - totals.projectedCosts) / totals.revisedOwnerPrice) * 100) : '—'}</td>
             </tr>
           </tfoot>
         </table>
@@ -298,18 +373,36 @@ export default function JobCostingBudget({ onBack, onOpenJPS }: { onBack?: () =>
         </button>
         {showRollup && (
           <div className="jcb-rollup-body">
-            <div className="jcb-rollup-math">
-              <div className="jcb-math-line"><span>Revised vs projected</span><span>{fmtSigned(totals.revisedVsProjected)}</span></div>
-              <div className="jcb-math-line"><span>Less: Builder variance (absorbed)</span><span>{fmtSigned(-totals.builderVariance)}</span></div>
-              <div className="jcb-math-line jcb-math-sub">
-                <span>Customer-payable cost change</span>
-                <span className={totals.customerPayable > 0 ? 'jcb-neg' : 'jcb-pos'}>{fmtSigned(totals.customerPayable)}</span>
-              </div>
-              <div className="jcb-math-line"><span>Markup ({(MARKUP_PCT * 100).toFixed(0)}%)</span><span>{fmtSigned(totals.customerPayableWithMarkup - totals.customerPayable)}</span></div>
-              <div className="jcb-math-line jcb-math-total">
-                <span>Total to client price</span>
-                <span className={totals.customerPayableWithMarkup > 0 ? 'jcb-neg' : 'jcb-pos'}>{fmtSigned(totals.customerPayableWithMarkup)}</span>
-              </div>
+            {(() => {
+              const costOverrun = totals.projectedCosts - totals.revisedBudgetCosts;
+              const markup = totals.customerPayableWithMarkup - totals.customerPayable;
+              return (
+                <div className="jcb-rollup-math">
+                  <div className="jcb-math-block">
+                    <div className="jcb-math-block-title">Step 1 — Cost overrun</div>
+                    <div className="jcb-math-row">    <span className="jcb-math-op"></span><span className="jcb-math-val">{fmt(totals.projectedCosts)}</span><span className="jcb-math-label">Projected costs</span></div>
+                    <div className="jcb-math-row">    <span className="jcb-math-op">−</span><span className="jcb-math-val">{fmt(totals.revisedBudgetCosts)}</span><span className="jcb-math-label">Revised budget costs</span></div>
+                    <div className="jcb-math-row jcb-math-sum"><span className="jcb-math-op">=</span><span className={`jcb-math-val ${costOverrun > 0 ? 'jcb-neg' : 'jcb-pos'}`}>{fmtSigned(costOverrun)}</span><span className="jcb-math-label">Cost overrun</span></div>
+                  </div>
+
+                  <div className="jcb-math-block">
+                    <div className="jcb-math-block-title">Step 2 — Customer-payable cost change</div>
+                    <div className="jcb-math-row">    <span className="jcb-math-op"></span><span className="jcb-math-val">{fmt(costOverrun)}</span><span className="jcb-math-label">Cost overrun (from Step 1)</span></div>
+                    <div className="jcb-math-row">    <span className="jcb-math-op">−</span><span className="jcb-math-val">{fmt(totals.builderVariance)}</span><span className="jcb-math-label">Builder variance (absorbed)</span></div>
+                    <div className="jcb-math-row jcb-math-sum"><span className="jcb-math-op">=</span><span className={`jcb-math-val ${totals.customerPayable > 0 ? 'jcb-neg' : 'jcb-pos'}`}>{fmtSigned(totals.customerPayable)}</span><span className="jcb-math-label">Customer-payable</span></div>
+                  </div>
+
+                  <div className="jcb-math-block">
+                    <div className="jcb-math-block-title">Step 3 — Cost variance to client price</div>
+                    <div className="jcb-math-row">    <span className="jcb-math-op"></span><span className="jcb-math-val">{fmt(totals.customerPayable)}</span><span className="jcb-math-label">Customer-payable (from Step 2)</span></div>
+                    <div className="jcb-math-row">    <span className="jcb-math-op">+</span><span className="jcb-math-val">{fmt(markup)}</span><span className="jcb-math-label">Open Book markup ({(MARKUP_PCT * 100).toFixed(0)}%)</span></div>
+                    <div className="jcb-math-row jcb-math-sum jcb-math-total"><span className="jcb-math-op">=</span><span className={`jcb-math-val ${totals.customerPayableWithMarkup > 0 ? 'jcb-neg' : 'jcb-pos'}`}>{fmtSigned(totals.customerPayableWithMarkup)}</span><span className="jcb-math-label">Cost variance to client price</span></div>
+                  </div>
+                </div>
+              );
+            })()}
+            <div className="jcb-rollup-note">
+              This {totals.customerPayableWithMarkup >= 0 ? 'increases' : 'decreases'} the client price on Job Price Summary, shown as <strong>Budget difference</strong> in the price breakdown.
             </div>
             {onOpenJPS && (
               <button type="button" className="jcb-rollup-link" onClick={onOpenJPS}>
