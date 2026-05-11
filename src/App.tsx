@@ -461,6 +461,7 @@ export default function App() {
             type: 'allowance' as 'allowance' | 'selection',
             name: ma.name,
             scenarioNote: ma.scenarioNote,
+            canMarkComplete: ma.id === 'ma-2',
             isComplete: markedComplete,
             revisedPrice: selectionsTotal,
             previouslyInvoiced: previouslyInvoicedDisplay,

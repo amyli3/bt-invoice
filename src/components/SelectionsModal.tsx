@@ -65,6 +65,7 @@ interface SelectionGroup {
   id: string;
   type: 'allowance' | 'selection';
   name: string;
+  canMarkComplete?: boolean;
   revisedPrice: number;
   previouslyInvoiced: number;
   invoiceBalance: number;
@@ -281,7 +282,7 @@ export default function SelectionsModal({ open, onClose, onAdd, jobName, addedGr
                           <span style={{ fontWeight: 600, fontSize: 14, color: 'var(--bt-midnight)' }}>{item.name}</span>
                           {item.scenarioNote && <ScenarioTooltip note={item.scenarioNote} />}
                         </div>
-                        {onMarkComplete && item.id === 'ma-2' && (
+                        {onMarkComplete && item.canMarkComplete && (
                           <button
                             onClick={(e) => { e.stopPropagation(); onMarkComplete(item.id); }}
                             style={{

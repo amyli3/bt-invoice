@@ -63,6 +63,10 @@ const ESTIMATE_LINES = {
     { id: 'de2', selId: 'ms-8', desc: '7030 - Pendant Fixtures', estimate: 3000, approved: 4000, allowanceCode: '5003', selectionCode: '7030' },
     { id: 'de3', selId: 'ms-9', desc: '7040 - Under-Cabinet Lighting', estimate: 1000, approved: 2500, allowanceCode: '5003', selectionCode: '7040' },
   ],
+  hardware: [
+    { id: 'he1', selId: 'ms-14', desc: '5050 - Cabinet Pulls', estimate: 1500, approved: 1200, allowanceCode: '5050', selectionCode: '5050' },
+    { id: 'he2', selId: 'ms-15', desc: '5050 - Cabinet Knobs', estimate: 1500, approved: 800,  allowanceCode: '5050', selectionCode: '5050' },
+  ],
 };
 
 // ─── "Add from Selections" modal data ─────────────────────────────
@@ -131,11 +135,23 @@ export const MODAL_ALLOWANCES: ModalAllowance[] = [
     costCode: '5003 - Lighting',
     budgetAmount: 11000,
     previouslyInvoiced: 11000,
-    scenarioNote: 'Scenario 1 · Allowance previously invoiced, selections go over → invoice the overage (same pattern as Kitchen)',
+    scenarioNote: 'Scenario · Allowance previously invoiced, selections have different cost codes and go over → reverse the allowance and bill selections at their real codes (net overage)',
     selections: [
       { id: 'ms-7', name: 'Recessed Can Lights', costCode: '7020', costType: 'Material', originalPrice: 7000, approvedPrice: 8500, status: 'approved' },
       { id: 'ms-8', name: 'Pendant Fixtures', costCode: '7030', costType: 'Material', originalPrice: 3000, approvedPrice: 4000, status: 'approved' },
       { id: 'ms-9', name: 'Under-Cabinet Lighting', costCode: '7040', costType: 'Material', originalPrice: 1000, approvedPrice: 2500, status: 'approved' },
+    ],
+  },
+  {
+    id: 'ma-6',
+    name: 'Cabinet Hardware Allowance',
+    costCode: '5050 - Cabinet Hardware',
+    budgetAmount: 3000,
+    previouslyInvoiced: 3000,
+    scenarioNote: 'Scenario · Allowance previously invoiced, selections at same cost code come in under → mark complete to issue credit for the underage',
+    selections: [
+      { id: 'ms-14', name: 'Cabinet Pulls', costCode: '5050', costType: 'Material', originalPrice: 1500, approvedPrice: 1200, status: 'approved' },
+      { id: 'ms-15', name: 'Cabinet Knobs', costCode: '5050', costType: 'Material', originalPrice: 1500, approvedPrice: 800,  status: 'approved' },
     ],
   },
 ];
@@ -241,6 +257,20 @@ function makeEstimateGroups() {
         annotation: 'Previously invoiced $11,000 — will reverse when selections are added',
       } as SOVLine],
     },
+    hardware: {
+      id: 'g6', label: 'Cabinet Hardware',
+      lines: [{
+        id: 'hardware-allowance',
+        description: '5050 - Cabinet Hardware Allowance',
+        budget: 3000,
+        previousInvoice: 3000,
+        thisInvoice: 0,
+        storedMaterials: 0,
+        retainage: 0,
+        isAllowance: true,
+        annotation: 'Previously invoiced $3,000 — will reverse when selections are added',
+      } as SOVLine],
+    },
     masonry: {
       id: 'g8', label: 'Masonry',
       lines: [{
@@ -281,7 +311,7 @@ function makeEstimateGroups() {
 }
 
 // CO Columns view: estimate lines get coAdjustment when selections added (all three categories)
-function getCostCodeViewGroups(addedIds: string[]): CostGroup[] {
+function getCostCodeViewGroups(addedIds: string[], completedIds: Set<string> = new Set()): CostGroup[] {
   const est = makeEstimateGroups();
 
   // Kitchen: combined into one allowance line — aggregate CO adjustments from added selections
@@ -330,13 +360,17 @@ function getCostCodeViewGroups(addedIds: string[]): CostGroup[] {
     children: flooringChildren.length > 0 ? flooringChildren : undefined,
   } as SOVLine];
 
-  // Drywall selection lines: scheduled value = original price (estimate),
-  // approved changes = delta (approved - estimate), revised = approved price.
-  // Allowance gets -11,000 approved change to reverse the full budget.
+  // Drywall (Lighting Allowance): previously invoiced $11k at 5003. Actual selections are
+  // at electrical codes (7020/7030/7040). Reverse the allowance via an approved change and
+  // add each selection as a flat top-level line — scheduled $0 since these aren't in the
+  // original contract, full approved goes in approved changes and this invoice.
+  // regroupByCostCode then buckets the allowance into Finishings (5000s) and the new
+  // lines into Electrical (7000s), so each dollar lives at the code where the work is.
+  // Net invoice change: +$4k overage.
   const addedDrywallCO = ESTIMATE_LINES.drywall.filter(i => addedIds.includes(i.selId));
   const drywallSelectionLines: SOVLine[] = addedDrywallCO.map(item => ({
     id: `child-${item.id}`,
-    description: `${item.desc.replace(/^\d+ - /, '')}`,
+    description: item.desc,
     budget: 0,
     coAdjustment: item.approved,
     previousInvoice: 0,
@@ -349,7 +383,7 @@ function getCostCodeViewGroups(addedIds: string[]): CostGroup[] {
   est.drywall.lines = [{
     id: 'drywall-allowance',
     description: '5003 - Lighting Allowance',
-    budget: addedDrywallCO.length > 0 ? 0 : 11000,
+    budget: 11000,
     coAdjustment: addedDrywallCO.length > 0 ? -11000 : 0,
     previousInvoice: 11000,
     thisInvoice: addedDrywallCO.length > 0 ? -11000 : 0,
@@ -357,8 +391,6 @@ function getCostCodeViewGroups(addedIds: string[]): CostGroup[] {
     retainage: 0,
     isAllowance: true,
     isFromSelection: addedDrywallCO.length > 0,
-    disablePct: addedDrywallCO.length > 0,
-    hideBalance: addedDrywallCO.length > 0,
   } as SOVLine, ...drywallSelectionLines];
 
   // Plumbing: never previously invoiced, same cost code — invoice full selection amounts
@@ -377,23 +409,82 @@ function getCostCodeViewGroups(addedIds: string[]): CostGroup[] {
     isFromSelection: addedPlumbingCO.length > 0,
   } as SOVLine];
 
-  return [est.electrical, est.masonry, est.framing, est.kitchen, est.flooring, est.plumbing, est.drywall];
+  // Hardware (Cabinet Hardware Allowance): previously invoiced $3k at 5050. Selections at
+  // the SAME cost code (5050) total $2k → -$1k underage credit. Because the codes match,
+  // no reclassification is needed — the credit flows directly on the allowance row as a
+  // negative thisInvoice. Gated behind mark-complete: until the builder confirms the
+  // client is done picking, the allowance stays open with no SOV impact.
+  const addedHardwareCO = ESTIMATE_LINES.hardware.filter(i => addedIds.includes(i.selId));
+  const hardwareComplete = completedIds.has('ma-6');
+  const hardwareActive = addedHardwareCO.length > 0 && hardwareComplete;
+  const hardwareSelectionsSum = addedHardwareCO.reduce((s, i) => s + i.approved, 0);
+  const hardwareCredit = hardwareActive ? hardwareSelectionsSum - 3000 : 0; // negative for underage
+  const hardwareChildren: SOVLine[] = hardwareActive ? addedHardwareCO.map(item => ({
+    id: `child-${item.id}`,
+    description: item.desc.replace(/^\d+ - /, ''),
+    budget: item.estimate,
+    coAdjustment: item.approved - item.estimate,
+    previousInvoice: 0,
+    thisInvoice: item.approved - item.estimate,
+    storedMaterials: 0,
+    retainage: 0,
+    isFromSelection: true,
+    hideBalance: true,
+  } as SOVLine)) : [];
+
+  est.hardware.lines = [{
+    id: 'hardware-allowance',
+    description: '5050 - Cabinet Hardware Allowance',
+    budget: 3000,
+    coAdjustment: hardwareCredit,
+    previousInvoice: 3000,
+    thisInvoice: hardwareCredit,
+    storedMaterials: 0,
+    retainage: 0,
+    isAllowance: true,
+    isFromSelection: hardwareActive,
+    children: hardwareChildren.length > 0 ? hardwareChildren : undefined,
+  } as SOVLine];
+
+  return [est.electrical, est.masonry, est.framing, est.kitchen, est.flooring, est.plumbing, est.drywall, est.hardware];
 }
 
-// Helper to build adjustment lines from any estimate group — grouped by cost code with nested selections
+// Helper to build adjustment lines from any estimate group.
+// Matched items (selectionCode === allowanceCode) group under one allowance parent.
+// Mismatched items emit as flat top-level rows at their own selection cost codes —
+// keeps cost-code identity visible instead of burying it under an allowance bucket
+// that no longer reflects where the money is actually being billed.
 function buildAdjLines(items: typeof ESTIMATE_LINES.kitchen, addedIds: string[], allowanceName: string, _allowanceBudget: number): SOVLine[] {
   const addedItems = items.filter(item => addedIds.includes(item.selId));
   if (addedItems.length === 0) return [];
 
-  // Group by allowance cost code to create parent rows
-  const byCostCode: Record<string, typeof addedItems> = {};
-  for (const item of addedItems) {
+  const matchedItems = addedItems.filter(item => item.selectionCode === item.allowanceCode);
+  const mismatchedItems = addedItems.filter(item => item.selectionCode !== item.allowanceCode);
+
+  // Flat rows for mismatched items
+  const flatLines: SOVLine[] = mismatchedItems.map(item => ({
+    id: `adj-${item.id}`,
+    description: item.desc,
+    budget: item.approved,
+    previousInvoice: 0,
+    thisInvoice: item.approved,
+    storedMaterials: 0,
+    retainage: 0,
+    isFromSelection: true,
+    hideBalance: true,
+  } as SOVLine));
+
+  if (matchedItems.length === 0) return flatLines;
+
+  // Group matched items by allowance cost code to create parent rows
+  const byCostCode: Record<string, typeof matchedItems> = {};
+  for (const item of matchedItems) {
     const code = item.allowanceCode;
     if (!byCostCode[code]) byCostCode[code] = [];
     byCostCode[code].push(item);
   }
 
-  return Object.entries(byCostCode).map(([code, codeItems]) => {
+  const groupedLines = Object.entries(byCostCode).map(([code, codeItems]) => {
     const totalBudget = codeItems.reduce((s, item) => {
       const codeMismatch = item.selectionCode !== item.allowanceCode;
       return s + (codeMismatch ? item.approved : (item.approved - item.estimate));
@@ -441,10 +532,12 @@ function buildAdjLines(items: typeof ESTIMATE_LINES.kitchen, addedIds: string[],
       children,
     } as SOVLine;
   });
+
+  return [...groupedLines, ...flatLines];
 }
 
 // Selection Adjustments: estimate lines stay, adjustments appear in own section (not a CO)
-function getSelAdjGroups(addedIds: string[]): CostGroup[] {
+function getSelAdjGroups(addedIds: string[], completedIds: Set<string> = new Set()): CostGroup[] {
   const est = makeEstimateGroups();
 
   // Kitchen: combined into one allowance line — already invoiced at budget
@@ -512,13 +605,44 @@ function getSelAdjGroups(addedIds: string[]): CostGroup[] {
     isAllowance: true,
   } as SOVLine];
 
-  const groups: CostGroup[] = [est.electrical, est.masonry, est.framing, est.kitchen, est.flooring, est.plumbing, est.drywall];
+  // Hardware: matched cost codes (5050 throughout). When marked complete, the underage
+  // is billed back as a credit directly on the allowance row — no reclassification needed
+  // since selections live at the same cost code as the allowance.
+  const addedHardwareItems = ESTIMATE_LINES.hardware.filter(i => addedIds.includes(i.selId));
+  const hardwareCompleteEst = completedIds.has('ma-6');
+  const hardwareActiveEst = addedHardwareItems.length > 0 && hardwareCompleteEst;
+  const hardwareSumEst = addedHardwareItems.reduce((s, i) => s + i.approved, 0);
+  const hardwareCreditEst = hardwareActiveEst ? hardwareSumEst - 3000 : 0;
+  est.hardware.lines = [{
+    id: 'hardware-allowance',
+    description: '5050 - Cabinet Hardware Allowance',
+    budget: 3000,
+    previousInvoice: 3000,
+    thisInvoice: hardwareCreditEst,
+    storedMaterials: 0,
+    retainage: 0,
+    isAllowance: true,
+    // When marked complete with a credit issued, the line is closed out — hide the
+    // % and balance columns so the row doesn't look like there's still more to bill.
+    // Estimate mode has no Approved changes column to communicate the revised total.
+    disablePct: hardwareActiveEst,
+    hideBalance: hardwareActiveEst,
+    annotation: hardwareActiveEst
+      ? `Marked complete · selections came in $${fmt(Math.abs(hardwareCreditEst))} under — credit issued`
+      : addedHardwareItems.length > 0
+        ? 'Previously invoiced $3,000 — mark complete to issue the underage credit'
+        : 'Previously invoiced $3,000 — will credit any underage when marked complete',
+  } as SOVLine];
+
+  const groups: CostGroup[] = [est.electrical, est.masonry, est.framing, est.kitchen, est.flooring, est.plumbing, est.drywall, est.hardware];
 
   // Build all adjustment lines grouped by allowance
   const kitchenAdj = buildAdjLines(ESTIMATE_LINES.kitchen, addedIds, 'Kitchen Allowance', 5000);
   const flooringAdj = buildAdjLines(ESTIMATE_LINES.flooring, addedIds, 'Flooring Allowance', 8000);
   const plumbingAdj = buildAdjLines(ESTIMATE_LINES.plumbing, addedIds, 'Plumbing Allowance', 4000);
   const drywallAdj = buildAdjLines(ESTIMATE_LINES.drywall, addedIds, 'Lighting Allowance', 11000);
+  // Hardware (matched codes): the underage credit lives directly on the allowance row above,
+  // so no Approved changes entries are needed for it.
 
   const allAdjLines = [...kitchenAdj, ...flooringAdj, ...plumbingAdj, ...drywallAdj];
 
@@ -1029,6 +1153,15 @@ export default function AIAPayApp({ onNavigate, approvedCOIds, addedCostIds: ext
   }, [addFromDropdownOpen]);
   const [modalChecked, setModalChecked] = useState<Record<string, boolean>>({});
   const [addedSelectionIds, setAddedSelectionIds] = useState<string[]>([]);
+  const [completedAllowanceIds, setCompletedAllowanceIds] = useState<Set<string>>(new Set());
+  const toggleAllowanceComplete = (id: string) => {
+    setCompletedAllowanceIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
   const handlePctChange = (lineId: string, pct: number) => {
     setPctOverrides(prev => ({ ...prev, [lineId]: pct }));
@@ -1051,7 +1184,7 @@ export default function AIAPayApp({ onNavigate, approvedCOIds, addedCostIds: ext
       .filter(id => !addedSelectionIds.includes(id));
     setAddedSelectionIds(prev => [...prev, ...newIds]);
     // Auto-fill % complete to 100 for newly added selection lines
-    const allEstItems = [...ESTIMATE_LINES.kitchen, ...ESTIMATE_LINES.flooring, ...ESTIMATE_LINES.plumbing, ...ESTIMATE_LINES.drywall];
+    const allEstItems = [...ESTIMATE_LINES.kitchen, ...ESTIMATE_LINES.flooring, ...ESTIMATE_LINES.plumbing, ...ESTIMATE_LINES.drywall, ...ESTIMATE_LINES.hardware];
     const pctUpdates: Record<string, number> = {};
     for (const selId of newIds) {
       const estItem = allEstItems.find(i => i.selId === selId);
@@ -1098,6 +1231,7 @@ export default function AIAPayApp({ onNavigate, approvedCOIds, addedCostIds: ext
       { items: ESTIMATE_LINES.flooring, selIds: ESTIMATE_LINES.flooring.map(i => i.selId) },
       { items: ESTIMATE_LINES.plumbing, selIds: ESTIMATE_LINES.plumbing.map(i => i.selId) },
       { items: ESTIMATE_LINES.drywall, selIds: ESTIMATE_LINES.drywall.map(i => i.selId) },
+      { items: ESTIMATE_LINES.hardware, selIds: ESTIMATE_LINES.hardware.map(i => i.selId) },
     ];
     const rawId = lineId.replace(/^(adj-|child-)/, '');
     const group = estGroups.find(g => g.items.some(i => i.id === rawId));
@@ -1168,8 +1302,8 @@ export default function AIAPayApp({ onNavigate, approvedCOIds, addedCostIds: ext
 
   // groupBy determines both the data shape and column visibility
   const rawGroups = groupBy === 'costcode'
-    ? getCostCodeViewGroups(addedSelectionIds)
-    : getSelAdjGroups(addedSelectionIds);
+    ? getCostCodeViewGroups(addedSelectionIds, completedAllowanceIds)
+    : getSelAdjGroups(addedSelectionIds, completedAllowanceIds);
   const baseGroups = groupBy === 'costcode' ? regroupByCostCode(rawGroups) : rawGroups;
 
   // Build cost children lookup — individual bills grouped by cost code
@@ -1412,6 +1546,7 @@ export default function AIAPayApp({ onNavigate, approvedCOIds, addedCostIds: ext
       { items: ESTIMATE_LINES.flooring },
       { items: ESTIMATE_LINES.plumbing },
       { items: ESTIMATE_LINES.drywall },
+      { items: ESTIMATE_LINES.hardware },
     ];
     const estGroup = estGroups2.find(g => g.items.some(i => i.id === rawId));
     if (estGroup) {
@@ -1948,6 +2083,7 @@ export default function AIAPayApp({ onNavigate, approvedCOIds, addedCostIds: ext
           ...ESTIMATE_LINES.flooring.map(i => ({ ...i, category: 'flooring' as const })),
           ...ESTIMATE_LINES.plumbing.map(i => ({ ...i, category: 'plumbing' as const })),
           ...ESTIMATE_LINES.drywall.map(i => ({ ...i, category: 'drywall' as const })),
+          ...ESTIMATE_LINES.hardware.map(i => ({ ...i, category: 'hardware' as const })),
         ];
         // Match on either the estimate line id or the adjustment line id (adj-xxx)
         const rawId = selectedLineId.replace(/^adj-/, '');
@@ -2179,8 +2315,12 @@ export default function AIAPayApp({ onNavigate, approvedCOIds, addedCostIds: ext
                 const originalTotal = allowance.selections.reduce((s, sel) => s + sel.originalPrice, 0);
                 const variance = allowance.budgetAmount - selectionsTotal;
                 const isOver = variance < 0;
-                // If allowance was previously invoiced and selections are at or under budget, block invoicing
-                const isUnderage = !isOver && allowance.previouslyInvoiced >= allowance.budgetAmount;
+                // Block invoicing only when matched codes + under-budget + previously invoiced —
+                // in that case there's nothing to do. Mismatched codes still produce a credit at
+                // the real cost codes even when under budget, so we leave those clickable.
+                const allowanceCodePrefix = allowance.costCode.split(' ')[0];
+                const allMismatched = allowance.selections.every(sel => sel.costCode !== allowanceCodePrefix);
+                const isUnderage = !isOver && allowance.previouslyInvoiced >= allowance.budgetAmount && !allMismatched;
                 const isFullyInvoiced = allowance.previouslyInvoiced >= allowance.budgetAmount;
                 const availableSelections = allowance.selections.filter(s => !addedSelectionIds.includes(s.id));
                 const allAvailableChecked = availableSelections.length > 0 && availableSelections.every(s => modalChecked[s.id]);
@@ -2370,16 +2510,67 @@ export default function AIAPayApp({ onNavigate, approvedCOIds, addedCostIds: ext
       <SelectionsModal
         open={showSelectionsModal}
         onClose={() => setShowSelectionsModal(false)}
+        onMarkComplete={toggleAllowanceComplete}
+        showNegativeBalances
         data={MODAL_ALLOWANCES.map(ma => {
           const selectionsTotal = ma.selections.reduce((s, sel) => s + sel.approvedPrice, 0);
+          const billableSelectionsTotal = ma.selections.reduce((s, sel) => s + (sel.status === 'invoiced' ? 0 : sel.approvedPrice), 0);
+          const invoicedSelectionsTotal = ma.selections.reduce((s, sel) => s + (sel.status === 'invoiced' ? sel.approvedPrice : 0), 0);
+          const notPreviouslyInvoiced = ma.previouslyInvoiced === 0;
+          const anyInvoicedSelection = ma.selections.some(s => s.status === 'invoiced');
+          const allowanceCodePrefix = ma.costCode.split(' ')[0];
+          const allMismatched = ma.selections.every(sel => sel.costCode !== allowanceCodePrefix);
+          // Only Cabinet Hardware (ma-6) needs the explicit mark-complete gate.
+          // Overage cases (Lighting) flow automatically; matched-code cases use existing math.
+          const isUnderBudget = selectionsTotal < ma.budgetAmount;
+          const canMarkComplete = ma.id === 'ma-6';
+          const markedComplete = completedAllowanceIds.has(ma.id);
+          // Under-budget mismatched allowance that requires mark-complete: don't bill until completed
+          const gatedPending = canMarkComplete && !markedComplete;
+
+          let allowanceNewInvoiceAmt: number | null;
+          let invoiceBalance: number;
+          // creditOnAllowanceRow: matched-codes credit lives on the allowance row itself,
+          // so selection children should show $0 to avoid double-counting in the modal sum.
+          let creditOnAllowanceRow = false;
+          if (anyInvoicedSelection) {
+            allowanceNewInvoiceAmt = null;
+            invoiceBalance = billableSelectionsTotal;
+          } else if (notPreviouslyInvoiced) {
+            allowanceNewInvoiceAmt = null;
+            invoiceBalance = billableSelectionsTotal;
+          } else if (gatedPending) {
+            // Awaiting mark-complete — no billing impact yet
+            allowanceNewInvoiceAmt = null;
+            invoiceBalance = 0;
+          } else if (allMismatched) {
+            // Mismatched cost codes: reverse full allowance, re-bill at real codes
+            allowanceNewInvoiceAmt = -ma.budgetAmount;
+            invoiceBalance = billableSelectionsTotal - ma.budgetAmount;
+          } else if (canMarkComplete && markedComplete) {
+            // Matched cost codes + marked complete: credit/charge lives on the allowance
+            // row directly. No reclassification needed.
+            allowanceNewInvoiceAmt = selectionsTotal - ma.budgetAmount;
+            invoiceBalance = selectionsTotal - ma.budgetAmount;
+            creditOnAllowanceRow = true;
+          } else {
+            const matchedReversal = Math.min(selectionsTotal, ma.budgetAmount);
+            allowanceNewInvoiceAmt = -matchedReversal;
+            invoiceBalance = selectionsTotal - matchedReversal;
+          }
+          const previouslyInvoicedDisplay = anyInvoicedSelection ? invoicedSelectionsTotal : ma.previouslyInvoiced;
           return {
             id: ma.id,
             type: 'allowance' as const,
             name: ma.name,
             scenarioNote: ma.scenarioNote,
+            canMarkComplete,
+            isComplete: markedComplete,
             revisedPrice: selectionsTotal,
-            previouslyInvoiced: ma.previouslyInvoiced,
-            invoiceBalance: selectionsTotal - ma.previouslyInvoiced,
+            previouslyInvoiced: previouslyInvoicedDisplay,
+            invoiceBalance,
+            allowanceBudget: ma.budgetAmount,
+            overage: selectionsTotal - ma.budgetAmount,
             children: [
               {
                 id: `${ma.id}-rev`,
@@ -2387,7 +2578,7 @@ export default function AIAPayApp({ onNavigate, approvedCOIds, addedCostIds: ext
                 costCode: ma.costCode,
                 selection: 'Allowance',
                 price: ma.budgetAmount,
-                newInvoiceAmt: -ma.budgetAmount,
+                newInvoiceAmt: allowanceNewInvoiceAmt,
               },
               ...ma.selections.map(sel => ({
                 id: sel.id,
@@ -2395,10 +2586,21 @@ export default function AIAPayApp({ onNavigate, approvedCOIds, addedCostIds: ext
                 costCode: `${sel.costCode} - ${sel.costType}`,
                 selection: sel.name,
                 price: sel.approvedPrice,
-                newInvoiceAmt: sel.approvedPrice,
+                newInvoiceAmt: sel.status === 'invoiced'
+                  ? null
+                  : gatedPending
+                    ? null
+                    : creditOnAllowanceRow
+                      ? 0
+                      : sel.approvedPrice,
               })),
             ],
           };
+        }).filter(row => {
+          const allowanceRev = row.children[0]?.newInvoiceAmt;
+          // Keep mark-complete-eligible rows visible even before they're marked,
+          // otherwise the user never sees the button to flip the state.
+          return row.invoiceBalance !== 0 || allowanceRev !== null || row.canMarkComplete;
         })}
         onAdd={(items) => {
           const newIds: string[] = [];
