@@ -508,6 +508,7 @@ export default function App() {
             type: 'selection' as const,
             name: ss.name,
             scenarioNote: ss.scenarioNote,
+            canMarkComplete: false,
             isComplete: false,
             revisedPrice: ss.approvedPrice,
             previouslyInvoiced: 0,

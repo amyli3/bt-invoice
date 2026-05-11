@@ -2522,7 +2522,6 @@ export default function AIAPayApp({ onNavigate, approvedCOIds, addedCostIds: ext
           const allMismatched = ma.selections.every(sel => sel.costCode !== allowanceCodePrefix);
           // Only Cabinet Hardware (ma-6) needs the explicit mark-complete gate.
           // Overage cases (Lighting) flow automatically; matched-code cases use existing math.
-          const isUnderBudget = selectionsTotal < ma.budgetAmount;
           const canMarkComplete = ma.id === 'ma-6';
           const markedComplete = completedAllowanceIds.has(ma.id);
           // Under-budget mismatched allowance that requires mark-complete: don't bill until completed
