@@ -1210,6 +1210,13 @@ table { width: 100%; border-collapse: collapse; }
 /* 2-column layout (budget difference) */
 .jps-table-budget { display: grid; grid-template-columns: 2.5fr 1fr; }
 .jps-table-budget .jps-col-impact { text-align: right; }
+.jps-table-budget .jps-col-title { display: flex; align-items: center; gap: 6px; }
+.jps-table-row-toggle { cursor: pointer; user-select: none; }
+.jps-table-row-toggle .jps-col-title svg { color: var(--g500); flex-shrink: 0; }
+.jps-table-row-nested > div { padding-top: 8px !important; padding-bottom: 8px !important; font-size: 12px !important; color: var(--g600) !important; }
+.jps-table-row-nested .jps-col-title { padding-left: 38px !important; }
+.jps-budget-nested-code { color: var(--g500); margin-right: 8px; font-variant-numeric: tabular-nums; }
+.jps-budget-nested-name { color: var(--g700); }
 
 /* Allowance summary in header */
 .jps-allowance-summary { font-size: 12px; color: var(--g500); font-weight: 400; }

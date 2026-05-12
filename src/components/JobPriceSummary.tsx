@@ -2313,14 +2313,52 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                       <div className="jps-col-title">{slice4Version === 'v45' ? 'Location' : 'Cost category'}</div>
                       <div className="jps-col-impact">Budget difference</div>
                     </div>
-                    {(slice4Version === 'v45' ? panelByLocation : panelByCategory).map((group, gi) => (
-                      <div key={gi} className="jps-table-row jps-table-budget">
-                        <div className="jps-col-title"><span className="jps-item-name">{group.category}</span></div>
-                        <div className="jps-col-impact">
-                          <span className={group.variance >= 0 ? 'jps-impact-up' : 'jps-impact-down'}>{fmtSigned(group.variance)}</span>
+                    {(slice4Version === 'v45' ? panelByLocation : panelByCategory).map((group, gi) => {
+                      const isV45 = slice4Version === 'v45';
+                      const groupKey = `bd-loc-${group.category}`;
+                      const isOpen = !!expandedGroups[groupKey];
+                      const hasItems = group.items.length > 0;
+                      if (isV45 && hasItems) {
+                        return (
+                          <Fragment key={gi}>
+                            <div
+                              className={`jps-table-row jps-table-budget jps-table-row-toggle ${isOpen ? 'jps-table-row-toggle-open' : ''}`}
+                              onClick={() => toggleGroup(groupKey)}
+                              role="button"
+                              tabIndex={0}
+                              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleGroup(groupKey); } }}
+                            >
+                              <div className="jps-col-title">
+                                <BdsIcon name={isOpen ? 'chevron-down' : 'chevron-right'} size={12} />
+                                <span className="jps-item-name">{group.category}</span>
+                              </div>
+                              <div className="jps-col-impact">
+                                <span className={group.variance >= 0 ? 'jps-impact-up' : 'jps-impact-down'}>{fmtSigned(group.variance)}</span>
+                              </div>
+                            </div>
+                            {isOpen && group.items.map((item) => (
+                              <div key={item.code} className="jps-table-row jps-table-budget jps-table-row-nested">
+                                <div className="jps-col-title">
+                                  <span className="jps-budget-nested-code">{item.code}</span>
+                                  <span className="jps-budget-nested-name">{item.name}</span>
+                                </div>
+                                <div className="jps-col-impact">
+                                  <span className={item.variance >= 0 ? 'jps-impact-up' : 'jps-impact-down'}>{fmtSigned(item.variance)}</span>
+                                </div>
+                              </div>
+                            ))}
+                          </Fragment>
+                        );
+                      }
+                      return (
+                        <div key={gi} className="jps-table-row jps-table-budget">
+                          <div className="jps-col-title"><span className="jps-item-name">{group.category}</span></div>
+                          <div className="jps-col-impact">
+                            <span className={group.variance >= 0 ? 'jps-impact-up' : 'jps-impact-down'}>{fmtSigned(group.variance)}</span>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                     <div className="jps-table-row jps-table-budget jps-row-total">
                       <div className="jps-col-title">Total</div>
                       <div className="jps-col-impact">{fmtSigned(panelVarianceTotal)}</div>
