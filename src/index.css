@@ -1181,8 +1181,8 @@ table { width: 100%; border-collapse: collapse; }
 /* 5-column layout (allowance approved view — with remaining + impact) */
 .jps-table-allowance-5col { display: grid; grid-template-columns: 2.2fr 0.7fr 0.7fr 1fr 0.8fr; }
 
-/* 4-column layout (standalone selections) */
-.jps-table-sel-standalone { display: grid; grid-template-columns: 3fr 0.7fr 1fr; }
+/* 4-column layout (standalone selections — title, date, price, price impact) */
+.jps-table-sel-standalone { display: grid; grid-template-columns: 3fr 0.9fr 1fr 1fr; }
 /* Post-contract: price == contract impact, so we hide price and show only the impact column */
 .jps-table-post-std { display: grid; grid-template-columns: 3fr 0.9fr 1fr; }
 /* Pre-contract: no contract impact (baked into base price), so we hide the impact column */
@@ -1213,6 +1213,17 @@ table { width: 100%; border-collapse: collapse; }
 .jps-from-co {
   font-size: 11px; font-weight: 500; color: var(--bt-blue); background: var(--bt-blue-light);
   padding: 2px 8px; border-radius: 20px; white-space: nowrap;
+}
+
+/* Selections section sub-tabs (Slice 1 — toggles pre/post groups vs combined grid) */
+.jps-selections-subtabs { display: flex; gap: 4px; }
+.jps-selections-subtabs button {
+  background: transparent; border: 1px solid var(--g300); color: var(--g700);
+  padding: 4px 12px; border-radius: 16px; font-size: 12px; font-weight: 500;
+  cursor: pointer; white-space: nowrap;
+}
+.jps-selections-subtabs button.jps-selections-subtab-active {
+  background: var(--bt-blue); border-color: var(--bt-blue); color: white;
 }
 
 .jps-col-title { display: flex; align-items: flex-start; gap: 8px; flex-wrap: wrap; }
@@ -2356,39 +2367,10 @@ table { width: 100%; border-collapse: collapse; }
 .cp-fin-cta { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 4px; }
 .cp-fin-cta .bds-button { margin-top: 8px; }
 
-/* ── Project financials version selector + open book variants ── */
-.cp-fin-version-selector {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-bottom: 14px;
-  flex-wrap: wrap;
-}
-.cp-fin-version-label {
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: #8E96A0;
-  margin-right: 4px;
-}
-.cp-fin-version-pill {
-  border: 1px solid #EAEEF5;
-  background: #fff;
-  padding: 4px 10px;
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 500;
-  color: #4d5662;
-  cursor: pointer;
-  transition: background 0.1s, border-color 0.1s, color 0.1s;
-}
-.cp-fin-version-pill:hover { border-color: #c9d2dd; }
-.cp-fin-version-pill-on {
-  background: #002F77;
-  border-color: #002F77;
-  color: #fff;
-}
+/* JPS openbook demo pane embedded in client portal financials grid */
+.cp-fin-jps-pane { border: 1px solid #EAEEF5; border-radius: 12px; padding: 20px; background: #fff; }
+.cp-fin-jps-pane .jps-pane-big { font-size: 24px; }
+
 
 /* Open book breakdown rows (v2/v4) */
 .cp-fin-row-parent .bds-text:first-child { font-weight: 600; }
@@ -2508,6 +2490,9 @@ table { width: 100%; border-collapse: collapse; }
 @media (max-width: 540px) {
   .cp-fin-panel { max-width: 100%; }
 }
+
+/* Inline color for "Budget difference" amount on the openbook card (matches JPS impact treatment) */
+.cp-fin-budget-up, .cp-fin-budget-down { color: var(--bt-midnight); font-weight: 500; }
 
 /* 3-col grid */
 .cp-grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }

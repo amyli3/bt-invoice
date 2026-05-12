@@ -2,6 +2,12 @@ import { useState, Fragment } from 'react';
 import '../bds-tokens.css';
 import { BdsActionBar, BdsBadge, BdsButton, BdsIcon, BdsSection, BdsTabs, BdsText } from '../bds';
 import { JCB_TOTALS, JCB_ROWS, MARKUP_PCT } from '../jcbMockData';
+import {
+  panelByCategory,
+  panelByLocation,
+  panelVarianceTotal,
+  type ActivityKind,
+} from '../v4PanelData';
 
 /* ── Mock Data ── */
 
@@ -78,8 +84,12 @@ const allSelections: SelectionItem[] = [
   // Standalone selections — pre-contract (included in original price)
   { name: 'Shower Floor Tile — Marble Upgrade', category: 'Exterior', date: 'Oct 2, 2024', price: 480, impact: 0, status: 'approved', timing: 'pre-contract', location: 'Master Bath' },
   { name: 'Upgraded front door hardware', category: 'Exterior', date: 'Oct 5, 2024', price: 350, impact: 0, status: 'approved', timing: 'pre-contract', location: 'Foyer' },
+  // Toilet scenario — pre-contract selection at $1,000 (baked into contract baseline)
+  { name: 'Kohler Kingston 1.28 GPF Two Piece Elongated Toilet with Right Hand Lever - Less Seat White', category: 'Bathroom', date: 'Oct 8, 2024', price: 1000, impact: 0, status: 'approved', timing: 'pre-contract', approvedBy: 'Jenna Johnson', location: 'Master Bath' },
 
   // Standalone selections — post-contract (changes after contract signed)
+  // Builder updated the price of the pre-contract Toilet selection post-contract: original $1,000 → new $1,500 = +$500 contract impact (delta only; original $1,000 stays in contract baseline)
+  { name: 'Kohler Kingston 1.28 GPF Two Piece Elongated Toilet with Right Hand Lever - Less Seat White — price update', category: 'Bathroom', date: 'Nov 25, 2024', price: 500, impact: 500, status: 'approved', timing: 'post-contract', approvedBy: 'Mark Johnson', location: 'Master Bath' },
   { name: 'Garage Door Upgrade — Insulated', category: 'Exterior', date: '', price: 2262, impact: 2262, status: 'pending', timing: 'post-contract', location: 'Exterior' },
   { name: 'Heated Tile Floor System', category: 'Bathroom', date: '', price: 3200, impact: 3200, status: 'pending', timing: 'post-contract', location: 'Master Bath' },
   { name: 'Recessed lighting package', category: 'Kitchen', date: 'Nov 15, 2024', price: 1800, impact: 1800, status: 'approved', timing: 'post-contract', approvedBy: 'Jenna Johnson', location: 'Kitchen' },
@@ -169,233 +179,13 @@ const costCodes: { name: string; budget: number; bills: BillRow[] }[] = [
   ] },
 ];
 
-// Activity-kind taxonomy used by both the v4 panel data and ActivityIcon below.
-type ActivityKind = 'Bill' | 'PO' | 'Time clock' | 'Receipt' | 'Cost adjustment';
-
 const costCodeVariances = costCodes.map(c => {
   const spent = c.bills.reduce((s, b) => s + b.amount, 0);
   return { ...c, spent, variance: spent - c.budget };
 });
 const billVarianceTotal = costCodeVariances.reduce((s, c) => s + c.variance, 0);
 
-// ─── v4 panel — self-contained hypothetical dataset ───
-// Math reconciles internally:
-//   Revised budget = Original budget + CO impact + Selection impact
-//   Spent          = Sum of activity amounts
-//   Variance       = Spent − Revised budget
-//   Budget difference (panel total) = Sum of per-code variances
-// No tie-back to JCB_ROWS — numbers here are demo only.
-
-type V4Activity = { kind: ActivityKind; name: string; amount: number };
-type V4CostCode = {
-  code: string;
-  name: string;
-  rangeLabel: string;
-  estimateGroup: string;
-  location: string;
-  originalBudget: number;
-  coImpact: number;
-  selectionImpact: number;
-  activity: V4Activity[];
-};
-
-const V4_PANEL_DATA: V4CostCode[] = [
-  {
-    code: '3100', name: 'Framing',
-    rangeLabel: '3000-3999 structural',
-    estimateGroup: 'Phase 2 · framing',
-    location: 'Whole house',
-    originalBudget: 25000, coImpact: 1043, selectionImpact: 0,
-    activity: [
-      { kind: 'Bill',       name: 'Lumber package',     amount: 18200 },
-      { kind: 'Bill',       name: 'Engineered beams',   amount: 8300 },
-      { kind: 'Time clock', name: 'Carpentry — week 4', amount: 2200 },
-    ],
-  },
-  {
-    code: '4400', name: 'Plumbing rough-in',
-    rangeLabel: '4000-4999 plumbing',
-    estimateGroup: 'Phase 3 · MEP rough-in',
-    location: 'Bathrooms',
-    originalBudget: 12000, coImpact: 0, selectionImpact: 0,
-    activity: [
-      { kind: 'Bill', name: 'PEX + fittings',          amount: 6800 },
-      { kind: 'Bill', name: 'Plumbing labor — week 1', amount: 4400 },
-      { kind: 'PO',   name: 'Extra valves',            amount: 1200 },
-    ],
-  },
-  {
-    code: '4500', name: 'HVAC',
-    rangeLabel: '4000-4999 plumbing',
-    estimateGroup: 'Phase 3 · MEP rough-in',
-    location: 'Whole house',
-    originalBudget: 15000, coImpact: 0, selectionImpact: 0,
-    activity: [
-      { kind: 'Bill',       name: 'Furnace + AC unit',        amount: 9200 },
-      { kind: 'Bill',       name: 'HVAC install labor',       amount: 5300 },
-      { kind: 'Time clock', name: 'Coordination supervision', amount: 280 },
-    ],
-  },
-  {
-    code: '7500', name: 'Electrical rough-in',
-    rangeLabel: '7000-7999 electrical',
-    estimateGroup: 'Phase 3 · MEP rough-in',
-    location: 'Kitchen and baths',
-    originalBudget: 18000, coImpact: 0, selectionImpact: 1183,
-    activity: [
-      { kind: 'Bill',            name: 'Wire + breakers',            amount: 7900 },
-      { kind: 'Bill',            name: 'Electrical labor',           amount: 11700 },
-      { kind: 'PO',              name: 'Sub-panel upgrade',          amount: 1100 },
-      { kind: 'Cost adjustment', name: 'Materials price correction', amount: 400 },
-    ],
-  },
-  {
-    code: '1100', name: 'Site preparation',
-    rangeLabel: '1000-1999 sitework',
-    estimateGroup: 'Phase 1 · sitework',
-    location: 'Site',
-    originalBudget: 8500, coImpact: 0, selectionImpact: 0,
-    activity: [
-      { kind: 'Bill',       name: 'Grading',         amount: 3200 },
-      { kind: 'Bill',       name: 'Site clearing',   amount: 2800 },
-      { kind: 'Time clock', name: 'Excavation crew', amount: 2100 },
-    ],
-  },
-  {
-    code: '2200', name: 'Foundation',
-    rangeLabel: '2000-2999 foundation',
-    estimateGroup: 'Phase 1 · sitework',
-    location: 'Whole house',
-    originalBudget: 22000, coImpact: 0, selectionImpact: 0,
-    activity: [
-      { kind: 'Bill', name: 'Concrete pour',     amount: 14500 },
-      { kind: 'Bill', name: 'Rebar + footings',  amount: 3800 },
-      { kind: 'Bill', name: 'Foundation labor',  amount: 3700 },
-    ],
-  },
-  {
-    code: '5200', name: 'Roofing',
-    rangeLabel: '5000-5999 roofing',
-    estimateGroup: 'Phase 2 · roofing',
-    location: 'Whole house',
-    originalBudget: 18500, coImpact: 0, selectionImpact: 0,
-    activity: [
-      { kind: 'Bill', name: 'Shingles + flashing', amount: 8200 },
-      { kind: 'Bill', name: 'Roofing labor',       amount: 7800 },
-      { kind: 'PO',   name: 'Underlayment',        amount: 2200 },
-    ],
-  },
-  {
-    code: '6100', name: 'Windows and doors',
-    rangeLabel: '6000-6999 openings',
-    estimateGroup: 'Phase 3 · openings',
-    location: 'Whole house',
-    originalBudget: 24000, coImpact: 0, selectionImpact: 1500,
-    activity: [
-      { kind: 'Bill', name: 'Window package',       amount: 15200 },
-      { kind: 'Bill', name: 'Exterior door package', amount: 7800 },
-      { kind: 'Bill', name: 'Install labor',        amount: 3200 },
-    ],
-  },
-  {
-    code: '8100', name: 'Insulation',
-    rangeLabel: '8000-8999 thermal',
-    estimateGroup: 'Phase 4 · insulation',
-    location: 'Whole house',
-    originalBudget: 7500, coImpact: 0, selectionImpact: 0,
-    activity: [
-      { kind: 'Bill', name: 'Insulation materials', amount: 4300 },
-      { kind: 'Bill', name: 'Insulation labor',     amount: 3100 },
-    ],
-  },
-  {
-    code: '9300', name: 'Drywall',
-    rangeLabel: '9000-9999 finishes',
-    estimateGroup: 'Phase 4 · finishes',
-    location: 'Whole house',
-    originalBudget: 9500, coImpact: 0, selectionImpact: 0,
-    activity: [
-      { kind: 'Bill', name: 'Drywall materials', amount: 4200 },
-      { kind: 'Bill', name: 'Drywall labor',     amount: 5650 },
-    ],
-  },
-  {
-    code: '9400', name: 'Cabinetry',
-    rangeLabel: '9000-9999 finishes',
-    estimateGroup: 'Phase 5 · cabinetry',
-    location: 'Kitchen and baths',
-    originalBudget: 14000, coImpact: 0, selectionImpact: 850,
-    activity: [
-      { kind: 'Bill', name: 'Kitchen cabinets',   amount: 9800 },
-      { kind: 'Bill', name: 'Bath vanities',      amount: 3200 },
-      { kind: 'PO',   name: 'Cabinet hardware',   amount: 1150 },
-    ],
-  },
-  {
-    code: '9600', name: 'Flooring',
-    rangeLabel: '9000-9999 finishes',
-    estimateGroup: 'Phase 5 · finishes',
-    location: 'Whole house',
-    originalBudget: 16000, coImpact: 0, selectionImpact: 0,
-    activity: [
-      { kind: 'Bill', name: 'Hardwood materials', amount: 9200 },
-      { kind: 'Bill', name: 'Tile materials',     amount: 2800 },
-      { kind: 'Bill', name: 'Flooring labor',     amount: 4500 },
-    ],
-  },
-];
-
-type PanelCategoryItem = {
-  name: string;
-  code: string;
-  originalBudget: number;
-  coImpact: number;
-  selectionImpact: number;
-  revisedBudget: number;
-  spent: number;
-  variance: number;
-  activity: V4Activity[];
-};
-type PanelCategory = {
-  category: string;
-  items: PanelCategoryItem[];
-  originalBudget: number;
-  revisedBudget: number;
-  variance: number;
-};
-
-function computePanelGroups(grouper: (item: V4CostCode) => string): PanelCategory[] {
-  const groups = new Map<string, PanelCategoryItem[]>();
-  V4_PANEL_DATA.forEach(cc => {
-    const category = grouper(cc);
-    const revised = cc.originalBudget + cc.coImpact + cc.selectionImpact;
-    const spent = cc.activity.reduce((s, a) => s + a.amount, 0);
-    const item: PanelCategoryItem = {
-      name: cc.name,
-      code: cc.code,
-      originalBudget: cc.originalBudget,
-      coImpact: cc.coImpact,
-      selectionImpact: cc.selectionImpact,
-      revisedBudget: revised,
-      spent,
-      variance: spent - revised,
-      activity: cc.activity,
-    };
-    if (!groups.has(category)) groups.set(category, []);
-    groups.get(category)!.push(item);
-  });
-  return Array.from(groups.entries()).map(([category, items]) => ({
-    category,
-    items,
-    originalBudget: items.reduce((s, i) => s + i.originalBudget, 0),
-    revisedBudget: items.reduce((s, i) => s + i.revisedBudget, 0),
-    variance: items.reduce((s, i) => s + i.variance, 0),
-  }));
-}
-const panelByCategory = computePanelGroups(item => item.rangeLabel);
-const panelByEstimate = computePanelGroups(item => item.estimateGroup);
-const panelByLocation = computePanelGroups(item => item.location);
-const panelVarianceTotal = panelByCategory.reduce((s, g) => s + g.variance, 0);
+// V4 panel data + grouped variants are imported from ../v4PanelData (shared with ClientPortal).
 
 // ─── Slice 4 · v5 — JCB-correct customer-payable cost variance ───
 // All inputs come from JCB_ROWS in jcbMockData.ts so JPS and JobCostingBudget
@@ -477,6 +267,8 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
   const defaultSort: SortState = { column: 'date', direction: 'asc' };
   // Each table is keyed by gridId so sorting one doesn't disturb the others.
   const [sortByGrid, setSortByGrid] = useState<Record<string, SortState>>({});
+  // Slice 1 Selections section view toggle — 'groups' = pre/post-contract collapsible groups, 'grid' = combined flat grid
+  const [selectionsView, setSelectionsView] = useState<'groups' | 'grid'>('groups');
   const getSort = (gridId: string): SortState => sortByGrid[gridId] ?? defaultSort;
 
   // Click a header → if same column, flip direction; otherwise make it active in asc, scoped to gridId.
@@ -1177,13 +969,72 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
               const preApproved = preContractSelections.filter(s => s.status === 'approved');
               const postApproved = postContractSelections.filter(s => s.status === 'approved');
               if (preApproved.length === 0 && postApproved.length === 0) return null;
+              const standaloneApproved = [...preApproved, ...postApproved];
+              const addedToContractAmount = standaloneApproved.reduce((s, i) => s + withTax(i.impact), 0);
+              // Price column shows a value only for items without a contract impact (pre-contract); post-contract rows show "—" in Price.
+              const totalPriceAmount = standaloneApproved
+                .filter(i => i.impact === 0)
+                .reduce((s, i) => s + withTax(i.price), 0);
               return (
                 <div className="jps-breakdown-section">
                   <div className="jps-section-header">
                     <BdsText as="h2" size="heavy-lg" className="jps-section-title">Selections</BdsText>
+                    <div className="jps-selections-subtabs">
+                      <button
+                        className={selectionsView === 'groups' ? 'jps-selections-subtab-active' : ''}
+                        onClick={() => setSelectionsView('groups')}
+                      >
+                        Pre / Post groups
+                      </button>
+                      <button
+                        className={selectionsView === 'grid' ? 'jps-selections-subtab-active' : ''}
+                        onClick={() => setSelectionsView('grid')}
+                      >
+                        Combined grid
+                      </button>
+                    </div>
                   </div>
 
-                  {postApproved.length > 0 && (
+                  {selectionsView === 'grid' && (
+                    <div className="jps-table">
+                      <div className="jps-table-header jps-table-sel-standalone">
+                        {sortableHeader('s1-std', 'title', 'Title', 'jps-col-title')}
+                        {sortableHeader('s1-std', 'date', 'Date', 'jps-col-date')}
+                        {sortableHeader('s1-std', 'price', 'Price (incl. tax)', 'jps-col-price')}
+                        {sortableHeader('s1-std', 'impact', 'Contract impact', 'jps-col-impact')}
+                      </div>
+                      {sortItems('s1-std', standaloneApproved).map((item, i) => (
+                        <div key={i} className="jps-table-row jps-table-sel-standalone">
+                          <div className="jps-col-title">
+                            <div><span className="jps-item-name" onClick={() => onOpenSelection?.({ name: item.name, category: item.category, price: item.price, allowanceName: item.allowanceName, status: item.status })}>{item.name}</span></div>
+                          </div>
+                          <div className="jps-col-date">{item.date || '—'}</div>
+                          <div className="jps-col-price">
+                            {item.impact !== 0
+                              ? <span className="jps-impact-neutral">—</span>
+                              : fmt(withTax(item.price))}
+                          </div>
+                          <div className="jps-col-impact">
+                            {item.impact !== 0
+                              ? <span className="jps-impact-up">{fmtSigned(withTax(item.impact))}</span>
+                              : <span className="jps-impact-neutral">—</span>}
+                          </div>
+                        </div>
+                      ))}
+                      <div className="jps-table-row jps-table-sel-standalone jps-row-total">
+                        <div className="jps-col-title">Total</div>
+                        <div className="jps-col-date"></div>
+                        <div className="jps-col-price">{fmt(totalPriceAmount)}</div>
+                        <div className="jps-col-impact">
+                          {addedToContractAmount > 0
+                            ? <span className="jps-impact-up">{fmtSigned(addedToContractAmount)}</span>
+                            : <span className="jps-impact-neutral">—</span>}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {selectionsView === 'groups' && postApproved.length > 0 && (
                     <div className="jps-cat-group">
                       <button className={`jps-cat-header ${expandedGroups['__s1-post-contract__'] ? 'jps-cat-header-open' : ''}`} onClick={() => toggleGroup('__s1-post-contract__')}>
                         <div className="jps-cat-header-left">
@@ -1225,13 +1076,12 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                     </div>
                   )}
 
-                  {preApproved.length > 0 && (
+                  {selectionsView === 'groups' && preApproved.length > 0 && (
                     <div className="jps-cat-group">
                       <button className={`jps-cat-header ${expandedGroups['__s1-pre-contract__'] ? 'jps-cat-header-open' : ''}`} onClick={() => toggleGroup('__s1-pre-contract__')}>
                         <div className="jps-cat-header-left">
                           <BdsIcon name={expandedGroups['__s1-pre-contract__'] ? 'chevron-down' : 'chevron-right'} size={16} />
                           <span className="jps-cat-name">Pre-contract</span>
-                          <span className="jps-cat-count">{preApproved.length} {preApproved.length === 1 ? 'item' : 'items'}</span>
                         </div>
                         <div className="jps-cat-header-right">
                           <span className="jps-cat-impact jps-impact-neutral">Included in original price</span>

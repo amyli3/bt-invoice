@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { BdsActionBar, BdsIcon } from '../bds';
+import { panelByCategory, panelVarianceTotal, fmtSignedUsd } from '../v4PanelData';
 
 // Rebar and concrete work - worker installing rebar
 const imgSiteWork1 = 'https://www.fandr.com/wp-content/uploads/2025/07/Placement-and-Inspection-of-Rebar-CRSI.jpg';
@@ -148,20 +150,20 @@ export function ClientTopNav({ onNavigate }: { onNavigate?: (page: string) => vo
 }
 
 export default function ClientPortal({ onNavigate }: { onNavigate?: (page: string) => void }) {
-  // Project financials experimentation — companion to the JPS "Openbook" slice.
-  // v1 = today's fixed-price-style baseline; v2-v4 explore open book breakdowns.
-  const [clientFinVersion, setClientFinVersion] = useState<'v1' | 'v2' | 'v3' | 'v4'>('v1');
   const [finDrillOpen, setFinDrillOpen] = useState(false);
-  const [finExpandOpen, setFinExpandOpen] = useState(false);
+  // Collapse state for budget difference panel categories (mirrors JPS v4 toggle behavior — default open)
+  const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
+  const toggleCategory = (key: string) => setExpandedCategories(prev => ({ ...prev, [key]: prev[key] === false ? true : false }));
 
   // Mock financials — synced with JPS / Openbook so totals match across surfaces.
   // Allowance variances are intentionally NOT a separate contributor: + variances are already
   // captured inside selection impacts, and unused (− variance) allowance budget doesn't refund the client.
+  // Budget difference comes from the shared V4 panel data so the rollup and drill panel reconcile.
   const fin = {
     contractPrice: 568100,
     changeOrders: 21000,         // sum of approved COs in JPS
     selectionsApprovedImpact: 4470, // sum of approved selection impacts in JPS
-    billVariance: 1800,          // sum of cost-code variances in JPS Openbook
+    billVariance: panelVarianceTotal, // sum of cost-code variances from V4 panel (drill-through source)
     tax: 368.78,                 // approvedSelectionsTotal * 0.0825
     paymentsReceived: 405000,    // sum of payments in JPS
     creditMemos: 1500,           // credit memo entry in JPS
@@ -275,87 +277,43 @@ export default function ClientPortal({ onNavigate }: { onNavigate?: (page: strin
 
         {/* Main content */}
         <div className="cp-main">
-          {/* Project Financials — version-aware experimentation surface (Kendall's brief, May 2026) */}
+          {/* Project Financials — JPS openbook demo layout */}
           <BdsSection title="Project financials" slot={
             <BdsButton text="Job price summary" displayType="secondary" onClick={() => onNavigate?.('client-jps')} />
           }>
-            {/* Version pill selector */}
-            <div className="cp-fin-version-selector">
-              <span className="cp-fin-version-label">Try a version:</span>
-              {([
-                ['v1', 'v1 · Today (fixed-price)'],
-                ['v2', 'v2 · Open book always-on'],
-                ['v3', 'v3 · Drill-through panel'],
-                ['v4', 'v4 · Inline expandable'],
-              ] as const).map(([key, label]) => (
-                <button
-                  key={key}
-                  className={`cp-fin-version-pill ${clientFinVersion === key ? 'cp-fin-version-pill-on' : ''}`}
-                  onClick={() => { setClientFinVersion(key); setFinDrillOpen(false); setFinExpandOpen(false); }}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-
             <div className="cp-financials-grid">
-              {/* ── First card — varies by version ── */}
-              {clientFinVersion === 'v1' && (
-                <div className="cp-fin-card">
-                  <div className="cp-fin-row"><BdsText size="normal-md">Contract price</BdsText><span className="cp-dots" /><BdsText size="distinct-sm">{fmtUsd(fin.contractPrice)}</BdsText></div>
-                  <div className="cp-fin-row"><BdsText size="normal-md">Change orders</BdsText><span className="cp-dots" /><BdsText size="distinct-sm">{fmtUsd(fin.changeOrders)}</BdsText></div>
-                  <div className="cp-fin-row"><BdsText size="normal-md">Selections</BdsText><span className="cp-dots" /><BdsText size="distinct-sm">{fmtUsd(fin.selectionsApprovedImpact)}</BdsText></div>
-                  <div className="cp-fin-row cp-fin-total"><BdsText size="distinct-sm">Total cost</BdsText><span className="cp-dots" /><BdsText size="distinct-sm">{fmtUsd(fin.contractPrice + fin.changeOrders + fin.selectionsApprovedImpact)}</BdsText></div>
-                </div>
-              )}
-
-              {clientFinVersion === 'v2' && (
-                <div className="cp-fin-card">
-                  <div className="cp-fin-row"><BdsText size="normal-md">Contract price</BdsText><span className="cp-dots" /><BdsText size="distinct-sm">{fmtUsd(fin.contractPrice)}</BdsText></div>
-                  <div className="cp-fin-row cp-fin-row-parent"><BdsText size="normal-md">Approved changes</BdsText><span className="cp-dots" /><BdsText size="distinct-sm">{fmtUsd(approvedChanges)}</BdsText></div>
-                  <div className="cp-fin-row cp-fin-row-nested"><BdsText size="normal-sm">Change orders</BdsText><span className="cp-dots" /><BdsText size="normal-sm">{fmtUsd(fin.changeOrders)}</BdsText></div>
-                  <div className="cp-fin-row cp-fin-row-nested"><BdsText size="normal-sm">Selection changes</BdsText><span className="cp-dots" /><BdsText size="normal-sm">{fmtUsd(fin.selectionsApprovedImpact)}</BdsText></div>
-                  <div className="cp-fin-row cp-fin-row-nested"><BdsText size="normal-sm">Bills</BdsText><span className="cp-dots" /><BdsText size="normal-sm">{fmtUsd(fin.billVariance)}</BdsText></div>
-                  <div className="cp-fin-row"><BdsText size="normal-md">Tax</BdsText><span className="cp-dots" /><BdsText size="distinct-sm">{fmtUsd(fin.tax)}</BdsText></div>
-                  <div className="cp-fin-row cp-fin-total"><BdsText size="distinct-sm">Current price</BdsText><span className="cp-dots" /><BdsText size="distinct-sm">{fmtUsd(currentPrice)}</BdsText></div>
-                </div>
-              )}
-
-              {clientFinVersion === 'v3' && (
-                <div className="cp-fin-card">
-                  <div className="cp-fin-row"><BdsText size="normal-md">Contract price</BdsText><span className="cp-dots" /><BdsText size="distinct-sm">{fmtUsd(fin.contractPrice)}</BdsText></div>
-                  <div className="cp-fin-row">
-                    <button type="button" className="cp-fin-link-label" onClick={() => setFinDrillOpen(true)}>Approved changes</button>
-                    <span className="cp-dots" />
-                    <BdsText size="distinct-sm">{fmtUsd(approvedChanges)}</BdsText>
+              {/* Total price card — mirrors the JPS openbook demo (v4) */}
+              <div className="jps-pane cp-fin-jps-pane">
+                <div className="jps-pane-label">Total price</div>
+                <div className="jps-pane-big" style={{ marginTop: 4 }}>{fmtUsd(currentPrice)}</div>
+                <div className="jps-pane-breakdown" style={{ marginTop: 16 }}>
+                  <div className="jps-breakdown-line">
+                    <span>Original client price</span>
+                    <span>{fmtUsd(fin.contractPrice)}</span>
                   </div>
-                  <div className="cp-fin-row"><BdsText size="normal-md">Tax</BdsText><span className="cp-dots" /><BdsText size="distinct-sm">{fmtUsd(fin.tax)}</BdsText></div>
-                  <div className="cp-fin-row cp-fin-total"><BdsText size="distinct-sm">Current price</BdsText><span className="cp-dots" /><BdsText size="distinct-sm">{fmtUsd(currentPrice)}</BdsText></div>
+                  <div className="jps-breakdown-line jps-breakdown-parent">
+                    <span>Approved changes</span>
+                    <span>{fmtUsd(approvedChanges)}</span>
+                  </div>
+                  <div className="jps-breakdown-line jps-breakdown-nested">
+                    <span>Change orders</span>
+                    <span>{fmtUsd(fin.changeOrders)}</span>
+                  </div>
+                  <div className="jps-breakdown-line jps-breakdown-nested">
+                    <span>Selection and allowance change</span>
+                    <span>{fmtUsd(fin.selectionsApprovedImpact)}</span>
+                  </div>
+                  <div className="jps-breakdown-line jps-breakdown-nested">
+                    <button type="button" className="cp-fin-link-label" onClick={() => setFinDrillOpen(true)}>Budget difference</button>
+                    <span className={fin.billVariance >= 0 ? 'cp-fin-budget-up' : 'cp-fin-budget-down'}>{fmtSignedUsd(fin.billVariance)}</span>
+                  </div>
+                  <div className="jps-breakdown-line">
+                    <span>Tax</span>
+                    <span>{fmtUsd(fin.tax)}</span>
+                  </div>
                 </div>
-              )}
+              </div>
 
-              {clientFinVersion === 'v4' && (
-                <div className="cp-fin-card">
-                  <div className="cp-fin-row"><BdsText size="normal-md">Contract price</BdsText><span className="cp-dots" /><BdsText size="distinct-sm">{fmtUsd(fin.contractPrice)}</BdsText></div>
-                  <button type="button" className={`cp-fin-row cp-fin-row-toggle ${finExpandOpen ? 'cp-fin-row-toggle-open' : ''}`} onClick={() => setFinExpandOpen(o => !o)}>
-                    <span className="cp-fin-row-toggle-label">
-                      <BdsText size="normal-md">Approved changes</BdsText>
-                      <span className={`cp-fin-row-chevron ${finExpandOpen ? 'cp-fin-row-chevron-open' : ''}`}>›</span>
-                    </span>
-                    <span className="cp-dots" />
-                    <BdsText size="distinct-sm">{fmtUsd(approvedChanges)}</BdsText>
-                  </button>
-                  {finExpandOpen && (
-                    <>
-                      <div className="cp-fin-row cp-fin-row-nested"><BdsText size="normal-sm">Change orders</BdsText><span className="cp-dots" /><BdsText size="normal-sm">{fmtUsd(fin.changeOrders)}</BdsText></div>
-                      <div className="cp-fin-row cp-fin-row-nested"><BdsText size="normal-sm">Selection changes</BdsText><span className="cp-dots" /><BdsText size="normal-sm">{fmtUsd(fin.selectionsApprovedImpact)}</BdsText></div>
-                      <div className="cp-fin-row cp-fin-row-nested"><BdsText size="normal-sm">Bills</BdsText><span className="cp-dots" /><BdsText size="normal-sm">{fmtUsd(fin.billVariance)}</BdsText></div>
-                    </>
-                  )}
-                  <div className="cp-fin-row"><BdsText size="normal-md">Tax</BdsText><span className="cp-dots" /><BdsText size="distinct-sm">{fmtUsd(fin.tax)}</BdsText></div>
-                  <div className="cp-fin-row cp-fin-total"><BdsText size="distinct-sm">Current price</BdsText><span className="cp-dots" /><BdsText size="distinct-sm">{fmtUsd(currentPrice)}</BdsText></div>
-                </div>
-              )}
 
               {/* Total paid / remaining card — synced with JPS payments + credits */}
               <div className="cp-fin-card cp-fin-stacked">
@@ -380,46 +338,63 @@ export default function ClientPortal({ onNavigate }: { onNavigate?: (page: strin
             </div>
           </BdsSection>
 
-          {/* v3 drill-through side panel */}
-          {clientFinVersion === 'v3' && finDrillOpen && (
-            <div className="cp-fin-panel-scrim" onClick={() => setFinDrillOpen(false)}>
-              <div className="cp-fin-panel" onClick={(e) => e.stopPropagation()}>
-                <div className="cp-fin-panel-header">
-                  <BdsText size="distinct-md">Approved changes detail</BdsText>
-                  <button type="button" className="cp-fin-panel-close" aria-label="Close" onClick={() => setFinDrillOpen(false)}>×</button>
+          {/* Budget difference drill-through — exact replica of JPS v4 cost-category side panel */}
+          {finDrillOpen && (
+            <div className="jps-s4-side-panel-scrim" onClick={() => setFinDrillOpen(false)}>
+              <aside className="jps-s4-side-panel" onClick={(e) => e.stopPropagation()}>
+                <BdsActionBar align="space-between" className="jps-s4-modal-bar">
+                  <div className="jps-s4-side-panel-titleblock">
+                    <BdsText size="heavy-lg">Budget difference</BdsText>
+                  </div>
+                  <button type="button" className="cp-fin-panel-close" aria-label="Close" onClick={() => setFinDrillOpen(false)}>
+                    <BdsIcon name="x" size={14} />
+                  </button>
+                </BdsActionBar>
+
+                <div className="jps-s4-side-panel-body">
+                  <div className="jps-s4-side-panel-note">
+                    Each cost category shows revised − original budget cost. This doesn't include approved Change Orders or Selection and allowance changes.
+                  </div>
+
+                  {panelByCategory.map((group) => {
+                    const key = `cp-budget-${group.category}`;
+                    const expanded = expandedCategories[key] !== false;
+                    return (
+                      <div key={group.category} className="jps-s4-category-block">
+                        <button
+                          type="button"
+                          className={`jps-s4-category-header jps-s4-category-header-toggle ${!expanded ? 'jps-s4-category-header-toggle-collapsed' : ''}`}
+                          onClick={() => toggleCategory(key)}
+                        >
+                          <div className="jps-s4-category-header-row">
+                            <div className="jps-s4-category-name">
+                              <BdsIcon name={expanded ? 'chevron-down' : 'chevron-right'} size={12} />
+                              <span>{group.category}</span>
+                            </div>
+                            {group.variance !== 0 && (
+                              <span className={group.variance >= 0 ? 'jps-s4-category-revision' : 'jps-impact-down'}>{fmtSignedUsd(group.variance)}</span>
+                            )}
+                          </div>
+                        </button>
+                        {expanded && group.items.map((item) => (
+                          <div key={item.code} className="jps-s4-modal-line">
+                            <span className="jps-s4-modal-line-name">
+                              <span className="jps-s4-cost-code-num">{item.code}</span>
+                              <span>{item.name}</span>
+                            </span>
+                            <span className="jps-s4-modal-line-amt">{fmtSignedUsd(item.variance)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })}
+
+                  <div className="jps-s4-side-panel-summary jps-s4-side-panel-summary-bottom">
+                    <span>Budget difference</span>
+                    <span className={panelVarianceTotal >= 0 ? 'jps-impact-up' : 'jps-impact-down'}>{fmtSignedUsd(panelVarianceTotal)}</span>
+                  </div>
                 </div>
-                <div className="cp-fin-panel-body">
-                  <div className="cp-fin-panel-section">
-                    <div className="cp-fin-panel-section-header">
-                      <BdsText size="distinct-sm">Change orders</BdsText>
-                      <BdsText size="distinct-sm">{fmtUsd(fin.changeOrders)}</BdsText>
-                    </div>
-                    <div className="cp-fin-panel-line"><span>Add covered patio</span><span>{fmtUsd(4200)}</span></div>
-                    <div className="cp-fin-panel-line"><span>Upgrade electrical panel</span><span>{fmtUsd(1800)}</span></div>
-                    <div className="cp-fin-panel-line"><span>Add screened porch</span><span>{fmtUsd(15000)}</span></div>
-                  </div>
-                  <div className="cp-fin-panel-section">
-                    <div className="cp-fin-panel-section-header">
-                      <BdsText size="distinct-sm">Selection changes</BdsText>
-                      <BdsText size="distinct-sm">{fmtUsd(fin.selectionsApprovedImpact)}</BdsText>
-                    </div>
-                    <div className="cp-fin-panel-line"><span>Recessed lighting package</span><span>{fmtUsd(1800)}</span></div>
-                    <div className="cp-fin-panel-line"><span>Exterior soffit lighting</span><span>{fmtUsd(950)}</span></div>
-                    <div className="cp-fin-panel-line"><span>Smart thermostat</span><span>{fmtUsd(420)}</span></div>
-                    <div className="cp-fin-panel-line"><span>Lighting allowance overages</span><span>{fmtUsd(1300)}</span></div>
-                  </div>
-                  <div className="cp-fin-panel-section">
-                    <div className="cp-fin-panel-section-header">
-                      <BdsText size="distinct-sm">Bills</BdsText>
-                      <BdsText size="distinct-sm">{fmtUsd(fin.billVariance)}</BdsText>
-                    </div>
-                    <div className="cp-fin-panel-line"><span>Framing · spent $26,500 of $25,000</span><span>{fmtUsd(1500)}</span></div>
-                    <div className="cp-fin-panel-line"><span>Plumbing rough-in · spent $11,200 of $12,000</span><span>{fmtUsd(-800)}</span></div>
-                    <div className="cp-fin-panel-line"><span>Electrical rough-in · spent $19,600 of $18,000</span><span>{fmtUsd(1600)}</span></div>
-                    <div className="cp-fin-panel-line"><span>HVAC · spent $14,500 of $15,000</span><span>{fmtUsd(-500)}</span></div>
-                  </div>
-                </div>
-              </div>
+              </aside>
             </div>
           )}
 
