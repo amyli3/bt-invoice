@@ -6,7 +6,6 @@ import {
   panelByCategory,
   panelByLocation,
   panelVarianceTotal,
-  type ActivityKind,
 } from '../v4PanelData';
 
 /* ── Mock Data ── */
@@ -224,23 +223,6 @@ const postContractSelections = allSelections.filter(s => !s.allowanceName && s.t
 const fmt = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 });
 const fmtSigned = (n: number) => (n > 0 ? '+' : '') + fmt(n);
 
-// Small inline icons for each activity entity type. Stroked, 24-viewBox,
-// follow the BdsIcon visual style. Scoped to JPS — not added to BDS itself.
-function ActivityIcon({ kind, size = 12 }: { kind: ActivityKind; size?: number }) {
-  const paths: Record<ActivityKind, React.ReactNode> = {
-    'Bill': <><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" /></>,
-    'PO': <><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" /><rect x="8" y="2" width="8" height="4" rx="1" /><line x1="9" y1="12" x2="15" y2="12" /><line x1="9" y1="16" x2="15" y2="16" /></>,
-    'Time clock': <><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></>,
-    'Receipt': <><path d="M5 2v20l2-1.5 2 1.5 2-1.5 2 1.5 2-1.5 2 1.5 2-1.5 2 1.5V2" /><line x1="8" y1="8" x2="16" y2="8" /><line x1="8" y1="12" x2="14" y2="12" /></>,
-    'Cost adjustment': <><line x1="4" y1="21" x2="4" y2="14" /><line x1="4" y1="10" x2="4" y2="3" /><line x1="12" y1="21" x2="12" y2="12" /><line x1="12" y1="8" x2="12" y2="3" /><line x1="20" y1="21" x2="20" y2="16" /><line x1="20" y1="12" x2="20" y2="3" /><line x1="1" y1="14" x2="7" y2="14" /><line x1="9" y1="8" x2="15" y2="8" /><line x1="17" y1="16" x2="23" y2="16" /></>,
-  };
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ verticalAlign: 'middle' }}>
-      {paths[kind]}
-    </svg>
-  );
-}
-
 /* ── Component ── */
 
 export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection, onBack }: { jobOpen?: boolean; onToggleJob?: () => void; onOpenSelection?: (sel: { name: string; category: string; price: number; allowanceName?: string; status: string }) => void; onBack?: () => void; onOpenJCB?: () => void }) {
@@ -250,7 +232,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
   // v1 inline expandable, v2 always-on list, v3 drill-through, v4 grouped sections,
   // v5 visual contribution bar — iteration of v2 that swaps three nested rows for a stacked
   // bar + decision callout (Sarah review, May 2026).
-  const [slice4Version, setSlice4Version] = useState<'v1' | 'v2' | 'v3' | 'v4' | 'v41' | 'v45'>('v1');
+  const [slice4Version, setSlice4Version] = useState<'v1' | 'v2' | 'v3' | 'v4' | 'v41' | 'v45' | 'v5'>('v1');
   const panelGroupBy: 'category' | 'category1' | 'estimate' =
     slice4Version === 'v41' ? 'category1'
     : slice4Version === 'v45' ? 'estimate'
