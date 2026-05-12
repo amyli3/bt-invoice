@@ -233,10 +233,6 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
   // v5 visual contribution bar — iteration of v2 that swaps three nested rows for a stacked
   // bar + decision callout (Sarah review, May 2026).
   const [slice4Version, setSlice4Version] = useState<'v1' | 'v2' | 'v3' | 'v4' | 'v41' | 'v45' | 'v5'>('v1');
-  const panelGroupBy: 'category' | 'category1' | 'estimate' =
-    slice4Version === 'v41' ? 'category1'
-    : slice4Version === 'v45' ? 'estimate'
-    : 'category';
   const [slice4DrillOpen, setSlice4DrillOpen] = useState(false);
   const [showPrint, setShowPrint] = useState(false);
   const [printOptions, setPrintOptions] = useState({
@@ -249,8 +245,6 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
   const defaultSort: SortState = { column: 'date', direction: 'asc' };
   // Each table is keyed by gridId so sorting one doesn't disturb the others.
   const [sortByGrid, setSortByGrid] = useState<Record<string, SortState>>({});
-  // Slice 1 Selections section view toggle — 'groups' = pre/post-contract collapsible groups, 'grid' = combined flat grid
-  const [selectionsView, setSelectionsView] = useState<'groups' | 'grid'>('groups');
   const getSort = (gridId: string): SortState => sortByGrid[gridId] ?? defaultSort;
 
   // Click a header → if same column, flip direction; otherwise make it active in asc, scoped to gridId.
@@ -327,6 +321,90 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
 
   const toggleGroup = (name: string) => setExpandedGroups(prev => ({ ...prev, [name]: !prev[name] }));
 
+  // Combined standalone selections grid — single rendering used across all slices.
+  // Merges "— price update" rows into their base (e.g., the toilet scenario) and shows
+  // Title / Date / Original price / Revised price / Contract impact + a column-total row.
+  const renderCombinedSelectionsGrid = (items: SelectionItem[]) => {
+    if (items.length === 0) return null;
+    const updateByBase = new Map<string, SelectionItem>();
+    for (const s of items) {
+      if (s.name.endsWith(' — price update')) {
+        updateByBase.set(s.name.replace(' — price update', ''), s);
+      }
+    }
+    const mergedRows = items
+      .filter(s => !s.name.endsWith(' — price update'))
+      .map(s => {
+        const update = updateByBase.get(s.name);
+        if (update) {
+          return {
+            ...s,
+            originalPrice: s.price,
+            revisedPrice: s.price + update.price,
+            contractImpact: update.impact,
+            date: update.date || s.date,
+          };
+        }
+        const isPostContract = s.timing === 'post-contract';
+        return {
+          ...s,
+          originalPrice: isPostContract ? 0 : s.price,
+          revisedPrice: s.price,
+          contractImpact: s.impact,
+        };
+      });
+    const approvedRows = mergedRows.filter(r => r.status === 'approved');
+    const pendingRows = mergedRows.filter(r => r.status === 'pending');
+    const orderedRows = [...approvedRows, ...pendingRows];
+    const totalOriginal = mergedRows.reduce((sum, r) => sum + withTax(r.originalPrice), 0);
+    const totalRevised = mergedRows.reduce((sum, r) => sum + withTax(r.revisedPrice), 0);
+    const totalImpact = mergedRows.reduce((sum, r) => sum + withTax(r.contractImpact), 0);
+    return (
+      <div className="jps-table">
+        <div className="jps-table-header jps-table-sel-standalone">
+          <div className="jps-col-title">Title</div>
+          <div className="jps-col-date">Date</div>
+          <div className="jps-col-price-orig">Original price</div>
+          <div className="jps-col-price-revised">Revised price</div>
+          <div className="jps-col-impact">Contract impact</div>
+        </div>
+        {orderedRows.map((item, i) => (
+          <div key={i} className={`jps-table-row jps-table-sel-standalone${item.status === 'pending' ? ' jps-row-pending' : ''}`}>
+            <div className="jps-col-title">
+              <div>
+                <span className="jps-item-name" onClick={() => onOpenSelection?.({ name: item.name, category: item.category, price: item.price, allowanceName: item.allowanceName, status: item.status })}>{item.name}</span>
+                {item.status === 'pending' && <BdsBadge text="Pending" displayType="warning" />}
+              </div>
+            </div>
+            <div className="jps-col-date">{item.date || '—'}</div>
+            <div className="jps-col-price-orig">
+              {item.originalPrice > 0
+                ? fmt(withTax(item.originalPrice))
+                : <span className="jps-impact-neutral">—</span>}
+            </div>
+            <div className="jps-col-price-revised">{fmt(withTax(item.revisedPrice))}</div>
+            <div className="jps-col-impact">
+              {item.contractImpact !== 0
+                ? <span className="jps-impact-up">{fmtSigned(withTax(item.contractImpact))}</span>
+                : <span className="jps-impact-neutral">—</span>}
+            </div>
+          </div>
+        ))}
+        <div className="jps-table-row jps-table-sel-standalone jps-row-total">
+          <div className="jps-col-title">Total</div>
+          <div className="jps-col-date"></div>
+          <div className="jps-col-price-orig">{fmt(totalOriginal)}</div>
+          <div className="jps-col-price-revised">{fmt(totalRevised)}</div>
+          <div className="jps-col-impact">
+            {totalImpact > 0
+              ? <span className="jps-impact-up">{fmtSigned(totalImpact)}</span>
+              : <span className="jps-impact-neutral">—</span>}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   // Keys the "expand/collapse all" button controls — allowances, selections, pending pills, and Slice 4 bills
   const allExpandKeys = [
     ...allowanceNames,
@@ -357,8 +435,6 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
     const approvedPostContract = allSelections.filter(s => s.status === 'approved' && !s.allowanceName && s.timing === 'post-contract');
     const approvedPreContract = allSelections.filter(s => s.status === 'approved' && !s.allowanceName && s.timing === 'pre-contract');
     const approvedChangeOrders = changeOrders.filter(c => c.status === 'approved');
-    const approvedPostContractSum = approvedPostContract.reduce((s, i) => s + i.price, 0);
-    const approvedPreContractSum = approvedPreContract.reduce((s, i) => s + i.price, 0);
     const approvedChangeOrdersTotal = approvedChangeOrders.reduce((s, c) => s + c.price, 0);
 
     // Slice 2 + 3 include pending items; Slice 3 also surfaces per-item location inside allowances.
@@ -501,67 +577,75 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
             );
           })()}
 
-          {/* Post-contract approved selections */}
-          {approvedPostContract.length > 0 && (
-            <section className="jps-print-section">
-              <h3 className="jps-print-section-title">Post-contract selections</h3>
-              <table className="jps-print-table">
-                <thead>
-                  <tr>
-                    {printSortableHeader('print-post', 'title', 'Selection title')}
-                    {printSortableHeader('print-post', 'date', 'Date', 'jps-print-th-date')}
-                    {showLocations && <th>Location</th>}
-                    {printSortableHeader('print-post', 'price', 'Price', 'jps-print-th-right')}
-                  </tr>
-                </thead>
-                <tbody>
-                  {sortItems('print-post', approvedPostContract).map((s, i) => (
-                    <tr key={i}>
-                      <td>{s.name}</td>
-                      <td className="jps-print-td-date">{s.date || '—'}</td>
-                      {showLocations && <td>{s.location || '—'}</td>}
-                      <td className="jps-print-td-right">{fmt(s.price)}</td>
+          {/* Selections — combined approved (pre + post) using same merged row logic as the main page */}
+          {(() => {
+            const approvedAll = [...approvedPreContract, ...approvedPostContract];
+            if (approvedAll.length === 0) return null;
+            const updateByBase = new Map<string, SelectionItem>();
+            for (const s of approvedAll) {
+              if (s.name.endsWith(' — price update')) {
+                updateByBase.set(s.name.replace(' — price update', ''), s);
+              }
+            }
+            const rows = approvedAll
+              .filter(s => !s.name.endsWith(' — price update'))
+              .map(s => {
+                const update = updateByBase.get(s.name);
+                if (update) {
+                  return {
+                    name: s.name,
+                    date: update.date || s.date,
+                    originalPrice: s.price,
+                    revisedPrice: s.price + update.price,
+                    contractImpact: update.impact,
+                  };
+                }
+                const isPost = s.timing === 'post-contract';
+                return {
+                  name: s.name,
+                  date: s.date,
+                  originalPrice: isPost ? 0 : s.price,
+                  revisedPrice: s.price,
+                  contractImpact: s.impact,
+                };
+              });
+            const totalOriginal = rows.reduce((sum, r) => sum + withTax(r.originalPrice), 0);
+            const totalRevised = rows.reduce((sum, r) => sum + withTax(r.revisedPrice), 0);
+            const totalImpact = rows.reduce((sum, r) => sum + withTax(r.contractImpact), 0);
+            return (
+              <section className="jps-print-section">
+                <h3 className="jps-print-section-title">Selections</h3>
+                <table className="jps-print-table">
+                  <thead>
+                    <tr>
+                      <th>Title</th>
+                      <th className="jps-print-th-date">Date</th>
+                      <th className="jps-print-th-right">Original price</th>
+                      <th className="jps-print-th-right">Revised price</th>
+                      <th className="jps-print-th-right">Contract impact</th>
                     </tr>
-                  ))}
-                  <tr className="jps-print-total-row">
-                    <td colSpan={showLocations ? 3 : 2}><strong>Total</strong></td>
-                    <td className="jps-print-td-right"><strong>{fmt(approvedPostContractSum)}</strong></td>
-                  </tr>
-                </tbody>
-              </table>
-            </section>
-          )}
-
-          {/* Pre-contract selections — included in original price, informational */}
-          {approvedPreContract.length > 0 && (
-            <section className="jps-print-section">
-              <h3 className="jps-print-section-title">Pre-contract selections <span className="jps-print-section-hint">(included in original price)</span></h3>
-              <table className="jps-print-table">
-                <thead>
-                  <tr>
-                    {printSortableHeader('print-pre', 'title', 'Selection title')}
-                    {printSortableHeader('print-pre', 'date', 'Date', 'jps-print-th-date')}
-                    {showLocations && <th>Location</th>}
-                    {printSortableHeader('print-pre', 'price', 'Price', 'jps-print-th-right')}
-                  </tr>
-                </thead>
-                <tbody>
-                  {sortItems('print-pre', approvedPreContract).map((s, i) => (
-                    <tr key={i}>
-                      <td>{s.name}</td>
-                      <td className="jps-print-td-date">{s.date || '—'}</td>
-                      {showLocations && <td>{s.location || '—'}</td>}
-                      <td className="jps-print-td-right">{fmt(s.price)}</td>
+                  </thead>
+                  <tbody>
+                    {rows.map((r, i) => (
+                      <tr key={i}>
+                        <td>{r.name}</td>
+                        <td className="jps-print-td-date">{r.date || '—'}</td>
+                        <td className="jps-print-td-right">{r.originalPrice === 0 ? '—' : fmt(withTax(r.originalPrice))}</td>
+                        <td className="jps-print-td-right">{fmt(withTax(r.revisedPrice))}</td>
+                        <td className="jps-print-td-right">{r.contractImpact === 0 ? fmt(0) : fmtSigned(withTax(r.contractImpact))}</td>
+                      </tr>
+                    ))}
+                    <tr className="jps-print-total-row">
+                      <td colSpan={2}><strong>Total</strong></td>
+                      <td className="jps-print-td-right"><strong>{fmt(totalOriginal)}</strong></td>
+                      <td className="jps-print-td-right"><strong>{fmt(totalRevised)}</strong></td>
+                      <td className="jps-print-td-right"><strong>{fmtSigned(totalImpact)}</strong></td>
                     </tr>
-                  ))}
-                  <tr className="jps-print-total-row">
-                    <td colSpan={showLocations ? 3 : 2}><strong>Total</strong></td>
-                    <td className="jps-print-td-right"><strong>{fmt(approvedPreContractSum)}</strong></td>
-                  </tr>
-                </tbody>
-              </table>
-            </section>
-          )}
+                  </tbody>
+                </table>
+              </section>
+            );
+          })()}
 
           {/* Pending selections — Slice 2 + 3 only */}
           {includePending && (pendingSelections.length > 0 || pendingAllowanceItems.length > 0) && (
@@ -650,6 +734,33 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
             </section>
           )}
 
+          {/* Budget difference — openbook (slice4/slice5) only */}
+          {(activeSlice === 'slice4' || activeSlice === 'slice5') && (
+            <section className="jps-print-section">
+              <h3 className="jps-print-section-title">Budget difference</h3>
+              <table className="jps-print-table">
+                <thead>
+                  <tr>
+                    <th>Cost category</th>
+                    <th className="jps-print-th-right">Budget difference</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {panelByCategory.map((group, i) => (
+                    <tr key={i}>
+                      <td>{group.category}</td>
+                      <td className="jps-print-td-right">{fmtSigned(group.variance)}</td>
+                    </tr>
+                  ))}
+                  <tr className="jps-print-total-row">
+                    <td><strong>Total</strong></td>
+                    <td className="jps-print-td-right"><strong>{fmtSigned(panelVarianceTotal)}</strong></td>
+                  </tr>
+                </tbody>
+              </table>
+            </section>
+          )}
+
           {/* Payments table */}
           {printOptions.payments && payments.length > 0 && (
             <section className="jps-print-section">
@@ -694,10 +805,10 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
               <div className="jps-print-totals-line jps-print-totals-heading"><span>Revised price total</span><strong>{fmt(revisedPricePrint)}</strong></div>
               <div className="jps-print-totals-line jps-print-totals-nested"><span>Original price total</span><span>{fmt(originalContractPrice)}</span></div>
               <div className="jps-print-totals-line jps-print-totals-nested"><span>Approved changes</span><span>{fmt(approvedChangesPrint)}</span></div>
-              <div className="jps-print-totals-line jps-print-totals-nested-2"><span>Change orders</span><span>{fmt(changeOrdersTotal)}</span></div>
               <div className="jps-print-totals-line jps-print-totals-nested-2"><span>Selection and allowance changes</span><span>{fmt(approvedSelectionsTotal)}</span></div>
+              <div className="jps-print-totals-line jps-print-totals-nested-2"><span>Change orders</span><span>{fmt(changeOrdersTotal)}</span></div>
               {isOpenbook && (
-                <div className="jps-print-totals-line jps-print-totals-nested-2"><span>Bills</span><span>{fmt(billVarianceTotal)}</span></div>
+                <div className="jps-print-totals-line jps-print-totals-nested-2"><span>Budget difference</span><span>{fmt(billVarianceTotal)}</span></div>
               )}
               <div className="jps-print-totals-line jps-print-totals-nested"><span>Tax</span><span>{fmt(totalTax)}</span></div>
             </div>
@@ -762,13 +873,17 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
           <BdsTabs
             ariaLabel="Slice view"
             activeKey={activeSlice}
-            onChange={(k) => setActiveSlice(k as 'slice1' | 'slice2' | 'slice3' | 'slice4' | 'slice5')}
+            onChange={(k) => {
+              const next = k as 'slice1' | 'slice2' | 'slice3' | 'slice4' | 'slice5';
+              setActiveSlice(next);
+              if (next === 'slice5') setSlice4Version('v41');
+            }}
             tabs={[
               { key: 'slice1', label: 'Slice 1' },
+              { key: 'slice5', label: 'Openbook (demo)' },
               { key: 'slice2', label: 'Slice 2' },
               { key: 'slice3', label: 'Slice 3' },
               { key: 'slice4', label: 'Openbook (WIP)' },
-              { key: 'slice5', label: 'Openbook (demo)' },
             ]}
           />
         </div>
@@ -791,11 +906,11 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                     <span>{fmt(changeOrdersTotal + approvedSelectionsTotal)}</span>
                   </div>
                   <div className="jps-breakdown-line jps-breakdown-nested">
-                    <span>Change Orders</span>
+                    <button type="button" className="jps-s4-scroll-link" onClick={() => document.getElementById('jps-sec-change-orders')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>Change Orders</button>
                     <span>{fmt(changeOrdersTotal)}</span>
                   </div>
                   <div className="jps-breakdown-line jps-breakdown-nested">
-                    <span>Selection and allowance changes</span>
+                    <button type="button" className="jps-s4-scroll-link" onClick={() => document.getElementById('jps-sec-allowances')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>Selection and allowance changes</button>
                     <span>{fmt(approvedSelectionsTotal)}</span>
                   </div>
                   <div className="jps-breakdown-line">
@@ -829,7 +944,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
             </div>
 
             {/* Allowances — approved only, grouped by allowance, no pending */}
-            <div className="jps-breakdown-section">
+            <div className="jps-breakdown-section" id="jps-sec-allowances">
               <div className="jps-section-header">
                 <BdsText as="h2" size="heavy-lg" className="jps-section-title">Allowances</BdsText>
               <BdsButton
@@ -946,152 +1061,17 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
               })}
             </div>
 
-            {/* Slice 1: Selections section — approved only, pre-contract + post-contract */}
+            {/* Slice 1: Selections section — approved standalone selections via combined grid */}
             {(() => {
               const preApproved = preContractSelections.filter(s => s.status === 'approved');
               const postApproved = postContractSelections.filter(s => s.status === 'approved');
               if (preApproved.length === 0 && postApproved.length === 0) return null;
-              const standaloneApproved = [...preApproved, ...postApproved];
-              const addedToContractAmount = standaloneApproved.reduce((s, i) => s + withTax(i.impact), 0);
-              // Price column shows a value only for items without a contract impact (pre-contract); post-contract rows show "—" in Price.
-              const totalPriceAmount = standaloneApproved
-                .filter(i => i.impact === 0)
-                .reduce((s, i) => s + withTax(i.price), 0);
               return (
                 <div className="jps-breakdown-section">
                   <div className="jps-section-header">
                     <BdsText as="h2" size="heavy-lg" className="jps-section-title">Selections</BdsText>
-                    <div className="jps-selections-subtabs">
-                      <button
-                        className={selectionsView === 'groups' ? 'jps-selections-subtab-active' : ''}
-                        onClick={() => setSelectionsView('groups')}
-                      >
-                        Pre / Post groups
-                      </button>
-                      <button
-                        className={selectionsView === 'grid' ? 'jps-selections-subtab-active' : ''}
-                        onClick={() => setSelectionsView('grid')}
-                      >
-                        Combined grid
-                      </button>
-                    </div>
                   </div>
-
-                  {selectionsView === 'grid' && (
-                    <div className="jps-table">
-                      <div className="jps-table-header jps-table-sel-standalone">
-                        {sortableHeader('s1-std', 'title', 'Title', 'jps-col-title')}
-                        {sortableHeader('s1-std', 'date', 'Date', 'jps-col-date')}
-                        {sortableHeader('s1-std', 'price', 'Price (incl. tax)', 'jps-col-price')}
-                        {sortableHeader('s1-std', 'impact', 'Contract impact', 'jps-col-impact')}
-                      </div>
-                      {sortItems('s1-std', standaloneApproved).map((item, i) => (
-                        <div key={i} className="jps-table-row jps-table-sel-standalone">
-                          <div className="jps-col-title">
-                            <div><span className="jps-item-name" onClick={() => onOpenSelection?.({ name: item.name, category: item.category, price: item.price, allowanceName: item.allowanceName, status: item.status })}>{item.name}</span></div>
-                          </div>
-                          <div className="jps-col-date">{item.date || '—'}</div>
-                          <div className="jps-col-price">
-                            {item.impact !== 0
-                              ? <span className="jps-impact-neutral">—</span>
-                              : fmt(withTax(item.price))}
-                          </div>
-                          <div className="jps-col-impact">
-                            {item.impact !== 0
-                              ? <span className="jps-impact-up">{fmtSigned(withTax(item.impact))}</span>
-                              : <span className="jps-impact-neutral">—</span>}
-                          </div>
-                        </div>
-                      ))}
-                      <div className="jps-table-row jps-table-sel-standalone jps-row-total">
-                        <div className="jps-col-title">Total</div>
-                        <div className="jps-col-date"></div>
-                        <div className="jps-col-price">{fmt(totalPriceAmount)}</div>
-                        <div className="jps-col-impact">
-                          {addedToContractAmount > 0
-                            ? <span className="jps-impact-up">{fmtSigned(addedToContractAmount)}</span>
-                            : <span className="jps-impact-neutral">—</span>}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {selectionsView === 'groups' && postApproved.length > 0 && (
-                    <div className="jps-cat-group">
-                      <button className={`jps-cat-header ${expandedGroups['__s1-post-contract__'] ? 'jps-cat-header-open' : ''}`} onClick={() => toggleGroup('__s1-post-contract__')}>
-                        <div className="jps-cat-header-left">
-                          <BdsIcon name={expandedGroups['__s1-post-contract__'] ? 'chevron-down' : 'chevron-right'} size={16} />
-                          <span className="jps-cat-name">Post-contract</span>
-                        </div>
-                        <div className="jps-cat-header-right">
-                          {(() => {
-                            const impact = postApproved.reduce((s, i) => s + i.impact, 0);
-                            return impact !== 0
-                              ? <span className={`jps-cat-impact ${impact > 0 ? 'jps-impact-up' : 'jps-impact-down'}`}>{fmtSigned(withTax(impact))} impact</span>
-                              : <span className="jps-cat-impact jps-impact-neutral">No impact</span>;
-                          })()}
-                        </div>
-                      </button>
-
-                      {expandedGroups['__s1-post-contract__'] && (
-                        <div className="jps-cat-body">
-                          <div className="jps-table">
-                            <div className="jps-table-header jps-table-post-std">
-                              {sortableHeader('s1-post', 'title', 'Title', 'jps-col-title')}
-                              {sortableHeader('s1-post', 'date', 'Date', 'jps-col-date')}
-                              {sortableHeader('s1-post', 'impact', 'Contract impact (incl. tax)', 'jps-col-impact')}
-                            </div>
-                            {sortItems('s1-post', postApproved).map((item, i) => (
-                              <div key={i} className="jps-table-row jps-table-post-std">
-                                <div className="jps-col-title">
-                                  <div><span className="jps-item-name" onClick={() => onOpenSelection?.({ name: item.name, category: item.category, price: item.price, allowanceName: item.allowanceName, status: item.status })}>{item.name}</span></div>
-                                </div>
-                                <div className="jps-col-date">{item.date || '—'}</div>
-                                <div className="jps-col-impact">
-                                  <span className={`${item.impact > 0 ? 'jps-impact-up' : 'jps-impact-down'}`}>{fmtSigned(withTax(item.impact))}</span>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {selectionsView === 'groups' && preApproved.length > 0 && (
-                    <div className="jps-cat-group">
-                      <button className={`jps-cat-header ${expandedGroups['__s1-pre-contract__'] ? 'jps-cat-header-open' : ''}`} onClick={() => toggleGroup('__s1-pre-contract__')}>
-                        <div className="jps-cat-header-left">
-                          <BdsIcon name={expandedGroups['__s1-pre-contract__'] ? 'chevron-down' : 'chevron-right'} size={16} />
-                          <span className="jps-cat-name">Pre-contract</span>
-                        </div>
-                        <div className="jps-cat-header-right">
-                          <span className="jps-cat-impact jps-impact-neutral">Included in original price</span>
-                        </div>
-                      </button>
-
-                      {expandedGroups['__s1-pre-contract__'] && (
-                        <div className="jps-cat-body">
-                          <div className="jps-table">
-                            <div className="jps-table-header jps-table-pre-std">
-                              {sortableHeader('s1-pre', 'title', 'Title', 'jps-col-title')}
-                              {sortableHeader('s1-pre', 'date', 'Date', 'jps-col-date')}
-                              {sortableHeader('s1-pre', 'price', 'Price (incl. tax)', 'jps-col-price')}
-                            </div>
-                            {sortItems('s1-pre', preApproved).map((item, i) => (
-                              <div key={i} className="jps-table-row jps-table-pre-std">
-                                <div className="jps-col-title">
-                                  <div><span className="jps-item-name" onClick={() => onOpenSelection?.({ name: item.name, category: item.category, price: item.price, allowanceName: item.allowanceName, status: item.status })}>{item.name}</span></div>
-                                </div>
-                                <div className="jps-col-date">{item.date || '—'}</div>
-                                <div className="jps-col-price">{fmt(withTax(item.price))}</div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
+                  {renderCombinedSelectionsGrid([...preApproved, ...postApproved])}
                 </div>
               );
             })()}
@@ -1101,7 +1081,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
               const coApproved = changeOrders.filter(c => c.status === 'approved');
               if (coApproved.length === 0) return null;
               return (
-                <div className="jps-breakdown-section">
+                <div className="jps-breakdown-section" id="jps-sec-change-orders">
                   <div className="jps-section-header">
                     <BdsText as="h2" size="heavy-lg" className="jps-section-title">Change Orders</BdsText>
                   </div>
@@ -1171,9 +1151,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
             {/* Summary cards — same 3-card row as Slice 2 */}
             <div className="jps-panes-row">
               <div className="jps-pane">
-                <div className="jps-pane-label jps-popover-wrap">
-                  <span className="jps-underline-hint">Total price</span>
-                </div>
+                <div className="jps-pane-label">Total price</div>
                 <div className="jps-pane-big" style={{ marginTop: 4 }}>{fmt(revisedClientPrice)}</div>
                 <div className="jps-pane-breakdown" style={{ marginTop: 16 }}>
                   <div className="jps-breakdown-line">
@@ -1185,11 +1163,11 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                     <span>{fmt(changeOrdersTotal + approvedSelectionsTotal)}</span>
                   </div>
                   <div className="jps-breakdown-line jps-breakdown-nested">
-                    <span>Change Orders</span>
+                    <button type="button" className="jps-s4-scroll-link" onClick={() => document.getElementById('jps-sec-change-orders')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>Change Orders</button>
                     <span>{fmt(changeOrdersTotal)}</span>
                   </div>
                   <div className="jps-breakdown-line jps-breakdown-nested">
-                    <span>Selection and allowance changes</span>
+                    <button type="button" className="jps-s4-scroll-link" onClick={() => document.getElementById('jps-sec-allowances')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>Selection and allowance changes</button>
                     <span>{fmt(approvedSelectionsTotal)}</span>
                   </div>
                   <div className="jps-breakdown-line">
@@ -1236,7 +1214,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
             </div>
 
             {/* Allowances — items sub-grouped by location when allowance spans multiple */}
-            <div className="jps-breakdown-section">
+            <div className="jps-breakdown-section" id="jps-sec-allowances">
               <div className="jps-section-header">
                 <BdsText as="h2" size="heavy-lg" className="jps-section-title">Allowances</BdsText>
               <BdsButton
@@ -1433,89 +1411,16 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
               })}
             </div>
 
-            {/* Selections section (same as Slice 2) */}
+            {/* Selections section — combined grid */}
             {(preContractSelections.length > 0 || postContractSelections.length > 0) && (
               <div className="jps-breakdown-section">
                 <div className="jps-section-header">
                   <BdsText as="h2" size="heavy-lg" className="jps-section-title">Selections</BdsText>
                 </div>
-
-                {postContractSelections.length > 0 && (() => {
-                  const postApproved = postContractSelections.filter(s => s.status === 'approved');
-                  return (
-                    <div className="jps-cat-group">
-                      <button className={`jps-cat-header ${expandedGroups['__s3-post-contract__'] ? 'jps-cat-header-open' : ''}`} onClick={() => toggleGroup('__s3-post-contract__')}>
-                        <div className="jps-cat-header-left">
-                          <BdsIcon name={expandedGroups['__s3-post-contract__'] ? 'chevron-down' : 'chevron-right'} size={16} />
-                          <span className="jps-cat-name">Post-contract</span>
-                        </div>
-                        <div className="jps-cat-header-right">
-                          {(() => {
-                            const impact = postApproved.reduce((s, i) => s + i.impact, 0);
-                            return impact !== 0
-                              ? <span className={`jps-cat-impact ${impact > 0 ? 'jps-impact-up' : 'jps-impact-down'}`}>{fmtSigned(impact)} impact</span>
-                              : <span className="jps-cat-impact jps-impact-neutral">No impact</span>;
-                          })()}
-                        </div>
-                      </button>
-                      {expandedGroups['__s3-post-contract__'] && (
-                        <div className="jps-cat-body">
-                          <div className="jps-table">
-                            <div className="jps-table-header jps-table-post-std">
-                              <div className="jps-col-title">Title</div>
-                              <div className="jps-col-impact">Contract impact</div>
-                            </div>
-                            {postApproved.map((item, i) => (
-                              <div key={i} className="jps-table-row jps-table-post-std">
-                                <div className="jps-col-title">
-                                  <div><span className="jps-item-name" onClick={() => onOpenSelection?.({ name: item.name, category: item.category, price: item.price, allowanceName: item.allowanceName, status: item.status })}>{item.name}</span></div>
-                                  {item.location && <span className="jps-item-parent">{item.location}</span>}
-                                </div>
-                                <div className="jps-col-impact">
-                                  <span className={`${item.impact > 0 ? 'jps-impact-up' : 'jps-impact-down'}`}>{fmtSigned(item.impact)}</span>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })()}
-
-                {preContractSelections.length > 0 && (
-                  <div className="jps-cat-group">
-                    <button className={`jps-cat-header ${expandedGroups['__s3-pre-contract__'] ? 'jps-cat-header-open' : ''}`} onClick={() => toggleGroup('__s3-pre-contract__')}>
-                      <div className="jps-cat-header-left">
-                        <BdsIcon name={expandedGroups['__s3-pre-contract__'] ? 'chevron-down' : 'chevron-right'} size={16} />
-                        <span className="jps-cat-name">Pre-contract</span>
-                        <span className="jps-cat-count">{preContractSelections.length} {preContractSelections.length === 1 ? 'item' : 'items'}</span>
-                      </div>
-                      <div className="jps-cat-header-right">
-                        <span className="jps-cat-impact jps-impact-neutral">Included in original price</span>
-                      </div>
-                    </button>
-                    {expandedGroups['__s3-pre-contract__'] && (
-                      <div className="jps-cat-body">
-                        <div className="jps-table">
-                          <div className="jps-table-header jps-table-pre-std">
-                            <div className="jps-col-title">Title</div>
-                            <div className="jps-col-price">Price</div>
-                          </div>
-                          {preContractSelections.map((item, i) => (
-                            <div key={i} className="jps-table-row jps-table-pre-std">
-                              <div className="jps-col-title">
-                                <div><span className="jps-item-name" onClick={() => onOpenSelection?.({ name: item.name, category: item.category, price: item.price, allowanceName: item.allowanceName, status: item.status })}>{item.name}</span></div>
-                                {item.location && <span className="jps-item-parent">{item.location}</span>}
-                              </div>
-                              <div className="jps-col-price">{fmt(item.price)}</div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
+                {renderCombinedSelectionsGrid([
+                  ...preContractSelections,
+                  ...postContractSelections.filter(s => s.status === 'approved'),
+                ])}
               </div>
             )}
 
@@ -1524,7 +1429,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
               const coApproved = changeOrders.filter(c => c.status === 'approved');
               const coPending = changeOrders.filter(c => c.status === 'pending');
               return (
-                <div className="jps-breakdown-section">
+                <div className="jps-breakdown-section" id="jps-sec-change-orders">
                   <div className="jps-section-header">
                     <BdsText as="h2" size="heavy-lg" className="jps-section-title">Change Orders</BdsText>
                   </div>
@@ -1647,11 +1552,11 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                 <span>{fmt(changeOrdersTotal + approvedSelectionsTotal)}</span>
               </div>
               <div className="jps-breakdown-line jps-breakdown-nested">
-                <span>Change Orders</span>
+                <button type="button" className="jps-s4-scroll-link" onClick={() => document.getElementById('jps-sec-change-orders')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>Change Orders</button>
                 <span>{fmt(changeOrdersTotal)}</span>
               </div>
               <div className="jps-breakdown-line jps-breakdown-nested">
-                <span>Selection and allowance changes</span>
+                <button type="button" className="jps-s4-scroll-link" onClick={() => document.getElementById('jps-sec-allowances')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>Selection and allowance changes</button>
                 <span>{fmt(approvedSelectionsTotal)}</span>
               </div>
               <div className="jps-breakdown-line">
@@ -1703,7 +1608,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
         </div>
 
         {/* ═══ Allowances ═══ */}
-        <div className="jps-breakdown-section">
+        <div className="jps-breakdown-section" id="jps-sec-allowances">
           <div className="jps-section-header">
             <BdsText as="h2" size="heavy-lg" className="jps-section-title">Allowances</BdsText>
               <BdsButton
@@ -1859,110 +1764,21 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
 
         </div>
 
-        {/* ═══ Selections ═══ */}
+        {/* ═══ Selections — combined grid ═══ */}
         {(preContractSelections.length > 0 || postContractSelections.length > 0) && (
           <div className="jps-breakdown-section">
             <div className="jps-section-header">
               <BdsText as="h2" size="heavy-lg" className="jps-section-title">Selections</BdsText>
             </div>
-
-            {/* Post-contract */}
-            {postContractSelections.length > 0 && (() => {
-              const postApproved = postContractSelections.filter(s => s.status === 'approved');
-              const postPending = postContractSelections.filter(s => s.status === 'pending');
-              return (
-              <div className="jps-cat-group">
-                <button className={`jps-cat-header ${expandedGroups['__post-contract__'] ? 'jps-cat-header-open' : ''}`} onClick={() => toggleGroup('__post-contract__')}>
-                  <div className="jps-cat-header-left">
-                    <BdsIcon name={expandedGroups['__post-contract__'] ? 'chevron-down' : 'chevron-right'} size={16} />
-                    <span className="jps-cat-name">Post-contract</span>
-                  </div>
-                  <div className="jps-cat-header-right">
-                    {(() => {
-                      const impact = postApproved.reduce((s, i) => s + i.impact, 0);
-                      return impact !== 0
-                        ? <span className={`jps-cat-impact ${impact > 0 ? 'jps-impact-up' : 'jps-impact-down'}`}>{fmtSigned(impact)} impact</span>
-                        : <span className="jps-cat-impact jps-impact-neutral">No impact</span>;
-                    })()}
-                  </div>
-                </button>
-
-                {expandedGroups['__post-contract__'] && (
-                  <div className="jps-cat-body">
-                    <div className="jps-table">
-                      <div className="jps-table-header jps-table-post-std">
-                        <div className="jps-col-title">Title</div>
-                        <div className="jps-col-impact">Contract impact</div>
-                      </div>
-
-                      {postApproved.map((item, i) => (
-                        <div key={i} className="jps-table-row jps-table-post-std">
-                          <div className="jps-col-title">
-                            <div><span className="jps-item-name" onClick={() => onOpenSelection?.({ name: item.name, category: item.category, price: item.price, allowanceName: item.allowanceName, status: item.status })}>{item.name}</span></div>
-                          </div>
-                          <div className="jps-col-impact">
-                            <span className={`${item.impact > 0 ? 'jps-impact-up' : 'jps-impact-down'}`}>{fmtSigned(item.impact)}</span>
-                          </div>
-                        </div>
-                      ))}
-
-                      {postPending.map((item, i) => (
-                        <div key={`p-${i}`} className="jps-table-row jps-table-post-std jps-row-pending">
-                          <div className="jps-col-title">
-                            <div><span className="jps-item-name" onClick={() => onOpenSelection?.({ name: item.name, category: item.category, price: item.price, allowanceName: item.allowanceName, status: item.status })}>{item.name}</span></div>
-                            <BdsBadge text="Pending" displayType="warning" />
-                          </div>
-                          <div className="jps-col-impact">
-                            <span className={`${item.impact > 0 ? 'jps-impact-up' : 'jps-impact-down'}`}>{fmtSigned(item.impact)}</span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-              );
-            })()}
-
-            {/* Pre-contract */}
-            {preContractSelections.length > 0 && (
-              <div className="jps-cat-group">
-                <button className={`jps-cat-header ${expandedGroups['__pre-contract__'] ? 'jps-cat-header-open' : ''}`} onClick={() => toggleGroup('__pre-contract__')}>
-                  <div className="jps-cat-header-left">
-                    <BdsIcon name={expandedGroups['__pre-contract__'] ? 'chevron-down' : 'chevron-right'} size={16} />
-                    <span className="jps-cat-name">Pre-contract</span>
-                    <span className="jps-cat-count">{preContractSelections.length} {preContractSelections.length === 1 ? 'item' : 'items'}</span>
-                  </div>
-                  <div className="jps-cat-header-right">
-                    <span className="jps-cat-impact jps-impact-neutral">Included in original price</span>
-                  </div>
-                </button>
-
-                {expandedGroups['__pre-contract__'] && (
-                  <div className="jps-cat-body">
-                    <div className="jps-table">
-                      <div className="jps-table-header jps-table-pre-std">
-                        <div className="jps-col-title">Title</div>
-                        <div className="jps-col-price">Price</div>
-                      </div>
-                      {preContractSelections.map((item, i) => (
-                        <div key={i} className="jps-table-row jps-table-pre-std">
-                          <div className="jps-col-title">
-                            <div><span className="jps-item-name" onClick={() => onOpenSelection?.({ name: item.name, category: item.category, price: item.price, allowanceName: item.allowanceName, status: item.status })}>{item.name}</span></div>
-                          </div>
-                          <div className="jps-col-price">{fmt(item.price)}</div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
+            {renderCombinedSelectionsGrid([
+              ...preContractSelections,
+              ...postContractSelections,
+            ])}
           </div>
         )}
 
         {/* ═══ Change Orders ═══ */}
-        <div className="jps-breakdown-section">
+        <div className="jps-breakdown-section" id="jps-sec-change-orders">
           <div className="jps-section-header">
             <BdsText as="h2" size="heavy-lg" className="jps-section-title">Change Orders</BdsText>
           </div>
@@ -2120,11 +1936,11 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                   {expandedGroups['__s4-v1-adj__'] && (
                     <>
                       <div className="jps-breakdown-line jps-breakdown-nested">
-                        <span>Change Orders</span>
+                        <button type="button" className="jps-s4-scroll-link" onClick={() => document.getElementById('jps-sec-change-orders')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>Change Orders</button>
                         <span>{fmt(changeOrdersTotal)}</span>
                       </div>
                       <div className="jps-breakdown-line jps-breakdown-nested">
-                        <span>Selection and allowance changes</span>
+                        <button type="button" className="jps-s4-scroll-link" onClick={() => document.getElementById('jps-sec-allowances')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>Selection and allowance changes</button>
                         <span>{fmt(approvedSelectionsTotal)}</span>
                       </div>
                       <div className="jps-breakdown-line jps-breakdown-nested">
@@ -2173,10 +1989,16 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                     <span>Approved changes</span>
                     <span>{fmt(priceAdjustment)}</span>
                   </div>
-                  <div className="jps-breakdown-line jps-breakdown-nested"><span>Change Orders</span><span>{fmt(changeOrdersTotal)}</span></div>
-                  <div className="jps-breakdown-line jps-breakdown-nested"><span>Selection and allowance changes</span><span>{fmt(approvedSelectionsTotal)}</span></div>
                   <div className="jps-breakdown-line jps-breakdown-nested">
-                    <button type="button" className="jps-s4-link-label" onClick={() => setSlice4DrillOpen(true)}>Budget difference</button>
+                    <button type="button" className="jps-s4-scroll-link" onClick={() => document.getElementById('jps-sec-allowances')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>Selection and allowance changes</button>
+                    <span>{fmt(approvedSelectionsTotal)}</span>
+                  </div>
+                  <div className="jps-breakdown-line jps-breakdown-nested">
+                    <button type="button" className="jps-s4-scroll-link" onClick={() => document.getElementById('jps-sec-change-orders')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>Change Orders</button>
+                    <span>{fmt(changeOrdersTotal)}</span>
+                  </div>
+                  <div className="jps-breakdown-line jps-breakdown-nested">
+                    <button type="button" className="jps-s4-scroll-link" onClick={() => document.getElementById('jps-sec-budget-difference')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>Budget difference</button>
                     <span className={panelVarianceTotal >= 0 ? 'jps-impact-up' : 'jps-impact-down'}>{fmtSigned(panelVarianceTotal)}</span>
                   </div>
                   <div className="jps-breakdown-line"><span>Tax</span><span>{fmt(totalTax)}</span></div>
@@ -2206,8 +2028,14 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                     <span>Approved changes</span>
                     <span>{fmt(priceAdjustmentV5)}</span>
                   </div>
-                  <div className="jps-breakdown-line jps-breakdown-nested"><span>Change orders</span><span>{fmt(changeOrdersTotal)}</span></div>
-                  <div className="jps-breakdown-line jps-breakdown-nested"><span>Selections and allowances</span><span>{fmt(approvedSelectionsTotal)}</span></div>
+                  <div className="jps-breakdown-line jps-breakdown-nested">
+                    <button type="button" className="jps-s4-scroll-link" onClick={() => document.getElementById('jps-sec-change-orders')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>Change orders</button>
+                    <span>{fmt(changeOrdersTotal)}</span>
+                  </div>
+                  <div className="jps-breakdown-line jps-breakdown-nested">
+                    <button type="button" className="jps-s4-scroll-link" onClick={() => document.getElementById('jps-sec-allowances')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>Selections and allowances</button>
+                    <span>{fmt(approvedSelectionsTotal)}</span>
+                  </div>
                   {cv !== 0 && (
                     <div className="jps-breakdown-line jps-breakdown-nested">
                       <button type="button" className="jps-s4-link-label" onClick={() => setSlice4DrillOpen(true)}>{trajLabel}</button>
@@ -2233,8 +2061,14 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                     <span>Approved changes</span>
                     <span>{fmt(priceAdjustment)}</span>
                   </div>
-                  <div className="jps-breakdown-line jps-breakdown-nested"><span>Change Orders</span><span>{fmt(changeOrdersTotal)}</span></div>
-                  <div className="jps-breakdown-line jps-breakdown-nested"><span>Selection and allowance changes</span><span>{fmt(approvedSelectionsTotal)}</span></div>
+                  <div className="jps-breakdown-line jps-breakdown-nested">
+                    <button type="button" className="jps-s4-scroll-link" onClick={() => document.getElementById('jps-sec-change-orders')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>Change Orders</button>
+                    <span>{fmt(changeOrdersTotal)}</span>
+                  </div>
+                  <div className="jps-breakdown-line jps-breakdown-nested">
+                    <button type="button" className="jps-s4-scroll-link" onClick={() => document.getElementById('jps-sec-allowances')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>Selection and allowance changes</button>
+                    <span>{fmt(approvedSelectionsTotal)}</span>
+                  </div>
                   <div className="jps-breakdown-line jps-breakdown-nested">
                     <span>Bills</span>
                     <span className={billVarianceTotal >= 0 ? 'jps-impact-up' : 'jps-impact-down'}>{fmtSigned(billVarianceTotal)}</span>
@@ -2284,9 +2118,6 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                     { key: 'v1', label: 'v1 · Inline expandable' },
                     { key: 'v2', label: 'v2 · Always-on list' },
                     { key: 'v3', label: 'v3 · Drill-through' },
-                    { key: 'v41', label: 'v4 · Cost category' },
-                    { key: 'v4', label: 'v4.1 · Drill with bills (Cost code)' },
-                    { key: 'v45', label: 'v4.5 · Drill with bills (Estimate)' },
                   ]}
                 />
               </div>
@@ -2301,7 +2132,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
               <div className="jps-s4-approved-group jps-s4-approved-group-flat">
 
               {/* ─── Allowances ─── */}
-              <div className="jps-breakdown-section">
+              <div className="jps-breakdown-section" id="jps-sec-allowances">
                 <div className="jps-section-header">
                   <BdsText as="h2" size="heavy-lg" className="jps-section-title">Allowances</BdsText>
                   <BdsButton
@@ -2415,165 +2246,17 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                 })}
               </div>
 
-              {/* ─── Budget difference (cost activity by code) ─── */}
-              <div className="jps-breakdown-section">
-                <div className="jps-section-header">
-                  <BdsText as="h2" size="heavy-lg" className="jps-section-title">Budget difference</BdsText>
-                </div>
-
-                {costCodeVariances.map(cc => {
-                  const groupKey = `s4-bill-${cc.name}`;
-                  const isOpen = expandedGroups[groupKey];
-                  const expandable = true;
-                  const over = cc.variance > 0;
-                  return (
-                    <div key={cc.name} className="jps-cat-group">
-                      <button
-                        className={`jps-cat-header ${isOpen && expandable ? 'jps-cat-header-open' : ''} ${expandable ? '' : 'jps-cat-header-static'}`}
-                        onClick={expandable ? () => toggleGroup(groupKey) : undefined}
-                        disabled={!expandable}
-                      >
-                        <div className="jps-cat-header-left">
-                          {expandable && <BdsIcon name={isOpen ? 'chevron-down' : 'chevron-right'} size={16} />}
-                          <span className="jps-cat-name">{cc.name}</span>
-                        </div>
-                        <div className="jps-cat-header-right">
-                          <span className="jps-allowance-flow">
-                            <span className="jps-flow-part"><span>Budget</span><strong>{fmt(cc.budget)}</strong></span>
-                            <span className="jps-flow-part"><span>Spent</span><strong>{fmt(cc.spent)}</strong></span>
-                            <span className="jps-flow-sep">·</span>
-                            <span className={over ? 'jps-flow-over' : 'jps-flow-remaining'}>
-                              {over ? <><span>Overage</span><strong>{fmt(cc.variance)}</strong></> : <><span>Remaining</span><strong>{fmt(-cc.variance)}</strong></>}
-                            </span>
-                          </span>
-                        </div>
-                      </button>
-
-                      {isOpen && expandable && (
-                        <div className="jps-cat-body">
-                          <div className="jps-table">
-                            <div className="jps-table-header jps-table-bills">
-                              <div className="jps-col-title">Bill</div>
-                              <div className="jps-col-vendor">Vendor</div>
-                              <div className="jps-col-date">Date</div>
-                              <div className="jps-col-amount">Amount</div>
-                            </div>
-                            {cc.bills.map((b, i) => (
-                              <div key={i} className="jps-table-row jps-table-bills">
-                                <div className="jps-col-title"><span className="jps-item-name">{b.name}</span></div>
-                                <div className="jps-col-vendor">{b.vendor}</div>
-                                <div className="jps-col-date">{b.date}</div>
-                                <div className="jps-col-amount">{fmt(b.amount)}</div>
-                              </div>
-                            ))}
-                            <div className="jps-table-row jps-table-bills jps-row-allowance-summary">
-                              <div className="jps-col-title"><span className="jps-item-name">Total spent</span></div>
-                              <div className="jps-col-vendor"></div>
-                              <div className="jps-col-date"></div>
-                              <div className="jps-col-amount">{fmt(cc.spent)}</div>
-                            </div>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* ─── Selections ─── */}
+              {/* ─── Selections — combined grid ─── */}
               {(() => {
                 const preApproved = preContractSelections.filter(s => s.status === 'approved');
                 const postApproved = postContractSelections.filter(s => s.status === 'approved');
                 if (preApproved.length === 0 && postApproved.length === 0) return null;
                 return (
-                  <div className="jps-breakdown-section">
+                  <div className="jps-breakdown-section" id="jps-sec-selections">
                     <div className="jps-section-header">
                       <BdsText as="h2" size="heavy-lg" className="jps-section-title">Selections</BdsText>
                     </div>
-
-                    {postApproved.length > 0 && (
-                      <div className="jps-cat-group">
-                        <button
-                          className={`jps-cat-header ${expandedGroups['__s4-post-contract__'] ? 'jps-cat-header-open' : ''}`}
-                          onClick={() => toggleGroup('__s4-post-contract__')}
-                        >
-                          <div className="jps-cat-header-left">
-                            <BdsIcon name={expandedGroups['__s4-post-contract__'] ? 'chevron-down' : 'chevron-right'} size={16} />
-                            <span className="jps-cat-name">Post-contract</span>
-                          </div>
-                          <div className="jps-cat-header-right">
-                            {(() => {
-                              const impact = postApproved.reduce((s, i) => s + i.impact, 0);
-                              return impact !== 0
-                                ? <span className={`jps-cat-impact ${impact > 0 ? 'jps-impact-up' : 'jps-impact-down'}`}>{fmtSigned(withTax(impact))} impact</span>
-                                : <span className="jps-cat-impact jps-impact-neutral">No impact</span>;
-                            })()}
-                          </div>
-                        </button>
-
-                        {expandedGroups['__s4-post-contract__'] && (
-                          <div className="jps-cat-body">
-                            <div className="jps-table">
-                              <div className="jps-table-header jps-table-post-std">
-                                {sortableHeader('s4-post', 'title', 'Title', 'jps-col-title')}
-                                {sortableHeader('s4-post', 'date', 'Date', 'jps-col-date')}
-                                {sortableHeader('s4-post', 'impact', 'Contract impact (incl. tax)', 'jps-col-impact')}
-                              </div>
-                              {sortItems('s4-post', postApproved).map((item, i) => (
-                                <div key={i} className="jps-table-row jps-table-post-std">
-                                  <div className="jps-col-title">
-                                    <div><span className="jps-item-name" onClick={() => onOpenSelection?.({ name: item.name, category: item.category, price: item.price, allowanceName: item.allowanceName, status: item.status })}>{item.name}</span></div>
-                                  </div>
-                                  <div className="jps-col-date">{item.date || '—'}</div>
-                                  <div className="jps-col-impact">
-                                    <span className={`${item.impact > 0 ? 'jps-impact-up' : 'jps-impact-down'}`}>{fmtSigned(withTax(item.impact))}</span>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {preApproved.length > 0 && (
-                      <div className="jps-cat-group">
-                        <button
-                          className={`jps-cat-header ${expandedGroups['__s4-pre-contract__'] ? 'jps-cat-header-open' : ''}`}
-                          onClick={() => toggleGroup('__s4-pre-contract__')}
-                        >
-                          <div className="jps-cat-header-left">
-                            <BdsIcon name={expandedGroups['__s4-pre-contract__'] ? 'chevron-down' : 'chevron-right'} size={16} />
-                            <span className="jps-cat-name">Pre-contract</span>
-                            <span className="jps-cat-count">{preApproved.length} {preApproved.length === 1 ? 'item' : 'items'}</span>
-                          </div>
-                          <div className="jps-cat-header-right">
-                            <span className="jps-cat-impact jps-impact-neutral">Included in original price</span>
-                          </div>
-                        </button>
-
-                        {expandedGroups['__s4-pre-contract__'] && (
-                          <div className="jps-cat-body">
-                            <div className="jps-table">
-                              <div className="jps-table-header jps-table-pre-std">
-                                {sortableHeader('s4-pre', 'title', 'Title', 'jps-col-title')}
-                                {sortableHeader('s4-pre', 'date', 'Date', 'jps-col-date')}
-                                {sortableHeader('s4-pre', 'price', 'Price (incl. tax)', 'jps-col-price')}
-                              </div>
-                              {sortItems('s4-pre', preApproved).map((item, i) => (
-                                <div key={i} className="jps-table-row jps-table-pre-std">
-                                  <div className="jps-col-title">
-                                    <div><span className="jps-item-name" onClick={() => onOpenSelection?.({ name: item.name, category: item.category, price: item.price, allowanceName: item.allowanceName, status: item.status })}>{item.name}</span></div>
-                                  </div>
-                                  <div className="jps-col-date">{item.date || '—'}</div>
-                                  <div className="jps-col-price">{fmt(withTax(item.price))}</div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
+                    {renderCombinedSelectionsGrid([...preApproved, ...postApproved])}
                   </div>
                 );
               })()}
@@ -2583,7 +2266,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                 const coApproved = changeOrders.filter(c => c.status === 'approved');
                 if (coApproved.length === 0) return null;
                 return (
-                  <div className="jps-breakdown-section">
+                  <div className="jps-breakdown-section" id="jps-sec-change-orders">
                     <div className="jps-section-header">
                       <BdsText as="h2" size="heavy-lg" className="jps-section-title">Change Orders</BdsText>
                     </div>
@@ -2613,6 +2296,38 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
               })()}
               </div>
               {/* ─── End approved-changes group wrapper ─── */}
+
+              {/* ─── Budget difference (v4/v41/v45) — table layout matching Change Orders ─── */}
+              {(slice4Version === 'v4' || slice4Version === 'v41' || slice4Version === 'v45') && (
+                <div className="jps-breakdown-section" id="jps-sec-budget-difference">
+                  <div className="jps-section-header">
+                    <BdsText as="h2" size="heavy-lg" className="jps-section-title">Budget difference</BdsText>
+                  </div>
+                  <div className="jps-s4-side-panel-note">
+                    {slice4Version === 'v45'
+                      ? "The difference between revised and original budget cost for each location. Approved change orders and selection and allowance changes aren't included."
+                      : "The difference between revised and original budget cost for each cost category. Approved change orders and selection and allowance changes aren't included."}
+                  </div>
+                  <div className="jps-table">
+                    <div className="jps-table-header jps-table-budget">
+                      <div className="jps-col-title">{slice4Version === 'v45' ? 'Location' : 'Cost category'}</div>
+                      <div className="jps-col-impact">Budget difference</div>
+                    </div>
+                    {(slice4Version === 'v45' ? panelByLocation : panelByCategory).map((group, gi) => (
+                      <div key={gi} className="jps-table-row jps-table-budget">
+                        <div className="jps-col-title"><span className="jps-item-name">{group.category}</span></div>
+                        <div className="jps-col-impact">
+                          <span className={group.variance >= 0 ? 'jps-impact-up' : 'jps-impact-down'}>{fmtSigned(group.variance)}</span>
+                        </div>
+                      </div>
+                    ))}
+                    <div className="jps-table-row jps-table-budget jps-row-total">
+                      <div className="jps-col-title">Total</div>
+                      <div className="jps-col-impact">{fmtSigned(panelVarianceTotal)}</div>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* ─── Payments ─── */}
               <div className="jps-breakdown-section">
@@ -2714,79 +2429,6 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                       )}
                     </div>
                   </div>
-                </div>
-              )}
-
-              {/* ─── v4 side panel — opens from the right when the user clicks
-                       the Bills line in the v2-style breakdown. Each cost code is
-                       clickable to expand the individual bills behind it. ─── */}
-              {(slice4Version === 'v4' || slice4Version === 'v41' || slice4Version === 'v45') && slice4DrillOpen && (
-                <div className="jps-s4-side-panel-scrim" onClick={() => setSlice4DrillOpen(false)}>
-                  <aside className="jps-s4-side-panel" onClick={(e) => e.stopPropagation()}>
-                    <BdsActionBar align="space-between" className="jps-s4-modal-bar">
-                      <div className="jps-s4-side-panel-titleblock">
-                        <BdsText as="h3" size="heavy-lg">Budget difference</BdsText>
-                      </div>
-                      <BdsButton displayType="tertiary" icon={<BdsIcon name="x" size={14} />} ariaLabel="Close" onClick={() => setSlice4DrillOpen(false)} />
-                    </BdsActionBar>
-
-                    <div className="jps-s4-side-panel-body">
-                      <div className="jps-s4-side-panel-note">
-                        Each cost category shows revised − original budget cost. This doesn't include approved Change Orders or Selection and allowance changes.
-                      </div>
-
-                      {(panelGroupBy === 'estimate' ? panelByLocation : panelByCategory).map((group, gi) => {
-                        const groupKey = `v45-group-${group.category}`;
-                        const groupExpanded = expandedGroups[groupKey] !== false;
-                        const collapsibleGroup = panelGroupBy === 'category' || panelGroupBy === 'estimate';
-                        return (
-                          <div key={gi} className="jps-s4-category-block">
-                            {collapsibleGroup ? (
-                              <button
-                                type="button"
-                                className={`jps-s4-category-header jps-s4-category-header-toggle ${!groupExpanded ? 'jps-s4-category-header-toggle-collapsed' : ''}`}
-                                onClick={() => toggleGroup(groupKey)}
-                              >
-                                <div className="jps-s4-category-header-row">
-                                  <div className="jps-s4-category-name">
-                                    <BdsIcon name={groupExpanded ? 'chevron-down' : 'chevron-right'} size={12} />
-                                    <span>{group.category}</span>
-                                  </div>
-                                  {group.variance !== 0 && (
-                                    <span className={group.variance >= 0 ? 'jps-s4-category-revision' : 'jps-impact-down'}>{fmtSigned(group.variance)}</span>
-                                  )}
-                                </div>
-                              </button>
-                            ) : (
-                              <div className={`jps-s4-category-header ${panelGroupBy === 'category1' ? 'jps-s4-category-header-flat' : ''}`}>
-                                <div className="jps-s4-category-header-row">
-                                  <div className="jps-s4-category-name">{group.category}</div>
-                                  {(group.variance !== 0 || panelGroupBy === 'category1') && (
-                                    <span className={group.variance >= 0 ? 'jps-s4-category-revision' : 'jps-impact-down'}>{fmtSigned(group.variance)}</span>
-                                  )}
-                                </div>
-                              </div>
-                            )}
-
-                            {collapsibleGroup && groupExpanded && group.items.map((item, i) => (
-                              <div key={i} className="jps-s4-modal-line">
-                                <span className="jps-s4-modal-line-name">
-                                  <span className="jps-s4-cost-code-num">{item.code}</span>
-                                  <span>{item.name}</span>
-                                </span>
-                                <span className="jps-s4-modal-line-amt">{fmtSigned(item.variance)}</span>
-                              </div>
-                            ))}
-                          </div>
-                        );
-                      })}
-
-                      <div className="jps-s4-side-panel-summary jps-s4-side-panel-summary-bottom">
-                        <span>Budget difference</span>
-                        <span className={panelVarianceTotal >= 0 ? 'jps-impact-up' : 'jps-impact-down'}>{fmtSigned(panelVarianceTotal)}</span>
-                      </div>
-                    </div>
-                  </aside>
                 </div>
               )}
 

@@ -1181,8 +1181,10 @@ table { width: 100%; border-collapse: collapse; }
 /* 5-column layout (allowance approved view — with remaining + impact) */
 .jps-table-allowance-5col { display: grid; grid-template-columns: 2.2fr 0.7fr 0.7fr 1fr 0.8fr; }
 
-/* 4-column layout (standalone selections — title, date, price, price impact) */
-.jps-table-sel-standalone { display: grid; grid-template-columns: 3fr 0.9fr 1fr 1fr; }
+/* 5-column layout (standalone selections — title, date, original price, revised price, contract impact) */
+.jps-table-sel-standalone { display: grid; grid-template-columns: 2.4fr 0.9fr 1fr 1fr 1fr; }
+.jps-col-price-orig { text-align: right; }
+.jps-col-price-revised { text-align: right; }
 /* Post-contract: price == contract impact, so we hide price and show only the impact column */
 .jps-table-post-std { display: grid; grid-template-columns: 3fr 0.9fr 1fr; }
 /* Pre-contract: no contract impact (baked into base price), so we hide the impact column */
@@ -1205,6 +1207,10 @@ table { width: 100%; border-collapse: collapse; }
 /* 3-column layout (change orders) */
 .jps-table-co { display: grid; grid-template-columns: 2.5fr 1fr 1fr; }
 
+/* 2-column layout (budget difference) */
+.jps-table-budget { display: grid; grid-template-columns: 2.5fr 1fr; }
+.jps-table-budget .jps-col-impact { text-align: right; }
+
 /* Allowance summary in header */
 .jps-allowance-summary { font-size: 12px; color: var(--g500); font-weight: 400; }
 .jps-cat-budget { font-size: 14px; font-weight: 700; color: var(--bt-midnight); }
@@ -1213,17 +1219,6 @@ table { width: 100%; border-collapse: collapse; }
 .jps-from-co {
   font-size: 11px; font-weight: 500; color: var(--bt-blue); background: var(--bt-blue-light);
   padding: 2px 8px; border-radius: 20px; white-space: nowrap;
-}
-
-/* Selections section sub-tabs (Slice 1 — toggles pre/post groups vs combined grid) */
-.jps-selections-subtabs { display: flex; gap: 4px; }
-.jps-selections-subtabs button {
-  background: transparent; border: 1px solid var(--g300); color: var(--g700);
-  padding: 4px 12px; border-radius: 16px; font-size: 12px; font-weight: 500;
-  cursor: pointer; white-space: nowrap;
-}
-.jps-selections-subtabs button.jps-selections-subtab-active {
-  background: var(--bt-blue); border-color: var(--bt-blue); color: white;
 }
 
 .jps-col-title { display: flex; align-items: flex-start; gap: 8px; flex-wrap: wrap; }
@@ -2384,12 +2379,24 @@ table { width: 100%; border-collapse: collapse; }
   padding: 0;
   margin: 0;
   font: inherit;
-  color: #1063A8;
-  text-decoration: underline;
+  color: inherit;
+  text-decoration: none;
   cursor: pointer;
   font-size: 14px;
 }
-.cp-fin-link-label:hover { text-decoration: none; }
+
+.cp-fin-toggle-label {
+  border: none;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
 
 /* v4 — clickable Approved changes row that expands */
 .cp-fin-row-toggle {
@@ -4409,6 +4416,23 @@ table { width: 100%; border-collapse: collapse; }
   text-align: left;
 }
 .jps-s4-link-label:hover { text-decoration: none; }
+
+/* Scroll-to-section link: looks like plain text until hover */
+.jps-s4-scroll-link {
+  border: none;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+  text-align: left;
+}
+.jps-s4-scroll-link:hover {
+  color: var(--bt-blue, #0064c1);
+  text-decoration: underline;
+}
 
 .jps-s4-detail-inline {
   margin: 4px 0 8px;

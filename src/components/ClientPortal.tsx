@@ -151,9 +151,7 @@ export function ClientTopNav({ onNavigate }: { onNavigate?: (page: string) => vo
 
 export default function ClientPortal({ onNavigate }: { onNavigate?: (page: string) => void }) {
   const [finDrillOpen, setFinDrillOpen] = useState(false);
-  // Collapse state for budget difference panel categories (mirrors JPS v4 toggle behavior — default open)
-  const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
-  const toggleCategory = (key: string) => setExpandedCategories(prev => ({ ...prev, [key]: prev[key] === false ? true : false }));
+  const [approvedChangesOpen, setApprovedChangesOpen] = useState(false);
 
   // Mock financials — synced with JPS / Openbook so totals match across surfaces.
   // Allowance variances are intentionally NOT a separate contributor: + variances are already
@@ -292,21 +290,28 @@ export default function ClientPortal({ onNavigate }: { onNavigate?: (page: strin
                     <span>{fmtUsd(fin.contractPrice)}</span>
                   </div>
                   <div className="jps-breakdown-line jps-breakdown-parent">
-                    <span>Approved changes</span>
+                    <button type="button" className="cp-fin-toggle-label" onClick={() => setApprovedChangesOpen(v => !v)} aria-expanded={approvedChangesOpen}>
+                      <span>Approved changes</span>
+                      <BdsIcon name={approvedChangesOpen ? 'chevron-down' : 'chevron-right'} size={12} />
+                    </button>
                     <span>{fmtUsd(approvedChanges)}</span>
                   </div>
-                  <div className="jps-breakdown-line jps-breakdown-nested">
-                    <span>Change orders</span>
-                    <span>{fmtUsd(fin.changeOrders)}</span>
-                  </div>
-                  <div className="jps-breakdown-line jps-breakdown-nested">
-                    <span>Selection and allowance change</span>
-                    <span>{fmtUsd(fin.selectionsApprovedImpact)}</span>
-                  </div>
-                  <div className="jps-breakdown-line jps-breakdown-nested">
-                    <button type="button" className="cp-fin-link-label" onClick={() => setFinDrillOpen(true)}>Budget difference</button>
-                    <span className={fin.billVariance >= 0 ? 'cp-fin-budget-up' : 'cp-fin-budget-down'}>{fmtSignedUsd(fin.billVariance)}</span>
-                  </div>
+                  {approvedChangesOpen && (
+                    <>
+                      <div className="jps-breakdown-line jps-breakdown-nested">
+                        <span>Selection and allowance change</span>
+                        <span>{fmtUsd(fin.selectionsApprovedImpact)}</span>
+                      </div>
+                      <div className="jps-breakdown-line jps-breakdown-nested">
+                        <span>Change orders</span>
+                        <span>{fmtUsd(fin.changeOrders)}</span>
+                      </div>
+                      <div className="jps-breakdown-line jps-breakdown-nested">
+                        <button type="button" className="cp-fin-link-label" onClick={() => setFinDrillOpen(true)}>Budget difference</button>
+                        <span className={fin.billVariance >= 0 ? 'cp-fin-budget-up' : 'cp-fin-budget-down'}>{fmtSignedUsd(fin.billVariance)}</span>
+                      </div>
+                    </>
+                  )}
                   <div className="jps-breakdown-line">
                     <span>Tax</span>
                     <span>{fmtUsd(fin.tax)}</span>
@@ -353,41 +358,19 @@ export default function ClientPortal({ onNavigate }: { onNavigate?: (page: strin
 
                 <div className="jps-s4-side-panel-body">
                   <div className="jps-s4-side-panel-note">
-                    Each cost category shows revised − original budget cost. This doesn't include approved Change Orders or Selection and allowance changes.
+                    The difference between revised and original budget cost for each cost category. Approved change orders and selection and allowance changes aren't included.
                   </div>
 
-                  {panelByCategory.map((group) => {
-                    const key = `cp-budget-${group.category}`;
-                    const expanded = expandedCategories[key] !== false;
-                    return (
-                      <div key={group.category} className="jps-s4-category-block">
-                        <button
-                          type="button"
-                          className={`jps-s4-category-header jps-s4-category-header-toggle ${!expanded ? 'jps-s4-category-header-toggle-collapsed' : ''}`}
-                          onClick={() => toggleCategory(key)}
-                        >
-                          <div className="jps-s4-category-header-row">
-                            <div className="jps-s4-category-name">
-                              <BdsIcon name={expanded ? 'chevron-down' : 'chevron-right'} size={12} />
-                              <span>{group.category}</span>
-                            </div>
-                            {group.variance !== 0 && (
-                              <span className={group.variance >= 0 ? 'jps-s4-category-revision' : 'jps-impact-down'}>{fmtSignedUsd(group.variance)}</span>
-                            )}
-                          </div>
-                        </button>
-                        {expanded && group.items.map((item) => (
-                          <div key={item.code} className="jps-s4-modal-line">
-                            <span className="jps-s4-modal-line-name">
-                              <span className="jps-s4-cost-code-num">{item.code}</span>
-                              <span>{item.name}</span>
-                            </span>
-                            <span className="jps-s4-modal-line-amt">{fmtSignedUsd(item.variance)}</span>
-                          </div>
-                        ))}
+                  {panelByCategory.map((group) => (
+                    <div key={group.category} className="jps-s4-category-block">
+                      <div className="jps-s4-category-header jps-s4-category-header-flat">
+                        <div className="jps-s4-category-header-row">
+                          <div className="jps-s4-category-name">{group.category}</div>
+                          <span className={group.variance >= 0 ? 'jps-s4-category-revision' : 'jps-impact-down'}>{fmtSignedUsd(group.variance)}</span>
+                        </div>
                       </div>
-                    );
-                  })}
+                    </div>
+                  ))}
 
                   <div className="jps-s4-side-panel-summary jps-s4-side-panel-summary-bottom">
                     <span>Budget difference</span>
