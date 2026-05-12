@@ -1,7 +1,7 @@
 import { useState, Fragment } from 'react';
 import '../bds-tokens.css';
 import { BdsActionBar, BdsBadge, BdsButton, BdsIcon, BdsSection, BdsTabs, BdsText } from '../bds';
-import { JCB_TOTALS, MARKUP_PCT } from '../jcbMockData';
+import { JCB_TOTALS, JCB_ROWS, MARKUP_PCT } from '../jcbMockData';
 
 /* ── Mock Data ── */
 
@@ -168,11 +168,234 @@ const costCodes: { name: string; budget: number; bills: BillRow[] }[] = [
     { name: 'HVAC install labor', vendor: 'TempControl Co', date: 'Nov 18, 2024', amount: 5300 },
   ] },
 ];
+
+// Activity-kind taxonomy used by both the v4 panel data and ActivityIcon below.
+type ActivityKind = 'Bill' | 'PO' | 'Time clock' | 'Receipt' | 'Cost adjustment';
+
 const costCodeVariances = costCodes.map(c => {
   const spent = c.bills.reduce((s, b) => s + b.amount, 0);
   return { ...c, spent, variance: spent - c.budget };
 });
 const billVarianceTotal = costCodeVariances.reduce((s, c) => s + c.variance, 0);
+
+// ─── v4 panel — self-contained hypothetical dataset ───
+// Math reconciles internally:
+//   Revised budget = Original budget + CO impact + Selection impact
+//   Spent          = Sum of activity amounts
+//   Variance       = Spent − Revised budget
+//   Budget difference (panel total) = Sum of per-code variances
+// No tie-back to JCB_ROWS — numbers here are demo only.
+
+type V4Activity = { kind: ActivityKind; name: string; amount: number };
+type V4CostCode = {
+  code: string;
+  name: string;
+  rangeLabel: string;
+  estimateGroup: string;
+  location: string;
+  originalBudget: number;
+  coImpact: number;
+  selectionImpact: number;
+  activity: V4Activity[];
+};
+
+const V4_PANEL_DATA: V4CostCode[] = [
+  {
+    code: '3100', name: 'Framing',
+    rangeLabel: '3000-3999 structural',
+    estimateGroup: 'Phase 2 · framing',
+    location: 'Whole house',
+    originalBudget: 25000, coImpact: 1043, selectionImpact: 0,
+    activity: [
+      { kind: 'Bill',       name: 'Lumber package',     amount: 18200 },
+      { kind: 'Bill',       name: 'Engineered beams',   amount: 8300 },
+      { kind: 'Time clock', name: 'Carpentry — week 4', amount: 2200 },
+    ],
+  },
+  {
+    code: '4400', name: 'Plumbing rough-in',
+    rangeLabel: '4000-4999 plumbing',
+    estimateGroup: 'Phase 3 · MEP rough-in',
+    location: 'Bathrooms',
+    originalBudget: 12000, coImpact: 0, selectionImpact: 0,
+    activity: [
+      { kind: 'Bill', name: 'PEX + fittings',          amount: 6800 },
+      { kind: 'Bill', name: 'Plumbing labor — week 1', amount: 4400 },
+      { kind: 'PO',   name: 'Extra valves',            amount: 1200 },
+    ],
+  },
+  {
+    code: '4500', name: 'HVAC',
+    rangeLabel: '4000-4999 plumbing',
+    estimateGroup: 'Phase 3 · MEP rough-in',
+    location: 'Whole house',
+    originalBudget: 15000, coImpact: 0, selectionImpact: 0,
+    activity: [
+      { kind: 'Bill',       name: 'Furnace + AC unit',        amount: 9200 },
+      { kind: 'Bill',       name: 'HVAC install labor',       amount: 5300 },
+      { kind: 'Time clock', name: 'Coordination supervision', amount: 280 },
+    ],
+  },
+  {
+    code: '7500', name: 'Electrical rough-in',
+    rangeLabel: '7000-7999 electrical',
+    estimateGroup: 'Phase 3 · MEP rough-in',
+    location: 'Kitchen and baths',
+    originalBudget: 18000, coImpact: 0, selectionImpact: 1183,
+    activity: [
+      { kind: 'Bill',            name: 'Wire + breakers',            amount: 7900 },
+      { kind: 'Bill',            name: 'Electrical labor',           amount: 11700 },
+      { kind: 'PO',              name: 'Sub-panel upgrade',          amount: 1100 },
+      { kind: 'Cost adjustment', name: 'Materials price correction', amount: 400 },
+    ],
+  },
+  {
+    code: '1100', name: 'Site preparation',
+    rangeLabel: '1000-1999 sitework',
+    estimateGroup: 'Phase 1 · sitework',
+    location: 'Site',
+    originalBudget: 8500, coImpact: 0, selectionImpact: 0,
+    activity: [
+      { kind: 'Bill',       name: 'Grading',         amount: 3200 },
+      { kind: 'Bill',       name: 'Site clearing',   amount: 2800 },
+      { kind: 'Time clock', name: 'Excavation crew', amount: 2100 },
+    ],
+  },
+  {
+    code: '2200', name: 'Foundation',
+    rangeLabel: '2000-2999 foundation',
+    estimateGroup: 'Phase 1 · sitework',
+    location: 'Whole house',
+    originalBudget: 22000, coImpact: 0, selectionImpact: 0,
+    activity: [
+      { kind: 'Bill', name: 'Concrete pour',     amount: 14500 },
+      { kind: 'Bill', name: 'Rebar + footings',  amount: 3800 },
+      { kind: 'Bill', name: 'Foundation labor',  amount: 3700 },
+    ],
+  },
+  {
+    code: '5200', name: 'Roofing',
+    rangeLabel: '5000-5999 roofing',
+    estimateGroup: 'Phase 2 · roofing',
+    location: 'Whole house',
+    originalBudget: 18500, coImpact: 0, selectionImpact: 0,
+    activity: [
+      { kind: 'Bill', name: 'Shingles + flashing', amount: 8200 },
+      { kind: 'Bill', name: 'Roofing labor',       amount: 7800 },
+      { kind: 'PO',   name: 'Underlayment',        amount: 2200 },
+    ],
+  },
+  {
+    code: '6100', name: 'Windows and doors',
+    rangeLabel: '6000-6999 openings',
+    estimateGroup: 'Phase 3 · openings',
+    location: 'Whole house',
+    originalBudget: 24000, coImpact: 0, selectionImpact: 1500,
+    activity: [
+      { kind: 'Bill', name: 'Window package',       amount: 15200 },
+      { kind: 'Bill', name: 'Exterior door package', amount: 7800 },
+      { kind: 'Bill', name: 'Install labor',        amount: 3200 },
+    ],
+  },
+  {
+    code: '8100', name: 'Insulation',
+    rangeLabel: '8000-8999 thermal',
+    estimateGroup: 'Phase 4 · insulation',
+    location: 'Whole house',
+    originalBudget: 7500, coImpact: 0, selectionImpact: 0,
+    activity: [
+      { kind: 'Bill', name: 'Insulation materials', amount: 4300 },
+      { kind: 'Bill', name: 'Insulation labor',     amount: 3100 },
+    ],
+  },
+  {
+    code: '9300', name: 'Drywall',
+    rangeLabel: '9000-9999 finishes',
+    estimateGroup: 'Phase 4 · finishes',
+    location: 'Whole house',
+    originalBudget: 9500, coImpact: 0, selectionImpact: 0,
+    activity: [
+      { kind: 'Bill', name: 'Drywall materials', amount: 4200 },
+      { kind: 'Bill', name: 'Drywall labor',     amount: 5650 },
+    ],
+  },
+  {
+    code: '9400', name: 'Cabinetry',
+    rangeLabel: '9000-9999 finishes',
+    estimateGroup: 'Phase 5 · cabinetry',
+    location: 'Kitchen and baths',
+    originalBudget: 14000, coImpact: 0, selectionImpact: 850,
+    activity: [
+      { kind: 'Bill', name: 'Kitchen cabinets',   amount: 9800 },
+      { kind: 'Bill', name: 'Bath vanities',      amount: 3200 },
+      { kind: 'PO',   name: 'Cabinet hardware',   amount: 1150 },
+    ],
+  },
+  {
+    code: '9600', name: 'Flooring',
+    rangeLabel: '9000-9999 finishes',
+    estimateGroup: 'Phase 5 · finishes',
+    location: 'Whole house',
+    originalBudget: 16000, coImpact: 0, selectionImpact: 0,
+    activity: [
+      { kind: 'Bill', name: 'Hardwood materials', amount: 9200 },
+      { kind: 'Bill', name: 'Tile materials',     amount: 2800 },
+      { kind: 'Bill', name: 'Flooring labor',     amount: 4500 },
+    ],
+  },
+];
+
+type PanelCategoryItem = {
+  name: string;
+  code: string;
+  originalBudget: number;
+  coImpact: number;
+  selectionImpact: number;
+  revisedBudget: number;
+  spent: number;
+  variance: number;
+  activity: V4Activity[];
+};
+type PanelCategory = {
+  category: string;
+  items: PanelCategoryItem[];
+  originalBudget: number;
+  revisedBudget: number;
+  variance: number;
+};
+
+function computePanelGroups(grouper: (item: V4CostCode) => string): PanelCategory[] {
+  const groups = new Map<string, PanelCategoryItem[]>();
+  V4_PANEL_DATA.forEach(cc => {
+    const category = grouper(cc);
+    const revised = cc.originalBudget + cc.coImpact + cc.selectionImpact;
+    const spent = cc.activity.reduce((s, a) => s + a.amount, 0);
+    const item: PanelCategoryItem = {
+      name: cc.name,
+      code: cc.code,
+      originalBudget: cc.originalBudget,
+      coImpact: cc.coImpact,
+      selectionImpact: cc.selectionImpact,
+      revisedBudget: revised,
+      spent,
+      variance: spent - revised,
+      activity: cc.activity,
+    };
+    if (!groups.has(category)) groups.set(category, []);
+    groups.get(category)!.push(item);
+  });
+  return Array.from(groups.entries()).map(([category, items]) => ({
+    category,
+    items,
+    originalBudget: items.reduce((s, i) => s + i.originalBudget, 0),
+    revisedBudget: items.reduce((s, i) => s + i.revisedBudget, 0),
+    variance: items.reduce((s, i) => s + i.variance, 0),
+  }));
+}
+const panelByCategory = computePanelGroups(item => item.rangeLabel);
+const panelByEstimate = computePanelGroups(item => item.estimateGroup);
+const panelByLocation = computePanelGroups(item => item.location);
+const panelVarianceTotal = panelByCategory.reduce((s, g) => s + g.variance, 0);
 
 // ─── Slice 4 · v5 — JCB-correct customer-payable cost variance ───
 // All inputs come from JCB_ROWS in jcbMockData.ts so JPS and JobCostingBudget
@@ -211,16 +434,37 @@ const postContractSelections = allSelections.filter(s => !s.allowanceName && s.t
 const fmt = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 });
 const fmtSigned = (n: number) => (n > 0 ? '+' : '') + fmt(n);
 
+// Small inline icons for each activity entity type. Stroked, 24-viewBox,
+// follow the BdsIcon visual style. Scoped to JPS — not added to BDS itself.
+function ActivityIcon({ kind, size = 12 }: { kind: ActivityKind; size?: number }) {
+  const paths: Record<ActivityKind, React.ReactNode> = {
+    'Bill': <><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" /></>,
+    'PO': <><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" /><rect x="8" y="2" width="8" height="4" rx="1" /><line x1="9" y1="12" x2="15" y2="12" /><line x1="9" y1="16" x2="15" y2="16" /></>,
+    'Time clock': <><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></>,
+    'Receipt': <><path d="M5 2v20l2-1.5 2 1.5 2-1.5 2 1.5 2-1.5 2 1.5 2-1.5 2 1.5V2" /><line x1="8" y1="8" x2="16" y2="8" /><line x1="8" y1="12" x2="14" y2="12" /></>,
+    'Cost adjustment': <><line x1="4" y1="21" x2="4" y2="14" /><line x1="4" y1="10" x2="4" y2="3" /><line x1="12" y1="21" x2="12" y2="12" /><line x1="12" y1="8" x2="12" y2="3" /><line x1="20" y1="21" x2="20" y2="16" /><line x1="20" y1="12" x2="20" y2="3" /><line x1="1" y1="14" x2="7" y2="14" /><line x1="9" y1="8" x2="15" y2="8" /><line x1="17" y1="16" x2="23" y2="16" /></>,
+  };
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ verticalAlign: 'middle' }}>
+      {paths[kind]}
+    </svg>
+  );
+}
+
 /* ── Component ── */
 
-export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection, onBack, onOpenJCB }: { jobOpen?: boolean; onToggleJob?: () => void; onOpenSelection?: (sel: { name: string; category: string; price: number; allowanceName?: string; status: string }) => void; onBack?: () => void; onOpenJCB?: () => void }) {
+export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection, onBack }: { jobOpen?: boolean; onToggleJob?: () => void; onOpenSelection?: (sel: { name: string; category: string; price: number; allowanceName?: string; status: string }) => void; onBack?: () => void; onOpenJCB?: () => void }) {
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
-  const [activeSlice, setActiveSlice] = useState<'slice1' | 'slice2' | 'slice3' | 'slice4'>('slice1');
+  const [activeSlice, setActiveSlice] = useState<'slice1' | 'slice2' | 'slice3' | 'slice4' | 'slice5'>('slice1');
   // Slice 4 = sandbox for Kendall's open book client financials brief (page 7003570340).
   // v1 inline expandable, v2 always-on list, v3 drill-through, v4 grouped sections,
   // v5 visual contribution bar — iteration of v2 that swaps three nested rows for a stacked
   // bar + decision callout (Sarah review, May 2026).
-  const [slice4Version, setSlice4Version] = useState<'v1' | 'v2' | 'v3' | 'v4' | 'v5'>('v1');
+  const [slice4Version, setSlice4Version] = useState<'v1' | 'v2' | 'v3' | 'v4' | 'v41' | 'v45'>('v1');
+  const panelGroupBy: 'category' | 'category1' | 'estimate' =
+    slice4Version === 'v41' ? 'category1'
+    : slice4Version === 'v45' ? 'estimate'
+    : 'category';
   const [slice4DrillOpen, setSlice4DrillOpen] = useState(false);
   const [showPrint, setShowPrint] = useState(false);
   const [printOptions, setPrintOptions] = useState({
@@ -404,9 +648,9 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
               Omaha, NE 68114
             </div>
             <div className="jps-print-summary-values">
-              <div><span>Revised price:</span><strong>{fmt(revisedClientPrice + (activeSlice === 'slice4' ? billVarianceTotal : 0))}</strong></div>
+              <div><span>Revised price:</span><strong>{fmt(revisedClientPrice + (activeSlice === 'slice4' || activeSlice === 'slice5' ? billVarianceTotal : 0))}</strong></div>
               <div><span>Amount paid:</span><strong>{fmt(paymentsReceived)}</strong></div>
-              <div><span>Remaining to pay:</span><strong>{fmt(remainingBalance + (activeSlice === 'slice4' ? billVarianceTotal : 0))}</strong></div>
+              <div><span>Remaining to pay:</span><strong>{fmt(remainingBalance + (activeSlice === 'slice4' || activeSlice === 'slice5' ? billVarianceTotal : 0))}</strong></div>
             </div>
           </div>
 
@@ -665,7 +909,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
 
           {/* Totals block — bottom right. Openbook slice rolls bill contributions into the math. */}
           {(() => {
-            const isOpenbook = activeSlice === 'slice4';
+            const isOpenbook = activeSlice === 'slice4' || activeSlice === 'slice5';
             const billsContrib = isOpenbook ? billVarianceTotal : 0;
             const approvedChangesPrint = changeOrdersTotal + approvedSelectionsTotal + billsContrib;
             const revisedPricePrint = revisedClientPrice + billsContrib;
@@ -744,12 +988,13 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
           <BdsTabs
             ariaLabel="Slice view"
             activeKey={activeSlice}
-            onChange={(k) => setActiveSlice(k as 'slice1' | 'slice2' | 'slice3' | 'slice4')}
+            onChange={(k) => setActiveSlice(k as 'slice1' | 'slice2' | 'slice3' | 'slice4' | 'slice5')}
             tabs={[
               { key: 'slice1', label: 'Slice 1' },
               { key: 'slice2', label: 'Slice 2' },
               { key: 'slice3', label: 'Slice 3' },
-              { key: 'slice4', label: 'Openbook' },
+              { key: 'slice4', label: 'Openbook (WIP)' },
+              { key: 'slice5', label: 'Openbook (demo)' },
             ]}
           />
         </div>
@@ -1997,7 +2242,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
         {/* ═══ SLICE 4 — sandbox for Kendall's open book client financials brief (page 7003570340).
               Each version (v1–v4) wraps the full Slice 1 JPS layout; only the Total-price card varies
               so the price-adjustment treatment can be evaluated in big-picture context. ═══ */}
-        {activeSlice === 'slice4' && (() => {
+        {(activeSlice === 'slice4' || activeSlice === 'slice5') && (() => {
           const approvedCOs = changeOrders.filter(c => c.status === 'approved');
           const approvedPostSelections = postContractSelections.filter(s => s.status === 'approved' && s.impact !== 0);
           const allowanceVariances = allowanceGroups
@@ -2074,6 +2319,33 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                   <div className="jps-breakdown-line jps-breakdown-parent">
                     <button type="button" className="jps-s4-link-label" onClick={() => setSlice4DrillOpen(true)}>Approved changes</button>
                     <span>{fmt(priceAdjustment)}</span>
+                  </div>
+                  <div className="jps-breakdown-line"><span>Tax</span><span>{fmt(totalTax)}</span></div>
+                </div>
+              </div>
+            );
+          } else if (slice4Version === 'v4' || slice4Version === 'v41' || slice4Version === 'v45') {
+            // v4 / v4.1 / v4.5: v2-style always-on breakdown with a clickable Budget difference
+            // row that opens a side panel. v4 = Cost code drill with bills, v4.1 = category totals
+            // only, v4.5 = drill grouped by Estimate (location).
+            totalPriceCard = (
+              <div className="jps-pane">
+                <div className="jps-pane-label">Total price</div>
+                <div className="jps-pane-big" style={{ marginTop: 4 }}>{fmt(revisedPriceS4)}</div>
+                <div className="jps-pane-breakdown" style={{ marginTop: 16 }}>
+                  <div className="jps-breakdown-line">
+                    <span>Original client price</span>
+                    <span>{fmt(originalContractPrice)}</span>
+                  </div>
+                  <div className="jps-breakdown-line jps-breakdown-parent">
+                    <span>Approved changes</span>
+                    <span>{fmt(priceAdjustment)}</span>
+                  </div>
+                  <div className="jps-breakdown-line jps-breakdown-nested"><span>Change Orders</span><span>{fmt(changeOrdersTotal)}</span></div>
+                  <div className="jps-breakdown-line jps-breakdown-nested"><span>Selection and allowance changes</span><span>{fmt(approvedSelectionsTotal)}</span></div>
+                  <div className="jps-breakdown-line jps-breakdown-nested">
+                    <button type="button" className="jps-s4-link-label" onClick={() => setSlice4DrillOpen(true)}>Budget difference</button>
+                    <span className={panelVarianceTotal >= 0 ? 'jps-impact-up' : 'jps-impact-down'}>{fmtSigned(panelVarianceTotal)}</span>
                   </div>
                   <div className="jps-breakdown-line"><span>Tax</span><span>{fmt(totalTax)}</span></div>
                 </div>
@@ -2168,77 +2440,24 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
 
           return (
             <>
-              {expandedGroups['__s4-context__'] && (
-                <div className="jps-s4-assumptions">
-                  <div className="jps-s4-assumptions-section">
-                    <div className="jps-s4-assumptions-title">Contributing entities</div>
-                    <div className="jps-s4-assumption-row">
-                      <span className="jps-s4-assumption-status jps-s4-status-confirmed">Confirmed</span>
-                      <span className="jps-s4-assumption-name">Change orders</span>
-                      <span className={`jps-s4-assumption-value ${changeOrdersTotal >= 0 ? 'jps-impact-up' : 'jps-impact-down'}`}>{fmtSigned(changeOrdersTotal)}</span>
-                    </div>
-                    <div className="jps-s4-assumption-row">
-                      <span className="jps-s4-assumption-status jps-s4-status-confirmed">Confirmed</span>
-                      <span className="jps-s4-assumption-name">Selection + allowance changes</span>
-                      <span className={`jps-s4-assumption-value ${approvedSelectionsTotal >= 0 ? 'jps-impact-up' : 'jps-impact-down'}`}>{fmtSigned(approvedSelectionsTotal)}</span>
-                    </div>
-                    <div className="jps-s4-assumption-row">
-                      <span className="jps-s4-assumption-status jps-s4-status-assumed">Assumed</span>
-                      <span className="jps-s4-assumption-name">Bills / line items <span className="jps-item-parent">— pending spike</span></span>
-                      <span className={`jps-s4-assumption-value ${billVarianceTotal >= 0 ? 'jps-impact-up' : 'jps-impact-down'}`}>{fmtSigned(billVarianceTotal)}</span>
-                    </div>
-                    <div className="jps-s4-assumption-row">
-                      <span className="jps-s4-assumption-status jps-s4-status-open">Open</span>
-                      <span className="jps-s4-assumption-name">Tax <span className="jps-item-parent">— Ben Affleck team owns thread</span></span>
-                      <span className="jps-s4-assumption-value">{fmt(totalTax)}</span>
-                    </div>
-                  </div>
-
-                  <div className="jps-s4-assumptions-section">
-                    <div className="jps-s4-assumptions-title">References</div>
-                    <ul className="jps-s4-refs">
-                      <li><strong>Brief:</strong> <a href="https://btwiki.atlassian.net/wiki/spaces/~6261832f60d67c0068d9dddb/pages/7003570340" target="_blank" rel="noreferrer">Confluence (Kendall, May 2026)</a></li>
-                      <li><strong>Tech spike:</strong> <a href="https://dev.azure.com/buildertrend/_workitems/edit/273071" target="_blank" rel="noreferrer">ADO #273071</a> — confirms data layer</li>
-                      <li><strong>Today's logic:</strong> <code>OwnerProjectFinancials.tsx</code> <span className="jps-item-parent">— comments invert open book / fixed price</span></li>
-                      <li><strong>Evidence:</strong> Adam Copenhaver (Copegrand) CS calls, April 2026</li>
-                    </ul>
-                  </div>
-
-                  <div className="jps-s4-assumptions-section">
-                    <div className="jps-s4-assumptions-title">Open questions</div>
-                    <ul className="jps-s4-questions">
-                      <li>How granular is too granular for the client?</li>
-                      <li>Order: chronological, by amount, or by source?</li>
-                      <li>Where does tax sit if it lands in this field?</li>
-                      <li>Reuse existing CO / selection visual language, or design something new for cost-tracking framing?</li>
-                    </ul>
-                  </div>
-                </div>
-              )}
-
               <div className="jps-slice-tabs" style={{ marginBottom: 16 }}>
                 <BdsTabs
                   ariaLabel="Direction"
                   activeKey={slice4Version}
-                  onChange={(k) => setSlice4Version(k as 'v1' | 'v2' | 'v3' | 'v4' | 'v5')}
-                  tabs={[
+                  onChange={(k) => setSlice4Version(k as 'v1' | 'v2' | 'v3' | 'v4' | 'v41' | 'v45')}
+                  tabs={activeSlice === 'slice5' ? [
+                    { key: 'v41', label: 'v4 · Cost category' },
+                    { key: 'v45', label: 'v4.5 · Drill with bills (Estimate)' },
+                  ] : [
                     { key: 'v1', label: 'v1 · Inline expandable' },
                     { key: 'v2', label: 'v2 · Always-on list' },
                     { key: 'v3', label: 'v3 · Drill-through' },
-                    { key: 'v4', label: 'v4 · Grouped sections' },
-                    { key: 'v5', label: 'v5 · Visual contribution' },
+                    { key: 'v41', label: 'v4 · Cost category' },
+                    { key: 'v4', label: 'v4.1 · Drill with bills (Cost code)' },
+                    { key: 'v45', label: 'v4.5 · Drill with bills (Estimate)' },
                   ]}
                 />
-                <button
-                  type="button"
-                  className="jps-s4-context-toggle"
-                  onClick={() => toggleGroup('__s4-context__')}
-                >
-                  <BdsIcon name={expandedGroups['__s4-context__'] ? 'chevron-up' : 'chevron-down'} size={12} />
-                  {expandedGroups['__s4-context__'] ? 'Hide assumptions' : 'Show assumptions'}
-                </button>
               </div>
-
 
               {/* ─── Two summary cards ─── */}
               <div className="jps-panes-row">
@@ -2246,14 +2465,8 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                 {balanceDueCard}
               </div>
 
-              {/* ─── Approved-changes group wrapper (v4 only — visually groups contributing sections) ─── */}
-              <div className={slice4Version === 'v4' ? 'jps-s4-approved-group' : 'jps-s4-approved-group jps-s4-approved-group-flat'}>
-                {slice4Version === 'v4' && (
-                  <div className="jps-s4-approved-group-header">
-                    <BdsText as="h2" size="heavy-lg" className="jps-s4-approved-group-title">Approved changes</BdsText>
-                    <span className="jps-s4-approved-group-total">{fmt(priceAdjustment)}</span>
-                  </div>
-                )}
+              {/* ─── Approved-changes group wrapper (always flat after v4 was removed) ─── */}
+              <div className="jps-s4-approved-group jps-s4-approved-group-flat">
 
               {/* ─── Allowances ─── */}
               <div className="jps-breakdown-section">
@@ -2370,10 +2583,10 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                 })}
               </div>
 
-              {/* ─── Bills ─── */}
+              {/* ─── Budget difference (cost activity by code) ─── */}
               <div className="jps-breakdown-section">
                 <div className="jps-section-header">
-                  <BdsText as="h2" size="heavy-lg" className="jps-section-title">Bills</BdsText>
+                  <BdsText as="h2" size="heavy-lg" className="jps-section-title">Budget difference</BdsText>
                 </div>
 
                 {costCodeVariances.map(cc => {
@@ -2672,12 +2885,90 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                 </div>
               )}
 
+              {/* ─── v4 side panel — opens from the right when the user clicks
+                       the Bills line in the v2-style breakdown. Each cost code is
+                       clickable to expand the individual bills behind it. ─── */}
+              {(slice4Version === 'v4' || slice4Version === 'v41' || slice4Version === 'v45') && slice4DrillOpen && (
+                <div className="jps-s4-side-panel-scrim" onClick={() => setSlice4DrillOpen(false)}>
+                  <aside className="jps-s4-side-panel" onClick={(e) => e.stopPropagation()}>
+                    <BdsActionBar align="space-between" className="jps-s4-modal-bar">
+                      <div className="jps-s4-side-panel-titleblock">
+                        <BdsText as="h3" size="heavy-lg">Budget difference</BdsText>
+                      </div>
+                      <BdsButton displayType="tertiary" icon={<BdsIcon name="x" size={14} />} ariaLabel="Close" onClick={() => setSlice4DrillOpen(false)} />
+                    </BdsActionBar>
+
+                    <div className="jps-s4-side-panel-body">
+                      <div className="jps-s4-side-panel-note">
+                        Each cost category shows revised − original budget cost. This doesn't include approved Change Orders or Selection and allowance changes.
+                      </div>
+
+                      {(panelGroupBy === 'estimate' ? panelByLocation : panelByCategory).map((group, gi) => {
+                        const groupKey = `v45-group-${group.category}`;
+                        const groupExpanded = expandedGroups[groupKey] !== false;
+                        const collapsibleGroup = panelGroupBy === 'category' || panelGroupBy === 'estimate';
+                        return (
+                          <div key={gi} className="jps-s4-category-block">
+                            {collapsibleGroup ? (
+                              <button
+                                type="button"
+                                className={`jps-s4-category-header jps-s4-category-header-toggle ${!groupExpanded ? 'jps-s4-category-header-toggle-collapsed' : ''}`}
+                                onClick={() => toggleGroup(groupKey)}
+                              >
+                                <div className="jps-s4-category-header-row">
+                                  <div className="jps-s4-category-name">
+                                    <BdsIcon name={groupExpanded ? 'chevron-down' : 'chevron-right'} size={12} />
+                                    <span>{group.category}</span>
+                                  </div>
+                                  {group.variance !== 0 && (
+                                    <span className={group.variance >= 0 ? 'jps-s4-category-revision' : 'jps-impact-down'}>{fmtSigned(group.variance)}</span>
+                                  )}
+                                </div>
+                              </button>
+                            ) : (
+                              <div className={`jps-s4-category-header ${panelGroupBy === 'category1' ? 'jps-s4-category-header-flat' : ''}`}>
+                                <div className="jps-s4-category-header-row">
+                                  <div className="jps-s4-category-name">{group.category}</div>
+                                  {(group.variance !== 0 || panelGroupBy === 'category1') && (
+                                    <span className={group.variance >= 0 ? 'jps-s4-category-revision' : 'jps-impact-down'}>{fmtSigned(group.variance)}</span>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+
+                            {collapsibleGroup && groupExpanded && group.items.map((item, i) => (
+                              <div key={i} className="jps-s4-modal-line">
+                                <span className="jps-s4-modal-line-name">
+                                  <span className="jps-s4-cost-code-num">{item.code}</span>
+                                  <span>{item.name}</span>
+                                </span>
+                                <span className="jps-s4-modal-line-amt">{fmtSigned(item.variance)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      })}
+
+                      <div className="jps-s4-side-panel-summary jps-s4-side-panel-summary-bottom">
+                        <span>Budget difference</span>
+                        <span className={panelVarianceTotal >= 0 ? 'jps-impact-up' : 'jps-impact-down'}>{fmtSigned(panelVarianceTotal)}</span>
+                      </div>
+                    </div>
+                  </aside>
+                </div>
+              )}
+
               {/* ─── v5 drill-through modal — math walkthrough using JCB column terms
                        so each row reconciles back to the Job Costing Budget. ─── */}
               {slice4Version === 'v5' && slice4DrillOpen && (() => {
                 const projOverage = MOCK_PROJECTED_COSTS - REVISED_BUDGET_TOTAL;
                 const builderStrip = -MOCK_BUILDER_VARIANCE;
                 const cvTotal = costSideDelta + markupOnDelta;
+                const topContributors = [...JCB_ROWS]
+                  .map(r => ({ ...r, variance: r.projectedCosts - r.revisedBudgetCosts }))
+                  .filter(r => r.variance !== 0)
+                  .sort((a, b) => Math.abs(b.variance) - Math.abs(a.variance))
+                  .slice(0, 3);
                 return (
                   <div className="jps-s4-modal-scrim" onClick={() => setSlice4DrillOpen(false)}>
                     <div className="jps-s4-modal" onClick={(e) => e.stopPropagation()}>
@@ -2688,46 +2979,38 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
 
                       <div className="jps-s4-modal-body">
                         <BdsSection
-                          title="Revised vs Projected"
-                          slot={<span className="jps-s4-modal-section-total">{fmtSigned(projOverage)}</span>}
+                          title="Revised vs projected"
                           className="jps-s4-modal-section"
                         >
                           <div className="jps-s4-modal-line jps-s4-math-line">
-                            <span className="jps-s4-math-op"></span>
                             <span className="jps-s4-math-val">{fmt(MOCK_PROJECTED_COSTS)}</span>
                             <span className="jps-s4-math-name">Projected costs</span>
                           </div>
                           <div className="jps-s4-modal-line jps-s4-math-line">
-                            <span className="jps-s4-math-op">−</span>
-                            <span className="jps-s4-math-val">{fmt(REVISED_BUDGET_TOTAL)}</span>
+                            <span className="jps-s4-math-val">− {fmt(REVISED_BUDGET_TOTAL)}</span>
                             <span className="jps-s4-math-name">Revised budget costs</span>
                           </div>
                           <div className="jps-s4-modal-line jps-s4-math-line jps-s4-math-result">
-                            <span className="jps-s4-math-op"></span>
-                            <span className={`jps-s4-math-val ${projOverage > 0 ? 'jps-neg' : 'jps-pos'}`}>{fmtSigned(projOverage)}</span>
+                            <span className="jps-s4-math-val">{fmtSigned(projOverage)}</span>
                             <span className="jps-s4-math-name">Total</span>
                           </div>
                         </BdsSection>
 
                         {builderStrip !== 0 && (
                           <BdsSection
-                            title="Builder Variance"
-                            slot={<span className="jps-s4-modal-section-total">{fmtSigned(builderStrip)}</span>}
+                            title="Builder variance"
                             className="jps-s4-modal-section"
                           >
                             <div className="jps-s4-modal-line jps-s4-math-line">
-                              <span className="jps-s4-math-op"></span>
                               <span className="jps-s4-math-val">{fmt(projOverage)}</span>
-                              <span className="jps-s4-math-name">Cost overrun (from above)</span>
+                              <span className="jps-s4-math-name">Revised vs projected (from above)</span>
                             </div>
                             <div className="jps-s4-modal-line jps-s4-math-line">
-                              <span className="jps-s4-math-op">−</span>
-                              <span className="jps-s4-math-val">{fmt(MOCK_BUILDER_VARIANCE)}</span>
-                              <span className="jps-s4-math-name">Builder variance (absorbed)</span>
+                              <span className="jps-s4-math-val">− {fmt(MOCK_BUILDER_VARIANCE)}</span>
+                              <span className="jps-s4-math-name">Builder variance</span>
                             </div>
                             <div className="jps-s4-modal-line jps-s4-math-line jps-s4-math-result">
-                              <span className="jps-s4-math-op"></span>
-                              <span className={`jps-s4-math-val ${costSideDelta > 0 ? 'jps-neg' : 'jps-pos'}`}>{fmtSigned(costSideDelta)}</span>
+                              <span className="jps-s4-math-val">{fmtSigned(costSideDelta)}</span>
                               <span className="jps-s4-math-name">Total</span>
                             </div>
                           </BdsSection>
@@ -2735,25 +3018,41 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
 
                         {markupOnDelta !== 0 && (
                           <BdsSection
-                            title="Markup on projection"
-                            slot={<span className="jps-s4-modal-section-total">{fmtSigned(markupOnDelta)}</span>}
+                            title="Markup"
                             className="jps-s4-modal-section"
                           >
                             <div className="jps-s4-modal-line jps-s4-math-line">
-                              <span className="jps-s4-math-op"></span>
                               <span className="jps-s4-math-val">{fmt(costSideDelta)}</span>
-                              <span className="jps-s4-math-name">Customer-payable cost change</span>
+                              <span className="jps-s4-math-name">Client cost change</span>
                             </div>
                             <div className="jps-s4-modal-line jps-s4-math-line">
-                              <span className="jps-s4-math-op">×</span>
-                              <span className="jps-s4-math-val">{(MOCK_MARKUP_PCT * 100).toFixed(0)}%</span>
-                              <span className="jps-s4-math-name">Open Book markup rate</span>
+                              <span className="jps-s4-math-val">× {(MOCK_MARKUP_PCT * 100).toFixed(0)}%</span>
+                              <span className="jps-s4-math-name">Markup rate</span>
                             </div>
                             <div className="jps-s4-modal-line jps-s4-math-line jps-s4-math-result">
-                              <span className="jps-s4-math-op"></span>
-                              <span className={`jps-s4-math-val ${markupOnDelta > 0 ? 'jps-neg' : 'jps-pos'}`}>{fmtSigned(markupOnDelta)}</span>
+                              <span className="jps-s4-math-val">{fmtSigned(markupOnDelta)}</span>
                               <span className="jps-s4-math-name">Total</span>
                             </div>
+                          </BdsSection>
+                        )}
+
+                        {topContributors.length > 0 && (
+                          <BdsSection
+                            title="Top contributors"
+                            className="jps-s4-modal-section"
+                          >
+                            <div className="jps-s4-modal-section-desc">Cost codes where the projected cost is trending furthest from the revised budget.</div>
+                            {topContributors.map(c => (
+                              <div key={c.code} className="jps-s4-modal-line jps-s4-math-line">
+                                <span className="jps-s4-math-val">{fmtSigned(c.variance)}</span>
+                                <span className="jps-s4-math-name">
+                                  {c.code} {c.name}
+                                  {c.builderVariance !== 0 && (
+                                    <span className="jps-item-parent"> · {fmt(c.builderVariance)} absorbed by builder</span>
+                                  )}
+                                </span>
+                              </div>
+                            ))}
                           </BdsSection>
                         )}
 
@@ -2764,18 +3063,12 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                           </div>
                         </div>
 
-                        {onOpenJCB && (
-                          <div style={{ marginTop: 16, paddingTop: 12, borderTop: '1px solid var(--g200)', fontSize: 13 }}>
-                            <a href="#" className="jps-s4-link-label" onClick={(e) => { e.preventDefault(); onOpenJCB(); }}>
-                              View on Job Costing Budget →
-                            </a>
-                          </div>
-                        )}
                       </div>
                     </div>
                   </div>
                 );
               })()}
+
             </>
           );
         })()}

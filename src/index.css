@@ -1226,6 +1226,10 @@ table { width: 100%; border-collapse: collapse; }
 .jps-item-name { font-weight: 500; color: var(--bt-blue); cursor: pointer; }
 .jps-item-name:hover { text-decoration: underline; }
 .jps-item-parent { display: block; font-size: 11px; color: var(--g400); font-weight: 400; margin-top: 1px; }
+.jps-s4-cost-code-num { font-variant-numeric: tabular-nums; color: var(--g500); font-weight: 500; }
+.jps-s4-cat-walk { display: flex; flex-direction: column; gap: 4px; padding: 6px 0 8px 12px; font-size: 12px; color: var(--g700); }
+.jps-s4-cat-walk-row { display: flex; justify-content: space-between; font-variant-numeric: tabular-nums; }
+.jps-s4-cat-walk-note { font-size: 11px; color: var(--g500); padding-top: 4px; line-height: 1.4; }
 
 /* Impact chips — the hero metric */
 .jps-impact-chip {
@@ -4572,7 +4576,8 @@ table { width: 100%; border-collapse: collapse; }
   display: flex !important;
   align-items: baseline;
   gap: 0;
-  padding: 1px 0 !important;
+  padding: 0 !important;
+  line-height: 1.4;
   font-feature-settings: "tnum";
   font-size: 13px;
 }
@@ -4663,9 +4668,6 @@ table { width: 100%; border-collapse: collapse; }
   color: var(--g700);
 }
 .jps-s4-math-row-total {
-  border-top: 1px solid var(--g300);
-  padding-top: 10px;
-  margin-top: 4px;
   font-size: 16px;
   font-weight: 700;
   color: var(--bt-midnight);
@@ -4683,6 +4685,12 @@ table { width: 100%; border-collapse: collapse; }
   align-items: baseline;
   margin-bottom: 6px;
 }
+.jps-s4-modal-section-desc {
+  font-size: 12px;
+  color: var(--g600);
+  margin-bottom: 8px;
+  line-height: 1.4;
+}
 .jps-s4-modal-section-total {
   font-size: 15px;
   font-weight: 700;
@@ -4696,8 +4704,321 @@ table { width: 100%; border-collapse: collapse; }
   padding: 2px 0;
 }
 .jps-s4-modal-line + .jps-s4-modal-line { border-top: 1px dashed var(--g200); }
-.jps-s4-modal-line-name { color: var(--g700); }
+.jps-s4-modal-line-name { color: var(--g700); display: inline-flex; align-items: center; gap: 10px; }
 .jps-s4-modal-line-amt { color: var(--g700); font-variant-numeric: tabular-nums; }
+
+/* v4.5 side panel — slides in from the right when the Bills row is clicked */
+.jps-s4-side-panel-scrim {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.32);
+  z-index: 1000;
+  display: flex;
+  justify-content: flex-end;
+  animation: jps-s4-fade-in 0.18s ease-out;
+}
+.jps-s4-side-panel {
+  width: min(480px, 92vw);
+  height: 100%;
+  background: #fff;
+  box-shadow: -8px 0 24px rgba(0,0,0,0.12);
+  display: flex;
+  flex-direction: column;
+  animation: jps-s4-slide-in 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+  overflow: hidden;
+}
+.jps-s4-side-panel .jps-s4-modal-bar {
+  padding: 12px 32px;
+}
+.jps-s4-side-panel-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 32px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.jps-s4-side-panel-summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 10px 12px;
+  background: var(--g50);
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--g700);
+  margin-bottom: 8px;
+  font-weight: 500;
+}
+.jps-s4-side-panel-summary-bottom {
+  margin-top: 12px;
+  margin-bottom: 0;
+  border-top: none;
+  border-radius: 0;
+  background: transparent;
+  padding: 12px 0 4px;
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--bt-midnight);
+}
+
+/* Category grouping inside the v4.5 panel */
+.jps-s4-category-block {
+  margin-bottom: 14px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--g200);
+}
+.jps-s4-category-block:last-child {
+  border-bottom: none;
+}
+.jps-s4-category-header {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 0 8px;
+  font-size: 13px;
+  margin-bottom: 4px;
+  border-bottom: 1px dashed var(--g200);
+}
+.jps-s4-category-header-toggle {
+  width: 100%;
+  background: none;
+  border: none;
+  border-bottom: 1px dashed var(--g200);
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+}
+.jps-s4-category-header-toggle:hover { background: var(--g50); }
+.jps-s4-category-header-toggle-collapsed { border-bottom: none; margin-bottom: 0; padding-bottom: 2px; }
+.jps-s4-category-block:has(.jps-s4-category-header-toggle-collapsed) { padding-bottom: 2px; margin-bottom: 8px; }
+.jps-s4-category-header-toggle .jps-s4-category-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.jps-s4-category-header.jps-s4-category-header-flat {
+  border-bottom: none;
+  margin-bottom: 0;
+}
+.jps-s4-category-block:has(.jps-s4-category-header-flat) {
+  border-bottom: none;
+  margin-bottom: 0;
+  padding-bottom: 0;
+}
+.jps-s4-category-block:has(.jps-s4-category-header-flat) .jps-s4-category-header {
+  padding: 4px 0;
+}
+.jps-s4-category-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  font-weight: 500;
+}
+.jps-s4-category-name {
+  font-weight: 500;
+  font-size: 13px;
+  color: var(--g700);
+}
+.jps-s4-category-equation {
+  font-size: 11px;
+  color: var(--g600);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.4;
+}
+.jps-s4-budget-value {
+  font-weight: 600;
+  color: var(--bt-midnight);
+  font-variant-numeric: tabular-nums;
+}
+.jps-s4-category-revision {
+  color: var(--bt-midnight);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Group-by toggle in the v4 panel */
+.jps-s4-panel-groupby {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 8px 0 12px;
+  font-size: 12px;
+}
+.jps-s4-panel-groupby-label {
+  color: var(--g600);
+  margin-right: 6px;
+}
+.jps-s4-panel-groupby-btn {
+  padding: 4px 10px;
+  border: 1px solid var(--g200);
+  background: #fff;
+  border-radius: 12px;
+  color: var(--g700);
+  cursor: pointer;
+  font: inherit;
+}
+.jps-s4-panel-groupby-btn:hover { background: var(--g50); }
+.jps-s4-panel-groupby-btn-active {
+  background: var(--bt-midnight);
+  border-color: var(--bt-midnight);
+  color: #fff;
+}
+
+/* Disclosure note under the panel summary */
+.jps-s4-side-panel-note {
+  font-size: 13px;
+  color: var(--g600);
+  line-height: 1.5;
+  margin: 0 0 16px;
+  padding: 0;
+}
+
+/* Budget walk inside the cost code expansion — shows how Original became Revised */
+.jps-s4-budget-walk {
+  background: var(--g50);
+  border-radius: 4px;
+  padding: 8px 10px;
+  margin-bottom: 8px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.jps-s4-budget-walk-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 2px 0;
+  color: var(--g700);
+}
+.jps-s4-budget-walk-total {
+  border-top: 1px solid var(--g300);
+  margin-top: 4px;
+  padding-top: 4px;
+  font-weight: 600;
+  color: var(--bt-midnight);
+}
+@keyframes jps-s4-slide-in {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+@keyframes jps-s4-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.jps-s4-side-panel-footer {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--g200);
+  font-size: 13px;
+}
+
+/* Activity-kind icons in the side panel — plain icons, no background */
+.jps-s4-activity-kind {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  margin-right: 8px;
+  vertical-align: middle;
+  color: var(--g600);
+  flex: 0 0 auto;
+}
+
+/* v4.5 modal — clickable cost code rows + nested bill detail */
+.jps-s4-modal-line-toggle {
+  width: 100%;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  align-items: center;
+  padding: 4px 0;
+  font: inherit;
+  color: inherit;
+}
+.jps-s4-modal-line-toggle:hover { background: var(--g50); }
+.jps-s4-modal-line-toggle .jps-s4-modal-line-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.jps-s4-modal-bills-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 0 6px 20px;
+  margin-bottom: 4px;
+  border-left: 2px solid var(--g200);
+  margin-left: 6px;
+}
+.jps-s4-modal-bill-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  column-gap: 12px;
+  font-size: 12px;
+  padding: 6px 8px;
+  border-radius: 4px;
+}
+.jps-s4-modal-bill-row:hover { background: var(--g50); }
+.jps-s4-modal-bill-row-clickable {
+  width: 100%;
+  background: none;
+  border: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.jps-s4-modal-bill-row-clickable:hover { background: var(--g50); }
+.jps-s4-modal-bill-row-clickable:hover .jps-s4-modal-bill-name-text {
+  text-decoration: underline;
+  color: var(--bt-blue);
+}
+.jps-s4-modal-bill-row-clickable:focus-visible {
+  outline: 2px solid var(--bt-blue);
+  outline-offset: -1px;
+}
+.jps-s4-modal-bill-name {
+  display: flex;
+  align-items: center;
+  color: var(--bt-midnight);
+  font-weight: 500;
+  flex: 1;
+  min-width: 0;
+}
+.jps-s4-modal-bill-amt {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--bt-midnight);
+  font-weight: 500;
+  flex: 0 0 auto;
+}
+.jps-s4-modal-bill-over {
+  color: #B71C1C;
+  font-weight: 600;
+}
+.jps-s4-modal-summary {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 6px 8px 8px;
+  font-size: 12px;
+  color: var(--g700);
+  font-variant-numeric: tabular-nums;
+  border-bottom: 1px solid var(--g200);
+  margin-bottom: 4px;
+}
+.jps-s4-modal-summary-sep {
+  color: var(--g500);
+}
+.jps-s4-modal-summary-under {
+  color: var(--g600);
+}
+
 
 /* v4 audience toggle */
 .jps-s4-audience-toggle {
