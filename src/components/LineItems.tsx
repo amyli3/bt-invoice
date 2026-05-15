@@ -65,7 +65,7 @@ function LineRow({ item, onChange, onRemove, vis, taxRate }: LineRowProps) {
   return (
     <tr>
       <td>
-        <div><input className="cell-input" style={{fontWeight: 600}} value={item.description} onChange={e => u('description', e.target.value)} /></div>
+        <div><textarea className="cell-input cell-input-multi" style={{fontWeight: 600}} rows={1} value={item.description} onChange={e => u('description', e.target.value)} /></div>
         <div><input className="cell-input" style={{fontSize: 11, color: 'var(--g400)'}} value={item.costCode} onChange={e => u('costCode', e.target.value)} /></div>
       </td>
       {vis.costType && <td><select className="badge" style={{cursor: 'pointer', fontSize: 12, padding: '2px 6px'}} value={item.costType} onChange={e => u('costType', e.target.value)}>{COST_TYPES.map(t => <option key={t}>{t}</option>)}</select></td>}

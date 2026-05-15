@@ -121,6 +121,14 @@ const SELECTIONS_DATA: SelectionGroup[] = allAllowances.map(allowance => {
 });
 
 /* ─── Component ─── */
+type HeldUnderage = { id: string; name: string; costCode: string; amount: number };
+type ReallocApplication = {
+  source: { id: string; name: string; costCode: string };
+  target: { id: string; name: string; costCode: string };
+  amount: number;
+  targetOverageTotal: number;
+};
+
 interface Props {
   open: boolean;
   onClose: () => void;
@@ -132,9 +140,11 @@ interface Props {
   showNegativeBalances?: boolean;
   sortByBalance?: boolean;
   onMarkComplete?: (id: string) => void;
+  heldUnderages?: HeldUnderage[];
+  onApplyReallocation?: (apps: ReallocApplication[]) => void;
 }
 
-export default function SelectionsModal({ open, onClose, onAdd, jobName, addedGroupIds = [], data, showNegativeBalances = false, sortByBalance = false, onMarkComplete }: Props) {
+export default function SelectionsModal({ open, onClose, onAdd, jobName, addedGroupIds = [], data, showNegativeBalances = false, sortByBalance = false, onMarkComplete, heldUnderages = [], onApplyReallocation }: Props) {
   const sourceData = data || SELECTIONS_DATA;
   const addedSet = new Set(addedGroupIds);
   const availableData = sourceData.filter(d => !addedSet.has(d.id));
@@ -143,6 +153,7 @@ export default function SelectionsModal({ open, onClose, onAdd, jobName, addedGr
   const [expanded, setExpanded] = useState<Record<string, boolean>>(() => {
     const e: Record<string, boolean> = {};
     sourceData.forEach(d => { e[d.id] = d.type === 'allowance'; });
+    heldUnderages.forEach(u => { e[u.id] = false; });
     return e;
   });
   const [includeDescs, setIncludeDescs] = useState(true);
@@ -192,13 +203,165 @@ export default function SelectionsModal({ open, onClose, onAdd, jobName, addedGr
 
   const handleCreate = () => {
     const items = availableData.filter(d => selected[d.id]);
-    onAdd(items);
+    // Reallocation: for each selected underage, add its negative source line(s)
+    // with target metadata when its match lands on a selected overage; otherwise
+    // it becomes a bare credit at its own cost code (self-target).
+    const selectedUnderageIds = new Set(heldUnderages.filter(u => selected[u.id]).map(u => u.id));
+    const matchedApps = previewApps.filter(a => selectedUnderageIds.has(a.source.id));
+    const bareCredits: ReallocApplication[] = heldUnderages
+      .filter(u => selected[u.id])
+      .map(u => {
+        const applied = matchedApps.filter(a => a.source.id === u.id).reduce((s, a) => s + a.amount, 0);
+        const bare = u.amount - applied;
+        if (bare <= 0) return null;
+        return {
+          source: { id: u.id, name: u.name, costCode: u.costCode },
+          target: { id: u.id, name: u.name, costCode: u.costCode },
+          amount: bare,
+          targetOverageTotal: 0,
+        } as ReallocApplication;
+      })
+      .filter((x): x is ReallocApplication => x !== null);
+    const allApps = [...matchedApps, ...bareCredits];
+
+    if (items.length > 0) onAdd(items);
+    if (allApps.length > 0 && onApplyReallocation) onApplyReallocation(allApps);
     onClose();
   };
+
+  // Greedy match held underages against SELECTED overages, so the underage
+  // sub-table previews "if you apply this, here's where it goes" based on
+  // what the builder has currently checked. Recomputes on every selection.
+  const previewApps: ReallocApplication[] = (() => {
+    const apps: ReallocApplication[] = [];
+    const selectedOverageRows = availableData
+      .filter(d => selected[d.id] && d.type === 'allowance' && (d.overage ?? 0) > 0)
+      .map(d => ({ id: d.id, name: d.name, costCode: d.children?.[0]?.costCode || '', overageAmount: d.overage ?? 0 }));
+    let held = heldUnderages.map(h => ({ ...h }));
+    selectedOverageRows.forEach(over => {
+      let remaining: number = over.overageAmount;
+      while (remaining > 0 && held.length > 0) {
+        const src = held[0];
+        const take = Math.min(src.amount, remaining);
+        apps.push({
+          source: { id: src.id, name: src.name, costCode: src.costCode },
+          target: { id: over.id, name: over.name, costCode: over.costCode },
+          amount: take,
+          targetOverageTotal: over.overageAmount,
+        });
+        src.amount -= take;
+        remaining -= take;
+        if (src.amount === 0) held.shift();
+      }
+    });
+    return apps;
+  })();
 
   const chevron = (isOpen: boolean) => (
     <span className={"est-group-chevron" + (isOpen ? " open" : "")}>&#9654;</span>
   );
+
+  // Render one allowance/selection card. Extracted so the same card can appear
+  // inside multiple subgroups (Overages, Other allowances, Selections) without
+  // duplicating the JSX. Coverage suggestions live on the invoice page's
+  // Smart panel, not here.
+  const renderItemCard = (item: SelectionGroup) => {
+    const isExpanded = expanded[item.id];
+    return (
+      <div key={item.id} style={{ marginBottom: 10, border: '1px solid var(--g200)', borderRadius: 8, overflow: 'hidden' }}>
+        <div className="sel-card-header">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div className={"est-check" + (selected[item.id] ? " on" : "")} onClick={() => toggleItem(item.id)} style={{ flexShrink: 0 }} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }} onClick={() => toggleExpand(item.id)}>
+              {chevron(isExpanded)}
+              <span style={{ color: 'var(--bt-midnight)', display: 'inline-flex', alignItems: 'center', flexShrink: 0 }}>
+                {item.type === 'allowance' ? <AllowanceIcon /> : <SelectionIcon />}
+              </span>
+              <span style={{ fontWeight: 600, fontSize: 14, color: 'var(--bt-midnight)' }}>{item.name}</span>
+              {item.scenarioNote && <ScenarioTooltip note={item.scenarioNote} />}
+            </div>
+            {onMarkComplete && item.canMarkComplete && (
+              <button
+                onClick={(e) => { e.stopPropagation(); onMarkComplete(item.id); }}
+                style={{
+                  marginLeft: 8, padding: '3px 10px', fontSize: 12, fontWeight: 500, borderRadius: 4,
+                  border: item.isComplete ? '1px solid var(--green, #2f855a)' : '1px solid var(--g300)',
+                  background: item.isComplete ? 'var(--green-bg, #f0fff4)' : '#fff',
+                  color: item.isComplete ? 'var(--green, #2f855a)' : 'var(--g600)',
+                  cursor: 'pointer',
+                }}
+              >
+                {item.isComplete ? '✓ Completed' : 'Mark complete'}
+              </button>
+            )}
+          </div>
+          <div className="sel-card-meta">
+            <div className="sel-meta-item">
+              <div className="sel-meta-label">Revised price</div>
+              <div className="sel-meta-value">${fmt(item.revisedPrice)}</div>
+            </div>
+            <div className="sel-meta-item">
+              <div className="sel-meta-label">Previously invoiced</div>
+              <div className="sel-meta-value">${fmt(item.previouslyInvoiced)}</div>
+            </div>
+            <div className="sel-meta-item">
+              <div className="sel-meta-label">Remaining to invoice</div>
+              <div className="sel-meta-value" style={{ color: item.invoiceBalance < 0 ? 'var(--red, #c53030)' : item.invoiceBalance > 0 ? 'var(--bt-midnight)' : 'var(--g500)' }}>{item.invoiceBalance < 0 ? '-' : ''}${fmt(Math.abs(item.invoiceBalance))}</div>
+            </div>
+          </div>
+        </div>
+
+        {isExpanded && (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, tableLayout: 'fixed', minWidth: 560 }}>
+              <colgroup>
+                <col style={{ width: '22%' }} />
+                <col style={{ width: '22%' }} />
+                <col style={{ width: '26%' }} />
+                <col style={{ width: '15%' }} />
+                <col style={{ width: '15%' }} />
+              </colgroup>
+              <thead>
+                <tr style={{ background: '#f8fafc' }}>
+                  <th style={{ textAlign: 'left', padding: '8px 14px', fontWeight: 500, fontSize: 12, color: 'var(--g500)', borderTop: '1px solid var(--g200)', borderBottom: '1px solid var(--g200)' }}>Line item</th>
+                  <th style={{ textAlign: 'left', padding: '8px 14px', fontWeight: 500, fontSize: 12, color: 'var(--g500)', borderTop: '1px solid var(--g200)', borderBottom: '1px solid var(--g200)' }}>Cost code</th>
+                  <th style={{ textAlign: 'left', padding: '8px 14px', fontWeight: 500, fontSize: 12, color: 'var(--g500)', borderTop: '1px solid var(--g200)', borderBottom: '1px solid var(--g200)' }}>Selection</th>
+                  <th style={{ textAlign: 'right', padding: '8px 14px', fontWeight: 500, fontSize: 12, color: 'var(--g500)', borderTop: '1px solid var(--g200)', borderBottom: '1px solid var(--g200)' }}>Price</th>
+                  <th style={{ textAlign: 'right', padding: '8px 14px', fontWeight: 500, fontSize: 12, color: 'var(--g500)', borderTop: '1px solid var(--g200)', borderBottom: '1px solid var(--g200)' }}>New invoice amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                {item.children.map((child, idx) => (
+                  <tr key={child.id} style={{ borderBottom: idx < item.children.length - 1 ? '1px solid var(--g100)' : 'none' }}>
+                    <td style={{ padding: '8px 14px', color: 'var(--g700)' }}>{child.lineItem}</td>
+                    <td style={{ padding: '8px 14px', color: 'var(--g500)' }}>{child.costCode}</td>
+                    <td style={{ padding: '8px 14px' }}>
+                      {child.selection === 'Allowance' ? (
+                        <span style={{ color: 'var(--g500)' }}>Allowance</span>
+                      ) : (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                          <a href="#" onClick={e => e.preventDefault()} style={{ color: 'var(--bt-blue)', textDecoration: 'underline', fontSize: 13 }}>{child.selection}</a>
+                          {child.selectionStatus && (
+                            <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--green)', background: 'var(--green-bg)', padding: '1px 6px', borderRadius: 3 }}>{child.selectionStatus}</span>
+                          )}
+                        </span>
+                      )}
+                    </td>
+                    <td style={{ padding: '8px 14px', textAlign: 'right' }}>${fmt(child.price)}</td>
+                    <td style={{ padding: '8px 14px', textAlign: 'right', fontWeight: 500, color: child.newInvoiceAmt === null ? 'var(--g400)' : 'var(--g700)' }}>
+                      {child.newInvoiceAmt === null
+                        ? '--'
+                        : `${child.newInvoiceAmt < 0 ? '-' : ''}$${fmt(Math.abs(child.newInvoiceAmt))}`}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return createPortal(
     <div className="modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
@@ -253,126 +416,136 @@ export default function SelectionsModal({ open, onClose, onAdd, jobName, addedGr
           {/* Items */}
           <div className="est-table-scroll">
             <div className="est-table-inner">
-              {filtered.filter(d => d.type === 'allowance' && (showNegativeBalances || d.invoiceBalance >= 0)).length > 0 && (
-                <div className="est-section-label">Allowances</div>
-              )}
+              {/* Allowances section — split into Overages (reallocation targets) + Other allowances */}
               {(() => {
-                const allowances = filtered.filter(d => d.type === 'allowance' && (showNegativeBalances || d.invoiceBalance >= 0));
-                return sortByBalance ? [...allowances].sort((a, b) => b.invoiceBalance - a.invoiceBalance) : allowances;
-              })().map(item => {
-                const isExpanded = expanded[item.id];
+                const underageIds = new Set(heldUnderages.map(h => h.id));
+                const all = filtered.filter(d => d.type === 'allowance' && !underageIds.has(d.id) && (showNegativeBalances || d.invoiceBalance >= 0));
+                const overages = all.filter(d => (d.overage ?? 0) > 0);
+                const others = all.filter(d => (d.overage ?? 0) <= 0);
+                const sort = (arr: SelectionGroup[]) => sortByBalance ? [...arr].sort((a, b) => b.invoiceBalance - a.invoiceBalance) : arr;
+                const useSubsections = heldUnderages.length > 0 && overages.length > 0;
+                if (all.length === 0) return null;
                 return (
-                  <div key={item.id} style={{ marginBottom: 10, border: '1px solid var(--g200)', borderRadius: 8, overflow: 'hidden' }}>
-                    {/* Group header */}
-                    <div className="sel-card-header">
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <div
-                          className={"est-check" + (selected[item.id] ? " on" : "")}
-                          onClick={() => toggleItem(item.id)}
-                          style={{ flexShrink: 0 }}
-                        />
-                        <div
-                          style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}
-                          onClick={() => toggleExpand(item.id)}
-                        >
-                          {chevron(isExpanded)}
-                          <span style={{ color: 'var(--bt-midnight)', display: 'inline-flex', alignItems: 'center', flexShrink: 0 }}>
-                            {item.type === 'allowance' ? <AllowanceIcon /> : <SelectionIcon />}
-                          </span>
-                          <span style={{ fontWeight: 600, fontSize: 14, color: 'var(--bt-midnight)' }}>{item.name}</span>
-                          {item.scenarioNote && <ScenarioTooltip note={item.scenarioNote} />}
+                  <>
+                    <div className="est-section-label">Allowances</div>
+                    {overages.length > 0 && (
+                      <>
+                        {useSubsections && (
+                          <div className="est-subsection-label">
+                            <span>Overages</span>
+                          </div>
+                        )}
+                        {sort(overages).map(o => renderItemCard(o))}
+                      </>
+                    )}
+                    {others.length > 0 && (
+                      <>
+                        {useSubsections && <div className="est-subsection-label">Other allowances</div>}
+                        {sort(others).map(o => renderItemCard(o))}
+                      </>
+                    )}
+                  </>
+                );
+              })()}
+
+              {/* Allowance underages — reference list of completed-and-under allowances. The
+                  primary affordance lives on each Overage card's "Apply coverage" callout. */}
+              {heldUnderages.length > 0 && (
+                <>
+                  <div className="est-section-label" style={{ marginTop: 16 }}>Allowance underages · reference</div>
+                  {heldUnderages.map(u => {
+                    const isExpanded = expanded[u.id] === true;
+                    const breakdown = previewApps.filter(a => a.source.id === u.id);
+                    const allocated = breakdown.reduce((s, b) => s + b.amount, 0);
+                    const stillHeld = u.amount - allocated;
+                    const isSelected = !!selected[u.id];
+                    return (
+                      <div key={u.id} style={{ marginBottom: 8, border: '1px solid var(--g200)', background: 'white', borderRadius: 8, overflow: 'hidden' }}>
+                        <div className="sel-card-header" style={{ background: 'transparent' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <div className={"est-check" + (isSelected ? " on" : "")} onClick={() => toggleItem(u.id)} style={{ flexShrink: 0 }} />
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }} onClick={() => toggleExpand(u.id)}>
+                              {chevron(isExpanded)}
+                              <span style={{ color: 'var(--bt-blue)', display: 'inline-flex', alignItems: 'center', flexShrink: 0 }}>
+                                <AllowanceIcon />
+                              </span>
+                              <span style={{ fontWeight: 600, fontSize: 14, color: 'var(--bt-midnight)' }}>{u.name}</span>
+                              <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--green)', background: 'var(--green-bg)', padding: '2px 8px', borderRadius: 3, marginLeft: 4 }}>
+                                Marked complete
+                              </span>
+                            </div>
+                          </div>
+                          <div className="sel-card-meta">
+                            <div className="sel-meta-item">
+                              <div className="sel-meta-label">Unspent budget</div>
+                              <div className="sel-meta-value">${fmt(u.amount)}</div>
+                            </div>
+                            <div className="sel-meta-item">
+                              <div className="sel-meta-label">Reallocated</div>
+                              <div className="sel-meta-value" style={{ color: allocated > 0 ? 'var(--bt-blue)' : 'var(--g400)' }}>${fmt(allocated)}</div>
+                            </div>
+                            <div className="sel-meta-item">
+                              <div className="sel-meta-label">Stays held</div>
+                              <div className="sel-meta-value" style={{ color: stillHeld > 0 ? 'var(--g700)' : 'var(--g400)' }}>${fmt(stillHeld)}</div>
+                            </div>
+                          </div>
                         </div>
-                        {onMarkComplete && item.canMarkComplete && (
-                          <button
-                            onClick={(e) => { e.stopPropagation(); onMarkComplete(item.id); }}
-                            style={{
-                              marginLeft: 8,
-                              padding: '3px 10px',
-                              fontSize: 12,
-                              fontWeight: 500,
-                              borderRadius: 4,
-                              border: item.isComplete ? '1px solid var(--green, #2f855a)' : '1px solid var(--g300)',
-                              background: item.isComplete ? 'var(--green-bg, #f0fff4)' : '#fff',
-                              color: item.isComplete ? 'var(--green, #2f855a)' : 'var(--g600)',
-                              cursor: 'pointer',
-                            }}
-                          >
-                            {item.isComplete ? '✓ Completed' : 'Mark complete'}
-                          </button>
+                        {isExpanded && (
+                          <div style={{ overflowX: 'auto', background: 'white' }}>
+                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, tableLayout: 'fixed', minWidth: 560 }}>
+                              <colgroup>
+                                <col style={{ width: '22%' }} />
+                                <col style={{ width: '22%' }} />
+                                <col style={{ width: '26%' }} />
+                                <col style={{ width: '15%' }} />
+                                <col style={{ width: '15%' }} />
+                              </colgroup>
+                              <thead>
+                                <tr style={{ background: '#f8fafc' }}>
+                                  <th style={{ textAlign: 'left', padding: '8px 14px', fontWeight: 500, fontSize: 12, color: 'var(--g500)', borderTop: '1px solid var(--g200)', borderBottom: '1px solid var(--g200)' }}>Line item</th>
+                                  <th style={{ textAlign: 'left', padding: '8px 14px', fontWeight: 500, fontSize: 12, color: 'var(--g500)', borderTop: '1px solid var(--g200)', borderBottom: '1px solid var(--g200)' }}>Cost code</th>
+                                  <th style={{ textAlign: 'left', padding: '8px 14px', fontWeight: 500, fontSize: 12, color: 'var(--g500)', borderTop: '1px solid var(--g200)', borderBottom: '1px solid var(--g200)' }}>Selection</th>
+                                  <th style={{ textAlign: 'right', padding: '8px 14px', fontWeight: 500, fontSize: 12, color: 'var(--g500)', borderTop: '1px solid var(--g200)', borderBottom: '1px solid var(--g200)' }}>Price</th>
+                                  <th style={{ textAlign: 'right', padding: '8px 14px', fontWeight: 500, fontSize: 12, color: 'var(--g500)', borderTop: '1px solid var(--g200)', borderBottom: '1px solid var(--g200)' }}>New invoice amount</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {breakdown.length === 0 && stillHeld > 0 && (
+                                  <tr>
+                                    <td colSpan={5} style={{ padding: '14px', textAlign: 'center', color: 'var(--g500)', fontSize: 12, fontStyle: 'italic' }}>
+                                      No overages selected yet — check an overage allowance below to apply this credit, or leave for last draw.
+                                    </td>
+                                  </tr>
+                                )}
+                                {breakdown.map((b, i) => (
+                                  <tr key={i} style={{ borderBottom: '1px solid var(--g100)' }}>
+                                    <td style={{ padding: '8px 14px', color: 'var(--g700)' }}>{b.target.name} overage</td>
+                                    <td style={{ padding: '8px 14px', color: 'var(--g500)' }}>{b.target.costCode}</td>
+                                    <td style={{ padding: '8px 14px', color: 'var(--g500)' }}>Allowance overage</td>
+                                    <td style={{ padding: '8px 14px', textAlign: 'right' }}>${fmt(b.targetOverageTotal)}</td>
+                                    <td style={{ padding: '8px 14px', textAlign: 'right', fontWeight: 500, color: 'var(--red, #c53030)' }}>
+                                      -${fmt(b.amount)}
+                                    </td>
+                                  </tr>
+                                ))}
+                                {stillHeld > 0 && breakdown.length > 0 && (
+                                  <tr>
+                                    <td style={{ padding: '8px 14px', color: 'var(--g600)' }}>Held for last draw</td>
+                                    <td style={{ padding: '8px 14px', color: 'var(--g400)' }}>—</td>
+                                    <td style={{ padding: '8px 14px', color: 'var(--g500)' }}>Hold</td>
+                                    <td style={{ padding: '8px 14px', textAlign: 'right', color: 'var(--g400)' }}>—</td>
+                                    <td style={{ padding: '8px 14px', textAlign: 'right', color: 'var(--g500)' }}>${fmt(stillHeld)} (held)</td>
+                                  </tr>
+                                )}
+                              </tbody>
+                            </table>
+                          </div>
                         )}
                       </div>
-                      <div className="sel-card-meta">
-                        <div className="sel-meta-item">
-                          <div className="sel-meta-label">Revised price</div>
-                          <div className="sel-meta-value">${fmt(item.revisedPrice)}</div>
-                        </div>
-                        <div className="sel-meta-item">
-                          <div className="sel-meta-label">Previously invoiced</div>
-                          <div className="sel-meta-value">${fmt(item.previouslyInvoiced)}</div>
-                        </div>
-                        <div className="sel-meta-item">
-                          <div className="sel-meta-label">Remaining to invoice</div>
-                          <div className="sel-meta-value" style={{ color: item.invoiceBalance < 0 ? 'var(--red, #c53030)' : item.invoiceBalance > 0 ? 'var(--bt-midnight)' : 'var(--g500)' }}>{item.invoiceBalance < 0 ? '-' : ''}${fmt(Math.abs(item.invoiceBalance))}</div>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Sub-table */}
-                    {isExpanded && (
-                      <div style={{ overflowX: 'auto' }}>
-                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, tableLayout: 'fixed', minWidth: 560 }}>
-                        <colgroup>
-                          <col style={{ width: '22%' }} />
-                          <col style={{ width: '22%' }} />
-                          <col style={{ width: '26%' }} />
-                          <col style={{ width: '15%' }} />
-                          <col style={{ width: '15%' }} />
-                        </colgroup>
-                        <thead>
-                          <tr style={{ background: '#f8fafc' }}>
-                            <th style={{ textAlign: 'left', padding: '8px 14px', fontWeight: 500, fontSize: 12, color: 'var(--g500)', borderTop: '1px solid var(--g200)', borderBottom: '1px solid var(--g200)' }}>Line item</th>
-                            <th style={{ textAlign: 'left', padding: '8px 14px', fontWeight: 500, fontSize: 12, color: 'var(--g500)', borderTop: '1px solid var(--g200)', borderBottom: '1px solid var(--g200)' }}>Cost code</th>
-                            <th style={{ textAlign: 'left', padding: '8px 14px', fontWeight: 500, fontSize: 12, color: 'var(--g500)', borderTop: '1px solid var(--g200)', borderBottom: '1px solid var(--g200)' }}>Selection</th>
-                            <th style={{ textAlign: 'right', padding: '8px 14px', fontWeight: 500, fontSize: 12, color: 'var(--g500)', borderTop: '1px solid var(--g200)', borderBottom: '1px solid var(--g200)' }}>Price</th>
-                            <th style={{ textAlign: 'right', padding: '8px 14px', fontWeight: 500, fontSize: 12, color: 'var(--g500)', borderTop: '1px solid var(--g200)', borderBottom: '1px solid var(--g200)' }}>New invoice amount</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {item.children.map((child, idx) => (
-                            <tr key={child.id} style={{ borderBottom: idx < item.children.length - 1 ? '1px solid var(--g100)' : 'none' }}>
-                              <td style={{ padding: '8px 14px', color: 'var(--g700)' }}>{child.lineItem}</td>
-                              <td style={{ padding: '8px 14px', color: 'var(--g500)' }}>{child.costCode}</td>
-                              <td style={{ padding: '8px 14px' }}>
-                                {child.selection === 'Allowance' ? (
-                                  <span style={{ color: 'var(--g500)' }}>Allowance</span>
-                                ) : (
-                                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                                    <a href="#" onClick={e => e.preventDefault()} style={{ color: 'var(--bt-blue)', textDecoration: 'underline', fontSize: 13 }}>{child.selection}</a>
-                                    {child.selectionStatus && (
-                                      <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--green)', background: 'var(--green-bg)', padding: '1px 6px', borderRadius: 3 }}>{child.selectionStatus}</span>
-                                    )}
-                                  </span>
-                                )}
-                              </td>
-                              <td style={{ padding: '8px 14px', textAlign: 'right' }}>${fmt(child.price)}</td>
-                              <td style={{
-                                padding: '8px 14px', textAlign: 'right', fontWeight: 500,
-                                color: child.newInvoiceAmt === null ? 'var(--g400)' : 'var(--g700)'
-                              }}>
-                                {child.newInvoiceAmt === null
-                                  ? '--'
-                                  : `${child.newInvoiceAmt < 0 ? '-' : ''}$${fmt(Math.abs(child.newInvoiceAmt))}`
-                                }
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+                    );
+                  })}
+                </>
+              )}
               {filtered.filter(d => d.type === 'selection').length > 0 && (
                 <div className="est-section-label" style={{ marginTop: 8 }}>Selections</div>
               )}

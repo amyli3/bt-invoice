@@ -6,6 +6,7 @@ import {
   panelByCategory,
   panelByLocation,
   panelVarianceTotal,
+  type PanelCategoryItem,
 } from '../v4PanelData';
 
 /* ── Mock Data ── */
@@ -222,6 +223,51 @@ const postContractSelections = allSelections.filter(s => !s.allowanceName && s.t
 
 const fmt = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 });
 const fmtSigned = (n: number) => (n > 0 ? '+' : '') + fmt(n);
+// Inline icons for activity kinds (Bill / PO / Time clock / Receipt / Cost adjustment).
+// 14×14, currentColor — tints with the surrounding text color.
+const ActivityKindIcon = ({ kind }: { kind: string }) => {
+  switch (kind) {
+    case 'Bill':
+      return (
+        <svg className="jps-kind-icon" width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <path d="M3 1.5h7l3 3v10a.5.5 0 0 1-.5.5h-9a.5.5 0 0 1-.5-.5v-13a.5.5 0 0 1 .5-.5z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
+          <path d="M10 1.5V4.5h3" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
+          <path d="M5 8h6M5 10.5h6M5 13h4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+        </svg>
+      );
+    case 'PO':
+      return (
+        <svg className="jps-kind-icon" width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <rect x="3" y="2.5" width="10" height="12" rx="0.5" stroke="currentColor" strokeWidth="1.2" />
+          <rect x="6" y="1.5" width="4" height="2" rx="0.5" stroke="currentColor" strokeWidth="1.2" fill="white" />
+          <path d="M5.5 8l1.5 1.5L10.5 6" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M5 11.5h6" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+        </svg>
+      );
+    case 'Time clock':
+      return (
+        <svg className="jps-kind-icon" width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.2" />
+          <path d="M8 4.5V8l2.5 1.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      );
+    case 'Receipt':
+      return (
+        <svg className="jps-kind-icon" width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <path d="M3 2v12l1.5-1 1.5 1 1.5-1 1.5 1 1.5-1 1.5 1V2H3z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
+          <path d="M5.5 5.5h5M5.5 8h5M5.5 10.5h3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+        </svg>
+      );
+    case 'Cost adjustment':
+      return (
+        <svg className="jps-kind-icon" width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <path d="M11 2.5l2.5 2.5L6 12.5l-3 .5.5-3L11 2.5z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
+        </svg>
+      );
+    default:
+      return null;
+  }
+};
 
 /* ── Component ── */
 
@@ -232,7 +278,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
   // v1 inline expandable, v2 always-on list, v3 drill-through, v4 grouped sections,
   // v5 visual contribution bar — iteration of v2 that swaps three nested rows for a stacked
   // bar + decision callout (Sarah review, May 2026).
-  const [slice4Version, setSlice4Version] = useState<'v1' | 'v2' | 'v3' | 'v4' | 'v41' | 'v45' | 'v5'>('v1');
+  const [slice4Version, setSlice4Version] = useState<'v1' | 'v2' | 'v3' | 'v4' | 'v41' | 'v411' | 'v45' | 'v5'>('v1');
   const [slice4DrillOpen, setSlice4DrillOpen] = useState(false);
   const [showPrint, setShowPrint] = useState(false);
   const [printOptions, setPrintOptions] = useState({
@@ -1972,10 +2018,11 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                 </div>
               </div>
             );
-          } else if (slice4Version === 'v4' || slice4Version === 'v41' || slice4Version === 'v45') {
+          } else if (slice4Version === 'v4' || slice4Version === 'v41' || slice4Version === 'v411' || slice4Version === 'v45') {
             // v4 / v4.1 / v4.5: v2-style always-on breakdown with a clickable Budget difference
-            // row that opens a side panel. v4 = Cost code drill with bills, v4.1 = category totals
-            // only, v4.5 = drill grouped by Estimate (location).
+            // row that opens a side panel. v4 = Cost code drill with bills, v4.1 = category totals,
+            // v4.1.1 = category totals expandable to bill/PO/time-clock activity,
+            // v4.5 = drill grouped by Estimate (location).
             totalPriceCard = (
               <div className="jps-pane">
                 <div className="jps-pane-label">Total price</div>
@@ -2110,9 +2157,10 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                 <BdsTabs
                   ariaLabel="Direction"
                   activeKey={slice4Version}
-                  onChange={(k) => setSlice4Version(k as 'v1' | 'v2' | 'v3' | 'v4' | 'v41' | 'v45')}
+                  onChange={(k) => setSlice4Version(k as 'v1' | 'v2' | 'v3' | 'v4' | 'v41' | 'v411' | 'v45')}
                   tabs={activeSlice === 'slice5' ? [
                     { key: 'v41', label: 'v4 · Cost category' },
+                    { key: 'v411', label: 'v4.1 · Cost category w/ activity' },
                     { key: 'v45', label: 'v4.5 · Drill with bills (Estimate)' },
                   ] : [
                     { key: 'v1', label: 'v1 · Inline expandable' },
@@ -2297,8 +2345,8 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
               </div>
               {/* ─── End approved-changes group wrapper ─── */}
 
-              {/* ─── Budget difference (v4/v41/v45) — table layout matching Change Orders ─── */}
-              {(slice4Version === 'v4' || slice4Version === 'v41' || slice4Version === 'v45') && (
+              {/* ─── Budget difference (v4/v41/v411/v45) — table layout matching Change Orders ─── */}
+              {(slice4Version === 'v4' || slice4Version === 'v41' || slice4Version === 'v411' || slice4Version === 'v45') && (
                 <div className="jps-breakdown-section" id="jps-sec-budget-difference">
                   <div className="jps-section-header">
                     <BdsText as="h2" size="heavy-lg" className="jps-section-title">Budget difference</BdsText>
@@ -2306,15 +2354,26 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                   <div className="jps-s4-side-panel-note">
                     {slice4Version === 'v45'
                       ? "The difference between revised and original budget cost for each location. Approved change orders and selection and allowance changes aren't included."
+                      : slice4Version === 'v411'
+                      ? "The difference between revised and original budget cost for each cost category. The largest cost is the biggest single bill, PO, or time clock entry on the cost code that's over budget. Approved change orders and selection and allowance changes aren't included."
                       : "The difference between revised and original budget cost for each cost category. Approved change orders and selection and allowance changes aren't included."}
                   </div>
                   <div className="jps-table">
-                    <div className="jps-table-header jps-table-budget">
-                      <div className="jps-col-title">{slice4Version === 'v45' ? 'Location' : 'Cost category'}</div>
-                      <div className="jps-col-impact">Budget difference</div>
-                    </div>
+                    {slice4Version === 'v411' ? (
+                      <div className="jps-table-header jps-table-budget-cause">
+                        <div className="jps-col-title">Cost category</div>
+                        <div className="jps-col-cause">Largest cost</div>
+                        <div className="jps-col-impact">Budget difference</div>
+                      </div>
+                    ) : (
+                      <div className="jps-table-header jps-table-budget">
+                        <div className="jps-col-title">{slice4Version === 'v45' ? 'Location' : 'Cost category'}</div>
+                        <div className="jps-col-impact">Budget difference</div>
+                      </div>
+                    )}
                     {(slice4Version === 'v45' ? panelByLocation : panelByCategory).map((group, gi) => {
                       const isV45 = slice4Version === 'v45';
+                      const isV411 = slice4Version === 'v411';
                       const groupKey = `bd-loc-${group.category}`;
                       const isOpen = !!expandedGroups[groupKey];
                       const hasItems = group.items.length > 0;
@@ -2350,6 +2409,47 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                           </Fragment>
                         );
                       }
+                      if (isV411) {
+                        // Pick the largest single activity on the over-budget cost code(s). When
+                        // nothing is over, fall back to the largest activity across all items so
+                        // the column stays informative without claiming a "cause."
+                        const overItems = group.items.filter(i => i.variance > 0);
+                        const pool = overItems.length ? overItems : group.items;
+                        let biggest: { kind: string; name: string; amount: number; item: PanelCategoryItem } | null = null;
+                        pool.forEach(item => {
+                          item.activity.forEach(act => {
+                            if (!biggest || act.amount > biggest.amount) {
+                              biggest = { kind: act.kind, name: act.name, amount: act.amount, item };
+                            }
+                          });
+                        });
+                        return (
+                          <div key={gi} className="jps-table-row jps-table-budget-cause">
+                            <div className="jps-col-title"><span className="jps-item-name">{group.category}</span></div>
+                            <div className="jps-col-cause">
+                              {biggest ? (
+                                <>
+                                  <span className="jps-cause-name">
+                                    <ActivityKindIcon kind={(biggest as { kind: string }).kind} />
+                                    <span className="jps-cause-name-text">{(biggest as { name: string }).name}</span>
+                                  </span>
+                                  <span className="jps-cause-kind">{(biggest as { item: PanelCategoryItem }).item.code} {(biggest as { item: PanelCategoryItem }).item.name} <span className="jps-item-parent">· {fmt((biggest as { amount: number }).amount)}</span></span>
+                                </>
+                              ) : (
+                                <span className="jps-cause-empty">No activity yet</span>
+                              )}
+                            </div>
+                            <div className="jps-col-impact">
+                              <span className={group.variance >= 0 ? 'jps-impact-up' : 'jps-impact-down'}>{fmtSigned(group.variance)}</span>
+                              {group.originalBudget > 0 && group.variance !== 0 && (
+                                <span className="jps-impact-pct">
+                                  {group.variance > 0 ? 'over' : 'under'} original amount of {fmt(group.originalBudget)}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      }
                       return (
                         <div key={gi} className="jps-table-row jps-table-budget">
                           <div className="jps-col-title"><span className="jps-item-name">{group.category}</span></div>
@@ -2359,10 +2459,18 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                         </div>
                       );
                     })}
-                    <div className="jps-table-row jps-table-budget jps-row-total">
-                      <div className="jps-col-title">Total</div>
-                      <div className="jps-col-impact">{fmtSigned(panelVarianceTotal)}</div>
-                    </div>
+                    {slice4Version === 'v411' ? (
+                      <div className="jps-table-row jps-table-budget-cause jps-row-total">
+                        <div className="jps-col-title">Total</div>
+                        <div className="jps-col-cause"></div>
+                        <div className="jps-col-impact">{fmtSigned(panelVarianceTotal)}</div>
+                      </div>
+                    ) : (
+                      <div className="jps-table-row jps-table-budget jps-row-total">
+                        <div className="jps-col-title">Total</div>
+                        <div className="jps-col-impact">{fmtSigned(panelVarianceTotal)}</div>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}

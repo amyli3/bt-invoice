@@ -18,6 +18,7 @@ import JobPriceSummary from './components/JobPriceSummary';
 import SelectionsPage from './components/SelectionsPage';
 import OptionDetailPage from './components/OptionDetailPage';
 import AIAPayApp, { type OverageInfo } from './components/AIAPayApp';
+import SmartSuggestionsPanel from './components/SmartSuggestionsPanel';
 import { INVOICE_SELECTION_SCENARIOS, INVOICE_STANDALONE_SELECTIONS } from './selectionsData';
 import ChangeOrderPage from './components/ChangeOrderPage';
 import ChangeOrderListPage from './components/ChangeOrderListPage';
@@ -30,9 +31,9 @@ import JobCostingBudget from './components/JobCostingBudget';
 import { JOBS } from './mockData';
 import { getNextId } from './mockData';
 
-type PageType = 'invoice' | 'job-price-summary' | 'selections' | 'option-detail' | 'progress-invoice' | 'change-order' | 'change-order-list' | 'client-portal' | 'client-jps' | 'estimate' | 'client-selections' | 'client-selections-2' | 'client-selections-3' | 'mobile-budget' | 'job-costing-budget';
+type PageType = 'invoice' | 'invoice-2' | 'job-price-summary' | 'selections' | 'option-detail' | 'progress-invoice' | 'change-order' | 'change-order-list' | 'client-portal' | 'client-jps' | 'estimate' | 'client-selections' | 'client-selections-2' | 'client-selections-3' | 'mobile-budget' | 'job-costing-budget';
 
-const validPages: PageType[] = ['invoice', 'job-price-summary', 'selections', 'option-detail', 'progress-invoice', 'change-order', 'change-order-list', 'client-portal', 'client-jps', 'estimate', 'client-selections', 'client-selections-2', 'client-selections-3', 'mobile-budget', 'job-costing-budget'];
+const validPages: PageType[] = ['invoice', 'invoice-2', 'job-price-summary', 'selections', 'option-detail', 'progress-invoice', 'change-order', 'change-order-list', 'client-portal', 'client-jps', 'estimate', 'client-selections', 'client-selections-2', 'client-selections-3', 'mobile-budget', 'job-costing-budget'];
 
 function getInitialPage(): PageType {
   // Support ?page=X query param (used when hash is occupied by Figma capture)
@@ -82,6 +83,8 @@ export default function App() {
   const [clientVis, setClientVis] = useState<ClientColumnVisibility>({
     costType: false, quantity: true, unit: false, unitPrice: true,
   });
+  const [clientGroupBy, setClientGroupBy] = useState<'estimate' | 'costcode' | 'all'>('estimate');
+  const [smartOn, setSmartOn] = useState(true);
 
   const [estModalOpen, setEstModalOpen] = useState(false);
   const [selModalOpen, setSelModalOpen] = useState(false);
@@ -117,6 +120,138 @@ export default function App() {
       setInvoice(inv => ({ ...inv, lineItems: [...inv.lineItems, ...newItems] }));
     }
   };
+  // Underage reallocation: pair held underages (from complete allowances with
+  // unspent budget) with overages on the invoice modal. Greedy fill in the
+  // order the held bucket lists them — surfaces the math for the banner and
+  // drives the one-click apply action.
+  const heldUnderages = INVOICE_SELECTION_SCENARIOS.flatMap(ma => {
+    const approved = ma.selections.reduce((s, sel) => s + sel.approvedPrice, 0);
+    const delta = ma.budgetAmount - approved;
+    const isComplete = ma.closeoutMode === 'credit' || completedAllowanceIds.has(ma.id);
+    if (!isComplete || delta <= 0) return [];
+    return [{ id: ma.id, name: ma.name, costCode: ma.costCode, amount: delta }];
+  });
+
+  const projectOverages = INVOICE_SELECTION_SCENARIOS.flatMap(ma => {
+    const approved = ma.selections.reduce((s, sel) => s + sel.approvedPrice, 0);
+    const overageAmount = approved - ma.budgetAmount;
+    if (overageAmount <= 0) return [];
+    return [{ id: ma.id, name: ma.name, costCode: ma.costCode, overageAmount }];
+  });
+
+  const handleSmartApply = (overageId: string, preferredSourceId?: string) => {
+    const overage = projectOverages.find(o => o.id === overageId);
+    if (!overage) return;
+    // Compute what's still uncovered for this overage (existing reallocations are subtracted).
+    const alreadyCovered = invoice.lineItems
+      .filter(li => li.reallocation?.targetAllowanceId === overageId)
+      .reduce((s, li) => s + (-li.unitCost), 0);
+    const stillNeeded = overage.overageAmount - alreadyCovered;
+    if (stillNeeded <= 0) return;
+
+    // Build the pool, deducting what's already reallocated invoice-wide
+    const used: Record<string, number> = {};
+    invoice.lineItems.forEach(li => {
+      if (li.reallocation) {
+        const sid = li.reallocation.sourceAllowanceId;
+        used[sid] = (used[sid] || 0) + (-li.unitCost);
+      }
+    });
+    let pool = heldUnderages.map(u => ({ ...u, amount: u.amount - (used[u.id] || 0) })).filter(u => u.amount > 0);
+    if (preferredSourceId) {
+      // Restrict to just the chosen source — builder explicitly picked it
+      pool = pool.filter(p => p.id === preferredSourceId);
+    }
+
+    const sources: { id: string; name: string; costCode: string; amount: number }[] = [];
+    let need = stillNeeded;
+    while (need > 0 && pool.length > 0) {
+      const src = pool[0];
+      const take = Math.min(src.amount, need);
+      if (take > 0) sources.push({ id: src.id, name: src.name, costCode: src.costCode, amount: take });
+      src.amount -= take;
+      need -= take;
+      if (src.amount === 0) pool.shift();
+    }
+    // Smart panel only adds reallocation source credit lines — the target
+    // overage line is already on the invoice (precondition for the panel).
+    const newItems = sources.map(src => ({
+      id: getNextId(),
+      description: `${src.name} – reallocated to ${overage.name}`,
+      costCode: src.costCode,
+      costType: 'Allowance',
+      unitCost: -src.amount,
+      quantity: 1,
+      unit: '--',
+      markup: 0,
+      relatedItem: { type: 'allowance' as const, name: src.name, groupId: src.id },
+      reallocation: { sourceAllowanceId: src.id, targetAllowanceId: overage.id, targetName: overage.name, targetCostCode: overage.costCode },
+    }));
+    if (newItems.length > 0) setInvoice(inv => ({ ...inv, lineItems: [...inv.lineItems, ...newItems] }));
+  };
+
+  const handleSmartUndo = (overageId: string) => {
+    setInvoice(inv => ({
+      ...inv,
+      lineItems: inv.lineItems.filter(li => li.reallocation?.targetAllowanceId !== overageId),
+    }));
+  };
+
+  const handleSmartRelease = () => {
+    const used: Record<string, number> = {};
+    invoice.lineItems.forEach(li => {
+      if (li.reallocation) {
+        const sid = li.reallocation.sourceAllowanceId;
+        used[sid] = (used[sid] || 0) + (-li.unitCost);
+      }
+      // Also count existing bare credits so re-clicking Release doesn't double-add
+      if (li.relatedItem?.type === 'allowance' && !li.reallocation && li.unitCost < 0) {
+        const sid = li.relatedItem.groupId;
+        used[sid] = (used[sid] || 0) + (-li.unitCost);
+      }
+    });
+    const remaining = heldUnderages
+      .map(u => ({ ...u, amount: u.amount - (used[u.id] || 0) }))
+      .filter(u => u.amount > 0);
+    const newItems = remaining.map(u => ({
+      id: getNextId(),
+      description: `${u.name} – allowance underage credit`,
+      costCode: u.costCode,
+      costType: 'Allowance',
+      unitCost: -u.amount,
+      quantity: 1,
+      unit: '--',
+      markup: 0,
+      relatedItem: { type: 'allowance' as const, name: u.name, groupId: u.id },
+    }));
+    if (newItems.length > 0) setInvoice(inv => ({ ...inv, lineItems: [...inv.lineItems, ...newItems] }));
+  };
+
+  const handleApplyReallocation = (apps: { source: { id: string; name: string; costCode: string }; target: { id: string; name: string; costCode: string }; amount: number; targetOverageTotal: number }[]) => {
+    // Underage credit lines only — the matching target overage allowance gets
+    // added via the regular Add from selections flow when the builder checks
+    // it. Self-targeted apps (source === target) are bare credits with no
+    // reallocation metadata, surfacing as a credit at the source cost code.
+    const newItems = apps.map(app => {
+      const isBareCredit = app.source.id === app.target.id;
+      return {
+        id: getNextId(),
+        description: isBareCredit
+          ? `${app.source.name} – allowance underage credit`
+          : `${app.source.name} – reallocated to ${app.target.name}`,
+        costCode: app.source.costCode,
+        costType: 'Allowance',
+        unitCost: -app.amount,
+        quantity: 1,
+        unit: '--',
+        markup: 0,
+        relatedItem: { type: 'allowance' as const, name: app.source.name, groupId: app.source.id },
+        ...(isBareCredit ? {} : { reallocation: { sourceAllowanceId: app.source.id, targetAllowanceId: app.target.id, targetName: app.target.name, targetCostCode: app.target.costCode } }),
+      };
+    });
+    if (newItems.length > 0) setInvoice(inv => ({ ...inv, lineItems: [...inv.lineItems, ...newItems] }));
+  };
+
   const handleAddFromSelections = (items: any[]) => {
     const newItems: any[] = [];
     items.forEach((group: any) => {
@@ -309,6 +444,7 @@ export default function App() {
               completedAllowanceIds={completedAllowanceIds}
               onToggleAllowanceComplete={toggleAllowanceComplete}
               onOpenInvoice={() => setActivePage('invoice')}
+              onOpenReallocation={() => { setActivePage('invoice-2'); setSelModalOpen(true); }}
             />
           </div>
         </div>
@@ -367,6 +503,31 @@ export default function App() {
             <div className="builder" style={isNarrow && activeView !== 'builder' ? {display: 'none'} : {}}>
               <InvoiceInfo invoice={invoice} onChange={setInvoice} />
               <OwnerPrice invoice={invoice} onChange={setInvoice} />
+              {activePage === 'invoice-2' && invoice.mode === 'lineItems' && (
+                smartOn ? (
+                  <SmartSuggestionsPanel
+                    heldUnderages={heldUnderages}
+                    overages={projectOverages}
+                    lineItems={invoice.lineItems}
+                    onApply={handleSmartApply}
+                    onUndo={handleSmartUndo}
+                    onRelease={handleSmartRelease}
+                    onDismiss={() => setSmartOn(false)}
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    className="smart-show-btn"
+                    onClick={() => setSmartOn(true)}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                      <path d="M8 1L9.2 5.5L13.5 7L9.2 8.5L8 13L6.8 8.5L2.5 7L6.8 5.5L8 1Z" fill="currentColor"/>
+                      <path d="M13 11.5L13.6 13L15 13.6L13.6 14.2L13 15.6L12.4 14.2L11 13.6L12.4 13L13 11.5Z" fill="currentColor"/>
+                    </svg>
+                    Show smart suggestions
+                  </button>
+                )
+              )}
               {invoice.mode === 'lineItems' && <LineItems invoice={invoice} onChange={setInvoice} vis={vis} onVisChange={setVis} onOpenEstimate={() => setEstModalOpen(true)} onOpenSelections={() => setSelModalOpen(true)} onOpenSelectionsV2={() => setSelV2ModalOpen(true)} />}
               <Notes invoice={invoice} onChange={setInvoice} />
             </div>
@@ -378,12 +539,21 @@ export default function App() {
                 </div>
                 <div className="preview-tabs-right">
                   {previewTab === 'client' && (
-                    <ClientColumnToggle columns={clientVis} onChange={setClientVis} />
+                    <>
+                      {activePage === 'invoice-2' && (
+                        <div className="client-group-toggle" role="tablist" aria-label="Group line items for client">
+                          <button type="button" className={"client-group-tab" + (clientGroupBy === 'estimate' ? ' on' : '')} onClick={() => setClientGroupBy('estimate')} aria-selected={clientGroupBy === 'estimate'}>By estimate</button>
+                          <button type="button" className={"client-group-tab" + (clientGroupBy === 'costcode' ? ' on' : '')} onClick={() => setClientGroupBy('costcode')} aria-selected={clientGroupBy === 'costcode'}>By cost code</button>
+                          <button type="button" className={"client-group-tab" + (clientGroupBy === 'all' ? ' on' : '')} onClick={() => setClientGroupBy('all')} aria-selected={clientGroupBy === 'all'}>All line items</button>
+                        </div>
+                      )}
+                      <ClientColumnToggle columns={clientVis} onChange={setClientVis} />
+                    </>
                   )}
                 </div>
               </div>
               <div style={{flex: 1, overflowY: 'auto', padding: 24, background: 'var(--g50)'}}>
-                {previewTab === 'client' && <ClientPreview invoice={invoice} clientVis={clientVis} />}
+                {previewTab === 'client' && <ClientPreview invoice={invoice} clientVis={clientVis} groupBy={activePage === 'invoice-2' ? clientGroupBy : 'estimate'} />}
                 {previewTab === 'email' && <EmailPreview invoice={invoice} />}
               </div>
             </div>
@@ -409,6 +579,8 @@ export default function App() {
         jobName={currentJob?.name || 'Job name'}
         addedGroupIds={invoice.lineItems.filter(li => li.relatedItem?.groupId).map(li => li.relatedItem!.groupId)}
         onMarkComplete={toggleAllowanceComplete}
+        heldUnderages={activePage === 'invoice-2' ? heldUnderages : []}
+        onApplyReallocation={activePage === 'invoice-2' ? handleApplyReallocation : undefined}
         showNegativeBalances
         data={INVOICE_SELECTION_SCENARIOS.map(ma => {
           const selectionsTotal = ma.selections.reduce((s, sel) => s + sel.approvedPrice, 0);

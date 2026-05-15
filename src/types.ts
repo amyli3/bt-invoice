@@ -18,6 +18,11 @@ export interface LineItem {
   unit: string;
   markup: number;
   relatedItem?: { type: 'allowance' | 'selection'; name: string; groupId: string };
+  // Underage reallocation metadata. When present, this line is the source
+  // (negative) side of a reallocation from one allowance to another. The
+  // builder view shows it at its own cost code; the client view (when
+  // grouped by cost code or estimate) can roll it under the target.
+  reallocation?: { sourceAllowanceId: string; targetAllowanceId: string; targetName: string; targetCostCode: string };
 }
 
 export interface Payment {

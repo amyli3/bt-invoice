@@ -10,6 +10,22 @@ interface ColumnConfig {
 interface Props {
   invoice: Invoice;
   clientVis: ClientColumnVisibility;
+  groupBy?: 'estimate' | 'costcode' | 'all';
+}
+
+// Reallocation lines (the negative source) get re-attributed to the
+// target's group and cost code for any grouped client view so the math
+// nets cleanly under the destination. Builder view always shows them at
+// their own source code.
+function attributeReallocationsToTarget(lineItems: LineItem[]): LineItem[] {
+  return lineItems.map(li => {
+    if (!li.reallocation) return li;
+    return {
+      ...li,
+      costCode: li.reallocation.targetCostCode,
+      relatedItem: { type: 'allowance' as const, name: li.reallocation.targetName, groupId: li.reallocation.targetAllowanceId },
+    };
+  });
 }
 
 // Collapse line items added from the same allowance/selection group into one
@@ -49,9 +65,45 @@ function rollUpByGroup(lineItems: LineItem[]): LineItem[] {
   return result;
 }
 
-export default function ClientPreview({ invoice, clientVis }: Props) {
+// Collapse by cost code alone — every line at the same cost code becomes one
+// row, regardless of whether it came from an allowance, selection, or manual
+// add. Used by the "By cost code" client view.
+function rollUpByCostCode(lineItems: LineItem[]): LineItem[] {
+  const result: LineItem[] = [];
+  const keyIndex: Record<string, number> = {};
+  for (const item of lineItems) {
+    const cc = item.costCode || '';
+    if (!cc) {
+      result.push(item);
+      continue;
+    }
+    const lineTotal = item.unitCost * item.quantity * (1 + item.markup / 100);
+    if (keyIndex[cc] === undefined) {
+      keyIndex[cc] = result.length;
+      result.push({
+        ...item,
+        description: cc,
+        unitCost: lineTotal,
+        quantity: 1,
+        markup: 0,
+        unit: '--',
+      });
+    } else {
+      const existing = result[keyIndex[cc]];
+      result[keyIndex[cc]] = { ...existing, unitCost: existing.unitCost + lineTotal };
+    }
+  }
+  return result;
+}
+
+export default function ClientPreview({ invoice, clientVis, groupBy = 'estimate' }: Props) {
   const isFlatFee = invoice.mode === 'flatFee';
-  const displayLineItems = isFlatFee ? invoice.lineItems : rollUpByGroup(invoice.lineItems);
+  const displayLineItems = (() => {
+    if (isFlatFee) return invoice.lineItems;
+    if (groupBy === 'all') return invoice.lineItems;
+    const attributed = attributeReallocationsToTarget(invoice.lineItems);
+    return groupBy === 'costcode' ? rollUpByCostCode(attributed) : rollUpByGroup(attributed);
+  })();
   const subtotal = isFlatFee
     ? (invoice.flatFeeAmount || 0)
     : invoice.lineItems.reduce((s, i) => s + i.unitCost * i.quantity * (1 + i.markup / 100), 0);

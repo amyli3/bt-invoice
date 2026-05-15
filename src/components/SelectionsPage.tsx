@@ -172,6 +172,45 @@ const mockData: SelectionRow[] = [
 
 const fmt = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 });
 
+// Project-level allowance summary used by the rollup strip + mark-complete prompt.
+// "Held" = unspent budget on allowances the builder has marked complete (or
+// scenarios already flagged with closeoutMode: 'credit'). "Over" = overspend on
+// allowances not yet covered.
+type AllowanceSummary = {
+  totalBudget: number;
+  totalApproved: number;
+  totalHeld: number;
+  totalOver: number;
+  countComplete: number;
+  countOver: number;
+};
+
+const isAllowanceComplete = (id: string, closeoutMode: string | undefined, completedIds: Set<string>) =>
+  closeoutMode === 'credit' || completedIds.has(id);
+
+const computeAllowanceSummary = (completedIds: Set<string>): AllowanceSummary => {
+  let totalBudget = 0;
+  let totalApproved = 0;
+  let totalHeld = 0;
+  let totalOver = 0;
+  let countComplete = 0;
+  let countOver = 0;
+  INVOICE_SELECTION_SCENARIOS.forEach(ma => {
+    const approved = ma.selections.reduce((s, sel) => s + sel.approvedPrice, 0);
+    const delta = ma.budgetAmount - approved;
+    const complete = isAllowanceComplete(ma.id, ma.closeoutMode, completedIds);
+    totalBudget += ma.budgetAmount;
+    totalApproved += approved;
+    if (complete) countComplete += 1;
+    if (complete && delta > 0) totalHeld += delta;
+    if (delta < 0) {
+      totalOver += -delta;
+      countOver += 1;
+    }
+  });
+  return { totalBudget, totalApproved, totalHeld, totalOver, countComplete, countOver };
+};
+
 const fmtDate = (d?: string) => {
   if (!d) return '';
   const date = new Date(d + 'T00:00:00');
@@ -275,6 +314,7 @@ interface SelectionsPageProps {
   completedAllowanceIds?: Set<string>;
   onToggleAllowanceComplete?: (id: string) => void;
   onOpenInvoice?: () => void;
+  onOpenReallocation?: () => void;
 }
 
 export default function SelectionsPage({
@@ -285,6 +325,7 @@ export default function SelectionsPage({
   completedAllowanceIds,
   onToggleAllowanceComplete,
   onOpenInvoice,
+  onOpenReallocation,
 }: SelectionsPageProps) {
   const [viewMode, setViewMode] = useState<ViewMode>('allowance');
   const [viewLayout, setViewLayout] = useState<ViewLayout>('list');
@@ -299,7 +340,20 @@ export default function SelectionsPage({
   const completedIds = completedAllowanceIds ?? new Set<string>();
   const [openAllowance, setOpenAllowance] = useState<AllowanceGroup | null>(null);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [confirmComplete, setConfirmComplete] = useState<AllowanceGroup | null>(null);
   const toggleComplete = (id: string) => onToggleAllowanceComplete?.(id);
+  const requestComplete = (a: AllowanceGroup) => {
+    const spent = a.options.reduce((s, o) => s + (o.approvedPrice || 0), 0);
+    const remaining = a.clientPrice - spent;
+    const isComplete = completedIds.has(a.id);
+    // Only prompt when marking complete (not reopening) AND there is unspent
+    // budget to hold. Overages and exact-budget allowances toggle silently.
+    if (!isComplete && remaining > 0) {
+      setConfirmComplete(a);
+    } else {
+      toggleComplete(a.id);
+    }
+  };
   const toggleMenu = (id: string) => setOpenMenuId(prev => prev === id ? null : id);
 
   const MoreMenu = ({ rowId }: { rowId: string }) => (
@@ -426,13 +480,16 @@ export default function SelectionsPage({
   };
 
   const renderAllowance = (row: AllowanceGroup) => {
-    const isOpen = expanded[row.id];
+    // Client view skips the allowance group header — clients just see the
+    // selection options as a flat list. Force children to render by treating
+    // the group as always open when there's no header to expand from.
+    const isOpen = audience === 'client' ? true : expanded[row.id];
     const spent = row.options.reduce((s, o) => s + (o.approvedPrice || 0), 0);
     const allowanceRemaining = row.clientPrice - spent;
     const overBudget = allowanceRemaining < 0;
     return (
       <div key={row.id} className={`sp-allowance-block${isOpen ? ' sp-allowance-block-open' : ''}`}>
-        {/* Allowance group header */}
+        {audience !== 'client' && (
         <div className="sp-row sp-row-group">
           <div className="sp-col-check">
             <div className={`sp-checkbox ${checked[row.id] ? 'sp-checkbox-on' : ''}`} onClick={() => toggleCheck(row.id)} />
@@ -471,6 +528,7 @@ export default function SelectionsPage({
             <MoreMenu rowId={row.id} />
           </div>
         </div>
+        )}
 
         {/* Expanded options */}
         {isOpen && (
@@ -659,6 +717,44 @@ export default function SelectionsPage({
       </div>
 
       <div className="sp-body">
+        {audience !== 'client' && (() => {
+          const s = computeAllowanceSummary(completedIds);
+          const canReallocate = s.totalHeld > 0 && s.totalOver > 0;
+          return (
+            <div className="sp-rollup">
+              <div className="sp-rollup-stat">
+                <div className="sp-rollup-label">Allowance budget</div>
+                <div className="sp-rollup-value">{fmt(s.totalBudget)}</div>
+                <div className="sp-rollup-sub">{INVOICE_SELECTION_SCENARIOS.length} allowances</div>
+              </div>
+              <div className="sp-rollup-stat">
+                <div className="sp-rollup-label">Approved selections</div>
+                <div className="sp-rollup-value">{fmt(s.totalApproved)}</div>
+                <div className="sp-rollup-sub">{Math.round((s.totalApproved / Math.max(s.totalBudget, 1)) * 100)}% of budget</div>
+              </div>
+              <div className="sp-rollup-stat sp-rollup-stat-held">
+                <div className="sp-rollup-label">Held underages</div>
+                <div className="sp-rollup-value">{fmt(s.totalHeld)}</div>
+                <div className="sp-rollup-sub">{s.countComplete} complete · available to reallocate</div>
+              </div>
+              <div className="sp-rollup-stat sp-rollup-stat-over">
+                <div className="sp-rollup-label">Over budget</div>
+                <div className="sp-rollup-value">{fmt(s.totalOver)}</div>
+                <div className="sp-rollup-sub">{s.countOver} allowance{s.countOver === 1 ? '' : 's'} need coverage</div>
+              </div>
+              <div className="sp-rollup-cta">
+                {canReallocate ? (
+                  <button className="btn btn-p" onClick={onOpenReallocation ?? onOpenInvoice}>Reallocate held funds</button>
+                ) : s.totalHeld > 0 ? (
+                  <span className="sp-rollup-cta-empty">No overages — funds<br/>roll to last draw</span>
+                ) : (
+                  <span className="sp-rollup-cta-empty">Nothing to settle yet</span>
+                )}
+              </div>
+            </div>
+          );
+        })()}
+
         <div className="sp-toolbar">
           <div className="sp-search">
             <svg className="sp-search-icon" width="16" height="16" viewBox="0 0 16 16" fill="none">
@@ -829,7 +925,7 @@ export default function SelectionsPage({
                 <button className="sp-panel-icon-btn" title="Share"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M14 4a2 2 0 1 0-1.9 2.7L7.6 9.2a2 2 0 1 0 0 1.6l4.5 2.5a2 2 0 1 0 .5-.9L8 9.9 12.6 7.3a2 2 0 0 0 1.4.7 2 2 0 0 0 0-4Z" fill="currentColor"/></svg></button>
                 <button className="sp-panel-icon-btn" title="Comments"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M3.5 4h13a1.5 1.5 0 0 1 1.5 1.5v8a1.5 1.5 0 0 1-1.5 1.5H10l-3 3v-3H3.5A1.5 1.5 0 0 1 2 13.5v-8A1.5 1.5 0 0 1 3.5 4Z" stroke="currentColor" strokeWidth="1.2" fill="none"/></svg></button>
                 <button className="sp-panel-icon-btn" title="Edit"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M3 14.5V17h2.5l8.4-8.4-2.5-2.5L3 14.5ZM16.7 6.3a1 1 0 0 0 0-1.4l-1.6-1.6a1 1 0 0 0-1.4 0l-1.3 1.3 2.5 2.5 1.8-1.8Z" fill="currentColor"/></svg></button>
-                <button className="btn btn-s sp-panel-cta" onClick={() => toggleComplete(a.id)}>
+                <button className="btn btn-s sp-panel-cta" onClick={() => requestComplete(a)}>
                   {isComplete ? 'Reopen' : 'Complete'}
                 </button>
                 <button className="sp-panel-close" onClick={() => setOpenAllowance(null)}>&times;</button>
@@ -920,13 +1016,52 @@ export default function SelectionsPage({
                 {!isComplete && remaining !== 0 && (
                   <div className="sp-panel-note">
                     {remaining > 0
-                      ? <>Marking this allowance complete will surface the unspent <strong>{fmt(remaining)}</strong> as a credit on the next invoice.</>
+                      ? <>Marking this allowance complete will hold the unspent <strong>{fmt(remaining)}</strong> for reallocation to other allowance overages, or settle on the last draw.</>
                       : <>Over budget by <strong>{fmt(Math.abs(remaining))}</strong>. Marking complete will lock the budget at the spent amount.</>
                     }
                   </div>
                 )}
               </div>
             </aside>
+          </div>
+        );
+      })()}
+
+      {confirmComplete && (() => {
+        const a = confirmComplete;
+        const spent = a.options.reduce((s, o) => s + (o.approvedPrice || 0), 0);
+        const remaining = a.clientPrice - spent;
+        const close = () => setConfirmComplete(null);
+        const finish = () => { toggleComplete(a.id); close(); };
+        return (
+          <div className="sp-confirm-backdrop" onClick={(e) => { if (e.target === e.currentTarget) close(); }}>
+            <div className="sp-confirm" role="dialog" aria-modal="true">
+              <div className="sp-confirm-header">
+                <h3 className="sp-confirm-title">Mark {a.name} complete</h3>
+                <p className="sp-confirm-sub">
+                  {a.options.length} selection{a.options.length === 1 ? '' : 's'} approved at {fmt(spent)} of {fmt(a.clientPrice)} budget
+                </p>
+              </div>
+              <div className="sp-confirm-body">
+                <div className="sp-confirm-amount">
+                  <span className="sp-confirm-amount-label">Unspent budget to hold</span>
+                  <span className="sp-confirm-amount-value">{fmt(remaining)}</span>
+                </div>
+                <div className="sp-confirm-options">
+                  <button className="sp-confirm-option" onClick={finish}>
+                    <div className="sp-confirm-option-title">Hold for later <span style={{color: 'var(--bt-blue)', fontWeight: 500, fontSize: 11, marginLeft: 6}}>RECOMMENDED</span></div>
+                    <div className="sp-confirm-option-desc">Buildertrend will prompt you to reallocate when another allowance goes over, or roll it into the last draw.</div>
+                  </button>
+                  <button className="sp-confirm-option" onClick={() => { finish(); (onOpenReallocation ?? onOpenInvoice)?.(); }}>
+                    <div className="sp-confirm-option-title">Reallocate now</div>
+                    <div className="sp-confirm-option-desc">Open the invoice and apply this {fmt(remaining)} to an over-budget allowance.</div>
+                  </button>
+                </div>
+              </div>
+              <div className="sp-confirm-footer">
+                <button className="btn btn-s" onClick={close}>Cancel</button>
+              </div>
+            </div>
           </div>
         );
       })()}
