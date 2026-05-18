@@ -109,7 +109,8 @@ export function ClientTopNav({ onNavigate }: { onNavigate?: (page: string) => vo
           {finOpen && (
             <div className="topnav-dropdown">
               <button className="topnav-dropdown-item" onClick={() => { setFinOpen(false); onNavigate?.('client-selections'); }}>Selections</button>
-              <button className="topnav-dropdown-item" onClick={() => { setFinOpen(false); onNavigate?.('client-selections-2'); }}>Selections (exploration)</button>
+              <button className="topnav-dropdown-item" onClick={() => { setFinOpen(false); onNavigate?.('client-selections-2'); }}>Selection 2</button>
+              <button className="topnav-dropdown-item" onClick={() => { setFinOpen(false); onNavigate?.('client-selections-3'); }}>Selections (exploration)</button>
               <button className="topnav-dropdown-item" onClick={() => { setFinOpen(false); onNavigate?.('client-jps'); }}>Job price summary</button>
             </div>
           )}

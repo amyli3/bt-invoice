@@ -1,611 +1,2827 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useCallback, useEffect, Fragment } from 'react';
 import '../bds-tokens.css';
-import './ClientSelections2.css';
+import { BdsButton, BdsBadge, BdsInput, BdsTextArea, BdsIcon } from '../bds';
 
-/* ── Mock data ── */
-type Tier = 'base' | 'upgrade';
-interface Option {
-  id: string; name: string; vendor: string; price: number; image: string;
-  group: string; tier: Tier; images?: string[];
-}
-interface Category {
-  id: string; name: string; vendor: string; allowance: number;
-  dueDate: string; description: string; options: Option[];
-}
-
-const selectionGroups: Category[] = [
+/* ── Mock data ──
+ * Allowances are grouped by vendor type (e.g. flooring, tile, plumbing).
+ * Each option's `group` is the room/area within that vendor type
+ * (e.g. "Kitchen flooring", "Master bath shower"). */
+const selectionGroups = [
   {
     id: 'sel-1', name: 'Flooring', vendor: 'Cornerstone Flooring',
-    allowance: 18500, dueDate: '2026-04-15',
-    description: 'Pick the floor for each room.',
+    allowance: 18500, dueDate: '2026-04-15', status: 'overdue' as const,
+    description: 'Pick flooring for each room. Your flooring vendor offers hardwood, vinyl plank, laminate, and carpet — choose what fits each space.',
     options: [
-      { id: 'fl-k1', name: 'Lifeproof Vinyl Plank — Dusk Cherry', vendor: 'Lifeproof', price: 3200, image: 'https://images.thdstatic.com/productImages/eb9b442d-4536-470d-81e4-f1bea67caf9d/svn/dusk-cherry-lifeproof-vinyl-plank-flooring-i06204lp-64_600.jpg', group: 'Kitchen', tier: 'base' },
-      { id: 'fl-k2', name: 'Shaw Natural Classics — White Oak', vendor: 'Shaw', price: 4800, image: 'https://shawfloors.widen.net/content/maw31txwtx/jpeg/sw774_01147_main', group: 'Kitchen', tier: 'upgrade' },
-      { id: 'fl-l1', name: 'TrafficMaster Laminate — Lakeshore Pecan', vendor: 'TrafficMaster', price: 2400, image: 'https://images.thdstatic.com/productImages/a08ca173-0a82-4dbe-90fb-7bdd3e8309a7/svn/lakeshore-pecan-stone-trafficmaster-laminate-wood-flooring-50560-77_600.jpg', group: 'Living', tier: 'base' },
-      { id: 'fl-l2', name: 'Bruce Solid Hardwood — Butterscotch Oak', vendor: 'Bruce', price: 5800, image: 'https://images.thdstatic.com/productImages/c29747ad-e373-456b-8cdd-fc380f7fd554/svn/butterscotch-bruce-solid-hardwood-ahs626-64_1000.jpg', group: 'Living', tier: 'upgrade' },
-      { id: 'fl-m1', name: 'Mohawk Plush Carpet — Sandstone', vendor: 'Mohawk', price: 1600, image: 'https://cdn11.bigcommerce.com/s-2d2cb/images/stencil/1280x1280/products/74638/189074/28326_00__21267.1668113654.jpg?c=2', group: 'Bedroom', tier: 'base' },
-      { id: 'fl-m2', name: 'Stainmaster Berber Carpet — Driftwood', vendor: 'Stainmaster', price: 2300, image: 'https://mobileimages.lowes.com/productimages/fe119674-3be7-4753-ab30-ac78df03cf27/72813536.jpeg', group: 'Bedroom', tier: 'upgrade' },
+      // Kitchen flooring
+      { id: 'fl-k1', name: 'Lifeproof Vinyl Plank — Dusk Cherry', vendor: 'Lifeproof', price: 3200, image: 'https://images.thdstatic.com/productImages/eb9b442d-4536-470d-81e4-f1bea67caf9d/svn/dusk-cherry-lifeproof-vinyl-plank-flooring-i06204lp-64_600.jpg', selected: false, group: 'Kitchen flooring', tier: 'base' as const },
+      { id: 'fl-k2', name: 'Shaw Natural Classics — White Oak', vendor: 'Shaw Floors', price: 4800, image: 'https://shawfloors.widen.net/content/maw31txwtx/jpeg/sw774_01147_main', selected: false, group: 'Kitchen flooring', tier: 'upgrade' as const },
+      // Living + dining flooring
+      { id: 'fl-l1', name: 'TrafficMaster Laminate — Lakeshore Pecan', vendor: 'TrafficMaster', price: 2400, image: 'https://images.thdstatic.com/productImages/a08ca173-0a82-4dbe-90fb-7bdd3e8309a7/svn/lakeshore-pecan-stone-trafficmaster-laminate-wood-flooring-50560-77_600.jpg', selected: false, group: 'Living + dining flooring', tier: 'base' as const },
+      { id: 'fl-l2', name: 'Bruce Solid Hardwood — Butterscotch Oak', vendor: 'Bruce', price: 5800, image: 'https://images.thdstatic.com/productImages/c29747ad-e373-456b-8cdd-fc380f7fd554/svn/butterscotch-bruce-solid-hardwood-ahs626-64_1000.jpg', selected: false, group: 'Living + dining flooring', tier: 'upgrade' as const },
+      // Bedroom flooring — consolidated for all bedrooms (master + bedrooms 2 & 3)
+      { id: 'fl-m1', name: 'Mohawk Plush Carpet — Sandstone', vendor: 'Mohawk', price: 1600, image: 'https://cdn11.bigcommerce.com/s-2d2cb/images/stencil/1280x1280/products/74638/189074/28326_00__21267.1668113654.jpg?c=2?imbypass=on', images: ['https://cdn11.bigcommerce.com/s-2d2cb/images/stencil/1280x1280/products/74638/189074/28326_00__21267.1668113654.jpg?c=2?imbypass=on', 'https://cdn11.bigcommerce.com/s-2d2cb/images/stencil/728x728/products/74638/189073/O_28326_958_mindful__35970.1668113650.jpg?c=2'], selected: false, group: 'Bedroom flooring', tier: 'base' as const },
+      { id: 'fl-m2', name: 'Stainmaster Berber Carpet — Driftwood', vendor: 'Stainmaster', price: 2300, image: 'https://mobileimages.lowes.com/productimages/fe119674-3be7-4753-ab30-ac78df03cf27/72813536.jpeg', images: ['https://mobileimages.lowes.com/productimages/fe119674-3be7-4753-ab30-ac78df03cf27/72813536.jpeg', 'https://mobileimages.lowes.com/product/converted/840712/840712114608.jpg?size=pdhism'], selected: false, group: 'Bedroom flooring', tier: 'upgrade' as const },
+      { id: 'fl-b1', name: 'Mohawk Plush Carpet — Mineral Beige', vendor: 'Mohawk', price: 1300, image: 'https://s7d4.scene7.com/is/image/MohawkResidential/28989_743_room_02?scl=2&op_sharpen=1', images: ['https://s7d4.scene7.com/is/image/MohawkResidential/28989_743_room_02?scl=2&op_sharpen=1', 'https://cdn11.bigcommerce.com/s-2d2cb/images/stencil/728x728/products/75581/192373/2P40-518_Hearth_Beige__79900.1682089402.jpg?c=2'], selected: false, group: 'Bedroom flooring', tier: 'base' as const },
+    ],
+  },
+  // Packaged selection — Good / Better / Best bundles where each option is a coordinated set
+  {
+    id: 'sel-pkg-bath', name: 'Master bath package', vendor: 'Allied Bath Collections',
+    allowance: 8000, dueDate: '2026-04-26', status: 'overdue' as const,
+    description: 'Choose a coordinated bath package — fixtures, fittings, and accessories from a single collection. Approving a package locks in all items as a set.',
+    options: [
+      {
+        id: 'pkg-bath-good', name: 'Good — Essentials', vendor: 'Moen Essentials',
+        price: 4400, image: 'https://images.thdstatic.com/productImages/a96c1819-3c0e-4dea-bf0c-ead6d07eb686/svn/chrome-moen-bathtub-shower-faucet-combos-82603-64_1000.jpg',
+        selected: false, group: 'Master bath package', tier: 'base' as const,
+      },
+      {
+        id: 'pkg-bath-better', name: 'Better — Curated', vendor: 'Delta Curated',
+        price: 6200, image: 'https://m.media-amazon.com/images/I/71FK1buvW+L.jpg',
+        selected: false, group: 'Master bath package', tier: 'upgrade' as const,
+      },
+      {
+        id: 'pkg-bath-best', name: 'Best — Designer', vendor: 'Kohler Designer',
+        price: 8400, image: 'https://images.thdstatic.com/productImages/d9b0b956-0169-4319-ad0e-f96098bc1fcc/svn/white-kohler-farmhouse-kitchen-sinks-k-28668-0-e1_600.jpg',
+        selected: false, group: 'Master bath package', tier: 'upgrade' as const,
+      },
     ],
   },
   {
     id: 'sel-2', name: 'Tile', vendor: 'Premier Tile & Stone',
-    allowance: 9500, dueDate: '2026-05-01',
-    description: 'Choose tile for backsplashes, shower walls, and bath floors.',
+    allowance: 9500, dueDate: '2026-05-01', status: 'action_needed' as const,
+    description: 'Choose tile for backsplashes, shower walls, and bath floors. The same vendor supplies all tile so styles can be coordinated.',
     options: [
-      { id: 'tl-k1', name: 'White Subway Tile Backsplash', vendor: 'Merola', price: 620, image: 'https://images.thdstatic.com/productImages/502e06ba-dcea-4c4b-b2f0-5cc5a55a2704/svn/glossy-white-merola-tile-ceramic-tile-web3chgw-64_600.jpg', group: 'Kitchen backsplash', tier: 'base' },
-      { id: 'tl-k2', name: 'Marble Hexagon Backsplash', vendor: 'TileBar', price: 950, image: 'https://www.tileclub.com/cdn/shop/files/carrara-hexagon-tile-backsplash-2.jpg?v=1723504600', group: 'Kitchen backsplash', tier: 'upgrade' },
-      { id: 'tl-mbf1', name: 'Porcelain Hex Tile — White', vendor: 'Merola', price: 2200, image: 'https://images.thdstatic.com/productImages/356a61c1-2e11-4f60-8b64-1b35ad5f289b/svn/white-medium-sheen-merola-tile-porcelain-tile-fcd10wtx-e1_600.jpg', group: 'Master bath floor', tier: 'base' },
-      { id: 'tl-s3', name: 'Herringbone Marble Mosaic', vendor: 'TileBar', price: 1800, image: 'https://www.stonecenteronline.com/media/catalog/product/cache/f77b4f15034ebe734bb6931a52e0b5ed/c/7/c72xh-carrara-white-marble-1x3-herringbone-mosaic-tile-honed.jpg', group: 'Master bath shower', tier: 'upgrade' },
-      { id: 'tl-s4', name: 'Arabesque Lantern Mosaic', vendor: 'MSI', price: 1450, image: 'https://images.thdstatic.com/productImages/342247dc-6a7d-47d3-ad33-2e140184c3fe/svn/carrara-white-glass-tile-mabq-whi-10-4f_600.jpg', group: 'Master bath shower', tier: 'upgrade' },
+      // Kitchen backsplash
+      { id: 'tl-k1', name: 'White Subway Tile Backsplash', vendor: 'Merola Tile', price: 620, image: 'https://images.thdstatic.com/productImages/502e06ba-dcea-4c4b-b2f0-5cc5a55a2704/svn/glossy-white-merola-tile-ceramic-tile-web3chgw-64_600.jpg', selected: false, group: 'Kitchen backsplash', tier: 'base' as const },
+      { id: 'tl-k2', name: 'Marble Hexagon Backsplash', vendor: 'TileBar', price: 950, image: 'https://www.tileclub.com/cdn/shop/files/carrara-hexagon-tile-backsplash-2.jpg?v=1723504600', selected: false, group: 'Kitchen backsplash', tier: 'upgrade' as const },
+      // Master bath floor
+      { id: 'tl-mbf1', name: 'Porcelain Hex Tile — White', vendor: 'Merola Tile', price: 2200, image: 'https://images.thdstatic.com/productImages/356a61c1-2e11-4f60-8b64-1b35ad5f289b/svn/white-medium-sheen-merola-tile-porcelain-tile-fcd10wtx-e1_600.jpg', selected: false, group: 'Master bath floor', tier: 'base' as const },
+      { id: 'tl-mbf2', name: 'Carrara White Marble Floor Tile', vendor: 'TileBar', price: 2800, image: 'https://encrypted-tbn3.gstatic.com/shopping?q=tbn:ANd9GcSGYKPyoe2Rzl-1bS94z9jjJrgknQCps5Ce5qwPPfI0-R7MOIqopooLat3pDoWs2LmGHx0WEc3lGD93Gy0TnSnoFvsEsSami58-o4SCkcg0n9cgZLY_fdtC4w', selected: false, group: 'Master bath floor', tier: 'upgrade' as const },
+      { id: 'tl-mbf3', name: 'Daltile Porcelain — Concrete Look Gray', vendor: 'Daltile', price: 1900, image: 'https://www.mineraltiles.com/cdn/shop/files/florence-calacatta-gold-porcelain-tile-39x39.jpg?v=1712084519&width=1150', selected: false, group: 'Master bath floor', tier: 'base' as const },
+      // Master bath shower
+      { id: 'tl-s1', name: 'Glossy White Subway Tile', vendor: 'Merola Tile', price: 1200, image: 'https://images.thdstatic.com/productImages/502e06ba-dcea-4c4b-b2f0-5cc5a55a2704/svn/glossy-white-merola-tile-ceramic-tile-web3chgw-64_600.jpg', selected: false, group: 'Master bath shower', tier: 'base' as const },
+      { id: 'tl-s2', name: 'Penny Round Mosaic — Matte White', vendor: 'Merola Tile', price: 980, image: 'https://m.media-amazon.com/images/I/51u37UdURlL._AC_UF350,350_QL80_.jpg', selected: false, group: 'Master bath shower', tier: 'base' as const },
+      { id: 'tl-s3', name: 'Herringbone Marble Mosaic', vendor: 'TileBar', price: 1800, image: 'https://www.stonecenteronline.com/media/catalog/product/cache/f77b4f15034ebe734bb6931a52e0b5ed/c/7/c72xh-carrara-white-marble-1x3-herringbone-mosaic-tile-honed.jpg', selected: false, group: 'Master bath shower', tier: 'upgrade' as const },
+      { id: 'tl-s4', name: 'Arabesque Lantern Mosaic — White', vendor: 'MSI', price: 1450, image: 'https://images.thdstatic.com/productImages/342247dc-6a7d-47d3-ad33-2e140184c3fe/svn/carrara-white-glass-tile-mabq-whi-10-4f_600.jpg', selected: false, group: 'Master bath shower', tier: 'upgrade' as const },
+      // Powder room floor
+      { id: 'tl-p1', name: 'Large Format Porcelain — Calacatta', vendor: 'Daltile', price: 750, image: 'https://www.mineraltiles.com/cdn/shop/files/florence-calacatta-gold-porcelain-tile-39x39.jpg?v=1712084519&width=1150', selected: false, group: 'Powder room floor', tier: 'base' as const },
+      { id: 'tl-p2', name: 'Basketweave Marble Mosaic', vendor: 'Jeffrey Court', price: 950, image: 'https://m.media-amazon.com/images/I/71ptOTYeLGL._AC_UF894,1000_QL80_.jpg', selected: false, group: 'Powder room floor', tier: 'upgrade' as const },
     ],
   },
   {
-    id: 'sel-3', name: 'Plumbing', vendor: 'Ferguson Plumbing Supply',
-    allowance: 5800, dueDate: '2026-05-15',
-    description: 'Pick faucets and sinks.',
+    id: 'sel-3', name: 'Plumbing fixtures', vendor: 'Ferguson Plumbing Supply',
+    allowance: 5800, dueDate: '2026-05-15', status: 'pending' as const,
+    description: 'Pick faucets and sinks for the kitchen and baths. All fixtures come from the same supplier so finishes can match.',
     options: [
-      { id: 'pl-ks1', name: 'Kraus Bellucci Undermount Sink', vendor: 'Kraus', price: 1890, image: 'https://images.thdstatic.com/productImages/fe4a0711-acbe-565f-bafa-1c99f5efca67/svn/metallic-black-kraus-undermount-kitchen-sinks-kguw2-33mbl-e1_600.jpg', group: 'Kitchen sink', tier: 'base' },
-      { id: 'pl-ks2', name: 'Kohler Elmbrook Farmhouse Sink', vendor: 'Kohler', price: 2160, image: 'https://images.thdstatic.com/productImages/d9b0b956-0169-4319-ad0e-f96098bc1fcc/svn/white-kohler-farmhouse-kitchen-sinks-k-28668-0-e1_600.jpg', group: 'Kitchen sink', tier: 'upgrade' },
-      { id: 'pl-kf2', name: 'Delta Kylo Touchless — Black', vendor: 'Delta', price: 780, image: 'https://mobileimages.lowes.com/productimages/b9f5b84c-5ac7-417f-aa2c-4ba4131f2aa7/69082796.jpeg', group: 'Kitchen faucet', tier: 'upgrade' },
-      { id: 'pl-mf2', name: 'Delta Trinsic Widespread — Matte Black', vendor: 'Delta', price: 380, image: 'https://m.media-amazon.com/images/I/71FK1buvW+L.jpg', group: 'Bath faucet', tier: 'upgrade' },
+      // Kitchen sink
+      { id: 'pl-ks1', name: 'Kraus Bellucci Undermount Sink', vendor: 'Kraus', price: 1890, image: 'https://images.thdstatic.com/productImages/fe4a0711-acbe-565f-bafa-1c99f5efca67/svn/metallic-black-kraus-undermount-kitchen-sinks-kguw2-33mbl-e1_600.jpg', selected: false, group: 'Kitchen sink', tier: 'base' as const, url: 'https://www.homedepot.com/p/KRAUS-Bellucci-White-Granite-Composite-32-in-Single-Bowl-Undermount-Workstation-Kitchen-Sink-with-WasteGuard-Garbage-Disposal-KGUW1-33WH-100-75MB/319044830' },
+      { id: 'pl-ks2', name: 'Kohler Elmbrook Farmhouse Sink', vendor: 'Kohler', price: 2160, image: 'https://images.thdstatic.com/productImages/d9b0b956-0169-4319-ad0e-f96098bc1fcc/svn/white-kohler-farmhouse-kitchen-sinks-k-28668-0-e1_600.jpg', images: ['https://images.thdstatic.com/productImages/d9b0b956-0169-4319-ad0e-f96098bc1fcc/svn/white-kohler-farmhouse-kitchen-sinks-k-28668-0-e1_600.jpg', 'https://images.thdstatic.com/productImages/ee9fa0be-2001-480b-852c-bc1cd926941c/svn/white-kohler-farmhouse-kitchen-sinks-k-28668-0-77_600.jpg', 'https://photos-us.bazaarvoice.com/photo/2/cGhvdG86aG9tZWRlcG90/dca91f51-7570-55e9-9033-b407853daf71'], selected: false, group: 'Kitchen sink', tier: 'upgrade' as const, url: 'https://www.homedepot.com/p/KOHLER-Elmbrook-Cast-Iron-33-in-Single-Bowl-Farmhouse-Apron-Front-Kitchen-Sink-in-White-K-28668-0/316246054' },
+      // Kitchen faucet
+      { id: 'pl-kf1', name: 'Moen Arbor MotionSense — Stainless', vendor: 'Moen', price: 650, image: 'https://m.media-amazon.com/images/I/81Tdwh-vFUL.jpg', images: ['https://m.media-amazon.com/images/I/81Tdwh-vFUL.jpg', 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQp_5oxh0J8UiRFoPUZjhkoDNurftH-7n96IQ&s'], selected: false, group: 'Kitchen faucet', tier: 'base' as const, url: 'https://www.homedepot.com/p/MOEN-Arbor-Single-Handle-Pull-Down-Sprayer-Kitchen-Faucet-with-Power-Boost-in-Spot-Resist-Stainless-7594SRS/204725308' },
+      { id: 'pl-kf2', name: 'Delta Kylo Touchless Faucet — Black', vendor: 'Delta', price: 780, image: 'https://mobileimages.lowes.com/productimages/b9f5b84c-5ac7-417f-aa2c-4ba4131f2aa7/69082796.jpeg', images: ['https://mobileimages.lowes.com/productimages/b9f5b84c-5ac7-417f-aa2c-4ba4131f2aa7/69082796.jpeg', 'https://mobileimages.lowes.com/productimages/aaa2b119-847d-4b26-9417-06db97eabd42/68533231.jpeg'], selected: false, group: 'Kitchen faucet', tier: 'upgrade' as const, url: 'https://www.lowes.com/pd/Delta-Kylo-Matte-Black-Single-Handle-Pull-down-Touchless-Kitchen-Faucet-with-Sprayer-Deck-Plate-Included/5015280915' },
+      // Master bath faucet
+      { id: 'pl-mf1', name: 'Moen Genta Widespread Faucet — Chrome', vendor: 'Moen', price: 220, image: 'https://i5.walmartimages.com/asr/2c09fd8c-ec91-4a78-83fa-557358b60258.414e80629804f3b1daa9c5e2ad64ac85.jpeg?odnHeight=768&odnWidth=768&odnBg=FFFFFF', images: ['https://i5.walmartimages.com/asr/2c09fd8c-ec91-4a78-83fa-557358b60258.414e80629804f3b1daa9c5e2ad64ac85.jpeg?odnHeight=768&odnWidth=768&odnBg=FFFFFF', 'https://m.media-amazon.com/images/I/51U94S9iZSL._AC_UF894,1000_QL80_.jpg'], selected: false, group: 'Master bath faucet', tier: 'base' as const },
+      { id: 'pl-mf2', name: 'Delta Trinsic Widespread — Matte Black', vendor: 'Delta', price: 380, image: 'https://m.media-amazon.com/images/I/71FK1buvW+L.jpg', images: ['https://m.media-amazon.com/images/I/71FK1buvW+L.jpg', 'https://mobileimages.lowes.com/productimages/f20254d5-1a4c-4d26-ab42-2ec59bfd4b16/65299559.png?size=pdhz'], selected: false, group: 'Master bath faucet', tier: 'upgrade' as const },
+      // Master bath shower trim
+      { id: 'pl-ms1', name: 'Moen Adler Tub & Shower Trim — Chrome', vendor: 'Moen', price: 280, image: 'https://images.thdstatic.com/productImages/a96c1819-3c0e-4dea-bf0c-ead6d07eb686/svn/chrome-moen-bathtub-shower-faucet-combos-82603-64_1000.jpg', selected: false, group: 'Master bath shower trim', tier: 'base' as const },
+      { id: 'pl-ms2', name: 'Delta Trinsic Rain Shower System — Black', vendor: 'Delta', price: 540, image: 'https://faucetlist.com/cdn/shop/products/SS1459BL1_2000x.jpg?v=1621372139', selected: false, group: 'Master bath shower trim', tier: 'upgrade' as const },
     ],
   },
   {
-    id: 'sel-4', name: 'Countertops & cabinets', vendor: 'Allied Cabinets & Stone',
-    allowance: 9200, dueDate: '2026-05-20',
-    description: 'Pick countertop materials and vanity finishes.',
+    id: 'sel-4', name: 'Countertops & cabinetry', vendor: 'Allied Cabinets & Stone',
+    allowance: 9200, dueDate: '2026-05-20', status: 'pending' as const,
+    description: 'Pick countertop materials and vanity finishes. Cabinets and stone are fabricated by the same shop.',
     options: [
-      { id: 'cb-kc1', name: 'Granite — White Ice', vendor: 'MSI', price: 2800, image: 'https://cabinetmakerwarehouse.com/cdn/shop/files/Formica-9476-White-Ice-Granite-Traditiona-Kitchen-scaled.jpg?v=1717089142&width=1080', group: 'Kitchen counter', tier: 'base' },
-      { id: 'cb-kc2', name: 'Quartz — Calacatta Laza', vendor: 'MSI', price: 3200, image: 'https://cdn.msisurfaces.com/images/quartz-countertops/products/roomscenes/large/calacatta-laza-quartz-4.jpg', group: 'Kitchen counter', tier: 'upgrade' },
-      { id: 'cb-mv2', name: 'Double Vanity — 60" Espresso', vendor: 'Home Decorators', price: 2650, image: 'https://whalenfurniture.com/wp-content/uploads/2023/09/60in-Estehaus-Vanity_SL60EHV.jpg', group: 'Master bath vanity', tier: 'upgrade' },
-      { id: 'cb-mm1', name: 'Frameless LED Mirror — 36"', vendor: 'TOOLKISS', price: 320, image: 'https://m.media-amazon.com/images/I/71uP4Hcb4jL.jpg', group: 'Master bath mirror', tier: 'base' },
+      // Kitchen countertop
+      { id: 'cb-kc1', name: 'Granite Countertop — White Ice', vendor: 'MSI', price: 2800, image: 'https://cabinetmakerwarehouse.com/cdn/shop/files/Formica-9476-White-Ice-Granite-Traditiona-Kitchen-scaled.jpg?v=1717089142&width=1080', selected: false, group: 'Kitchen countertop', tier: 'base' as const },
+      { id: 'cb-kc2', name: 'Quartz Countertop — Calacatta Laza', vendor: 'MSI', price: 3200, image: 'https://cdn.msisurfaces.com/images/quartz-countertops/products/roomscenes/large/calacatta-laza-quartz-4.jpg', selected: false, group: 'Kitchen countertop', tier: 'upgrade' as const },
+      // Master bath vanity
+      { id: 'cb-mv1', name: 'Double Vanity — 60" White Shaker', vendor: 'Home Decorators', price: 1850, image: 'https://m.media-amazon.com/images/I/81esKlRUTpL._AC_UF894,1000_QL80_.jpg', selected: false, group: 'Master bath vanity', tier: 'base' as const },
+      { id: 'cb-mv2', name: 'Double Vanity — 60" Espresso w/ Quartz Top', vendor: 'Home Decorators', price: 2650, image: 'https://whalenfurniture.com/wp-content/uploads/2023/09/60in-Estehaus-Vanity_SL60EHV.jpg', selected: false, group: 'Master bath vanity', tier: 'upgrade' as const },
+      // Master bath mirror
+      { id: 'cb-mm1', name: 'Frameless LED Mirror — 36" Round', vendor: 'TOOLKISS', price: 320, image: 'https://m.media-amazon.com/images/I/71uP4Hcb4jL.jpg', selected: false, group: 'Master bath mirror', tier: 'base' as const },
     ],
   },
   {
-    id: 'sel-5', name: 'Appliances', vendor: 'Capitol Appliance',
-    allowance: 2400, dueDate: '2026-06-01',
-    description: 'Pick your kitchen appliances.',
+    id: 'sel-5', name: 'Appliances', vendor: 'Capitol Appliance Co.',
+    allowance: 2400, dueDate: '2026-06-01', status: 'pending' as const,
+    description: 'Pick your kitchen appliances. The package is sourced through your appliance vendor.',
     options: [
-      { id: 'ap-d1', name: 'GE Profile Dishwasher', vendor: 'GE', price: 1079, image: 'https://reviewed-com-res.cloudinary.com/image/fetch/s--1szEEAgv--/b_white,c_limit,cs_srgb,f_auto,fl_progressive.strip_profile,g_center,q_auto,w_1200/https://reviewed-production.s3.amazonaws.com/1662062743549/114647_Profile_Dish_CoBranding_2400x2500_1.jpeg', group: 'Dishwasher', tier: 'base' },
-      { id: 'ap-d2', name: 'Bosch 500 Series Dishwasher', vendor: 'Bosch', price: 1349, image: 'https://us.bosch-press.com/pressportal/us/media/dam_images_us/pi266_usus/shp65dm5n_lifestyleimage_1_master.jpg', group: 'Dishwasher', tier: 'upgrade' },
+      { id: 'ap-d1', name: 'GE Profile Dishwasher', vendor: 'GE Appliances', price: 1079, image: 'https://reviewed-com-res.cloudinary.com/image/fetch/s--1szEEAgv--/b_white,c_limit,cs_srgb,f_auto,fl_progressive.strip_profile,g_center,q_auto,w_1200/https://reviewed-production.s3.amazonaws.com/1662062743549/114647_Profile_Dish_CoBranding_2400x2500_1.jpeg', selected: false, group: 'Kitchen dishwasher', tier: 'base' as const, url: 'https://www.homedepot.com/p/GE-Profile-24-in-Smart-Built-In-Top-Control-45-dBA-Fingerprint-Resistant-Stainless-Dishwasher-with-Microban-Technology-PDT705SYWFS/331066211' },
+      { id: 'ap-d2', name: 'Bosch 500 Series Dishwasher', vendor: 'Bosch', price: 1349, image: 'https://us.bosch-press.com/pressportal/us/media/dam_images_us/pi266_usus/shp65dm5n_lifestyleimage_1_master.jpg', selected: false, group: 'Kitchen dishwasher', tier: 'upgrade' as const, url: 'https://www.homedepot.com/p/Bosch-500-Series-24-in-Stainless-Steel-Top-Control-Tall-Tub-Pocket-Handle-Dishwasher-with-Stainless-Steel-Tub-Quiet-44-dBA-SHP65CM5N/325602597' },
     ],
   },
   {
     id: 'sel-6', name: 'Lighting', vendor: 'Capitol Lighting',
-    allowance: 6000, dueDate: '2026-04-20',
-    description: 'Already approved by your builder.',
+    allowance: 6000, dueDate: '2026-04-20', status: 'approved' as const,
+    description: 'Your builder has reviewed and confirmed your lighting choices. These are locked in for your project.',
     options: [
-      { id: 'lt-1', name: 'Modern Chandelier — Dining', vendor: 'West Elm', price: 2400, image: 'https://images.thdstatic.com/productImages/10674fff-fe26-4bfd-b382-b9d2f4ffe230/svn/matte-gold-26-lnc-chandeliers-nbbfbzhd1362236-e4_600.jpg', group: 'Dining chandelier', tier: 'upgrade' },
-      { id: 'lt-2', name: 'Recessed Lighting (8x)', vendor: 'Commercial Electric', price: 1920, image: 'https://images.thdstatic.com/productImages/b9e47a4d-a64c-4755-90eb-3cebd7d8b345/svn/white-commercial-electric-recessed-lighting-retrofit-trims-ns01da09fr2-259-1d_1000.jpg', group: 'Recessed', tier: 'base' },
-      { id: 'lt-3', name: 'Pendants — Kitchen Island (3x)', vendor: 'Hukoro', price: 1350, image: 'https://images.thdstatic.com/productImages/ba4f0ae8-66d7-4ba0-8767-2482a5886153/svn/black-henveton-pendant-lights-ylc900504-1b-e1_1000.jpg', group: 'Pendants', tier: 'base' },
+      { id: 'lt-1', name: 'Modern Chandelier — Dining', vendor: 'West Elm', price: 2400, image: 'https://images.thdstatic.com/productImages/10674fff-fe26-4bfd-b382-b9d2f4ffe230/svn/matte-gold-26-lnc-chandeliers-nbbfbzhd1362236-e4_600.jpg', selected: true, group: 'Dining chandelier', tier: 'upgrade' as const },
+      { id: 'lt-2', name: 'Recessed Lighting (8x)', vendor: 'Commercial Electric', price: 1920, image: 'https://images.thdstatic.com/productImages/b9e47a4d-a64c-4755-90eb-3cebd7d8b345/svn/white-commercial-electric-recessed-lighting-retrofit-trims-ns01da09fr2-259-1d_1000.jpg', selected: true, group: 'Whole-house recessed', tier: 'base' as const },
+      { id: 'lt-3', name: 'Pendant Lights — Kitchen Island (3x)', vendor: 'Hukoro', price: 1350, image: 'https://images.thdstatic.com/productImages/ba4f0ae8-66d7-4ba0-8767-2482a5886153/svn/black-henveton-pendant-lights-ylc900504-1b-e1_1000.jpg', selected: true, group: 'Kitchen pendants', tier: 'base' as const },
     ],
   },
 ];
 
-/* ── Helpers ── */
-const fmt = (n: number) => n.toLocaleString('en-US', { maximumFractionDigits: 0 });
-const fmtMoney = (n: number) => '$' + fmt(n);
+// Package-only option detail — items list keyed by option id. Kept outside the
+// strictly-typed selectionGroups array so the rest of the code stays inferred.
+const packageItems: Record<string, { name: string; qty: number; unit: string; price: number }[]> = {
+  'pkg-bath-good': [
+    { name: 'Vanity faucet — Chrome', qty: 2, unit: 'ea', price: 220 },
+    { name: 'Shower trim & valve — Chrome', qty: 1, unit: 'ea', price: 280 },
+    { name: 'Toilet — Round front', qty: 1, unit: 'ea', price: 380 },
+    { name: 'Towel bars (24") + ring + hook', qty: 1, unit: 'set', price: 140 },
+    { name: 'Bath accessories — Chrome', qty: 1, unit: 'set', price: 160 },
+    { name: 'Installation labor', qty: 1, unit: 'lot', price: 3000 },
+  ],
+  'pkg-bath-better': [
+    { name: 'Vanity faucet — Matte black widespread', qty: 2, unit: 'ea', price: 380 },
+    { name: 'Shower trim, valve & rain head', qty: 1, unit: 'set', price: 540 },
+    { name: 'Toilet — One-piece elongated', qty: 1, unit: 'ea', price: 680 },
+    { name: 'Heated towel rack', qty: 1, unit: 'ea', price: 320 },
+    { name: 'Bath accessories — Matte black set', qty: 1, unit: 'set', price: 240 },
+    { name: 'Installation labor', qty: 1, unit: 'lot', price: 3300 },
+  ],
+  'pkg-bath-best': [
+    { name: 'Vanity faucet — Brushed brass widespread', qty: 2, unit: 'ea', price: 620 },
+    { name: 'Smart shower system w/ rain + body sprays', qty: 1, unit: 'set', price: 1280 },
+    { name: 'Toilet — Smart bidet seat', qty: 1, unit: 'ea', price: 1400 },
+    { name: 'Heated towel rack — Brushed brass', qty: 1, unit: 'ea', price: 480 },
+    { name: 'Bath accessories — Designer set', qty: 1, unit: 'set', price: 420 },
+    { name: 'Installation labor', qty: 1, unit: 'lot', price: 3800 },
+  ],
+};
 
-function dueText(dateStr: string, isApproved: boolean): { label: string; tone: 'urgent' | 'soon' | 'ok' | 'done' } {
-  if (isApproved) return { label: 'Locked in', tone: 'done' };
-  const diff = Math.ceil((new Date(dateStr).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
-  if (diff < 0) return { label: `${Math.abs(diff)}d overdue`, tone: 'urgent' };
-  if (diff <= 7) return { label: `Due in ${diff}d`, tone: 'soon' };
-  return { label: `Due ${new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`, tone: 'ok' };
+const statusConfig = {
+  overdue: { label: 'Overdue', color: '#B5254C', bg: '#FFEEEA' },
+  action_needed: { label: 'Action needed', color: '#854D00', bg: '#FDF3D3' },
+  pending: { label: 'Not started', color: '#4E555F', bg: '#F1F4FA' },
+  approved: { label: 'Approved', color: '#057E4B', bg: '#DDFDEF' },
+  ready: { label: 'Ready to submit', color: '#057E4B', bg: '#DDFDEF' },
+  in_progress: { label: 'In progress', color: '#004FD6', bg: '#E6F6FF' },
+};
+
+const fmt = (n: number) => n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+function daysUntil(dateStr: string) {
+  const diff = Math.ceil((new Date(dateStr).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+  if (diff < 0) return `${Math.abs(diff)} days overdue`;
+  if (diff === 0) return 'Due today';
+  if (diff === 1) return 'Due tomorrow';
+  return `${diff} days`;
 }
 
-const CLIENT_FIRST = 'Rodger';
-const JOB_NAME = 'Johnson Residence';
-
-/* ── Status mapping (plain language for clients) ── */
-function statusFor(cat: Category, picked: Set<string>, approved: Set<string>): {
-  key: 'approved' | 'sent' | 'pending' | 'started' | 'overdue';
-  label: string; tone: 'done' | 'sent' | 'urgent' | 'started' | 'pending';
-} {
-  if (approved.has(cat.id)) return { key: 'approved', label: 'Approved', tone: 'done' };
-  const pickedHere = cat.options.filter(o => picked.has(o.id));
-  const groupsHere = new Set(cat.options.map(o => o.group));
-  const groupsPicked = new Set(pickedHere.map(o => o.group));
-  if (groupsPicked.size === groupsHere.size && groupsHere.size > 0) {
-    return { key: 'sent', label: 'Ready to send', tone: 'sent' };
-  }
-  const diff = Math.ceil((new Date(cat.dueDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
-  if (diff < 0) return { key: 'overdue', label: 'Overdue', tone: 'urgent' };
-  if (groupsPicked.size > 0) return { key: 'started', label: 'In progress', tone: 'started' };
-  return { key: 'pending', label: 'Your pick', tone: 'pending' };
+function formatDate(dateStr: string) {
+  return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
-/* ── Component ── */
-export default function ClientSelections2() {
-  const [mobilePreview] = useState(true);
-  const [openCatId, setOpenCatId] = useState<string | null>(null);
-  const [tab, setTab] = useState<'decide' | 'saved' | 'updates'>('decide');
-  const [saved, setSaved] = useState<Set<string>>(new Set(['fl-l2', 'tl-s3', 'pl-kf2', 'cb-mv2', 'ap-d2']));
-  const [picked, setPicked] = useState<Set<string>>(new Set(['lt-1', 'lt-2', 'lt-3']));
-  const [skipped, setSkipped] = useState<Set<string>>(new Set());
-  const [approvedCats] = useState<Set<string>>(new Set(['sel-6']));
-  const [askingId, setAskingId] = useState<string | null>(null);
-  const [askDraft, setAskDraft] = useState('');
-  const [toast, setToast] = useState<string | null>(null);
-  const [lightbox, setLightbox] = useState<{ src: string; name: string } | null>(null);
-
-  useEffect(() => {
-    if (!toast) return;
-    const t = setTimeout(() => setToast(null), 1800);
-    return () => clearTimeout(t);
-  }, [toast]);
-
-  const showToast = (msg: string) => setToast(msg);
-
-  const toggleSaved = (id: string) => {
-    setSaved(prev => {
-      const n = new Set(prev);
-      if (n.has(id)) { n.delete(id); showToast('Removed from saved'); }
-      else { n.add(id); showToast('Saved'); }
-      return n;
-    });
-  };
-
-  const pickOption = (id: string, group: string, catId: string) => {
-    const cat = selectionGroups.find(c => c.id === catId)!;
-    setPicked(prev => {
-      const n = new Set(prev);
-      if (n.has(id)) {
-        n.delete(id);
-        showToast('Pick undone');
-      } else {
-        cat.options.filter(o => o.group === group).forEach(o => n.delete(o.id));
-        n.add(id);
-        showToast('Picked');
-      }
-      return n;
-    });
-    setSkipped(prev => { const n = new Set(prev); n.delete(id); return n; });
-  };
-
-  const skipOption = (id: string) => {
-    setSkipped(prev => {
-      const n = new Set(prev);
-      if (n.has(id)) n.delete(id);
-      else { n.add(id); showToast('Skipped'); }
-      return n;
-    });
-    setPicked(prev => { const n = new Set(prev); n.delete(id); return n; });
-  };
-
-  /* ── Computed ── */
-  const totalAllowance = selectionGroups.reduce((s, c) => s + c.allowance, 0);
-  const pickedCost = useMemo(() => selectionGroups.reduce((sum, cat) => {
-    const groupTotals = new Map<string, number>();
-    cat.options.forEach(o => {
-      if (picked.has(o.id)) groupTotals.set(o.group, o.price);
-    });
-    return sum + Array.from(groupTotals.values()).reduce((a, b) => a + b, 0);
-  }, 0), [picked]);
-  const remaining = totalAllowance - pickedCost;
-
-  const statuses = selectionGroups.map(c => statusFor(c, picked, approvedCats));
-  const pendingCount = statuses.filter(s => s.key !== 'approved').length;
-  const doneCount = statuses.filter(s => s.key === 'approved').length;
-  const readyToSendCount = statuses.filter(s => s.key === 'sent').length;
-
-  const upNext = selectionGroups
-    .map((c, i) => ({ cat: c, st: statuses[i] }))
-    .filter(({ st }) => st.key !== 'approved' && st.key !== 'sent')
-    .sort((a, b) => new Date(a.cat.dueDate).getTime() - new Date(b.cat.dueDate).getTime())
-    .slice(0, 4);
-
-  const openCat = openCatId ? selectionGroups.find(c => c.id === openCatId) : null;
-  const openStatus = openCat ? statusFor(openCat, picked, approvedCats) : null;
-
-  const savedOptions = useMemo(() => {
-    return selectionGroups.flatMap(c => c.options.filter(o => saved.has(o.id)).map(o => ({ ...o, catName: c.name, catId: c.id })));
-  }, [saved]);
-
-  const updates = useMemo(() => ([
-    { id: 'u1', who: 'Sarah (your builder)', when: '2h ago', text: 'Lighting is approved on our end — looks great!', cat: 'Lighting' },
-    { id: 'u2', who: 'Sarah (your builder)', when: 'Yesterday', text: 'Heads up: tile decision is due May 1 to keep the schedule.', cat: 'Tile' },
-    { id: 'u3', who: 'System', when: '3d ago', text: 'New flooring options were added to your queue.', cat: 'Flooring' },
-  ]), []);
-
-  return (
-    <>
-      <div className={`cs2-container ${mobilePreview ? 'cs2-force-mobile' : ''}`}>
-        <div className="cs2-app">
-          {/* Header */}
-          <header className="cs2-topbar">
-            <div className="cs2-topbar-job">{JOB_NAME}</div>
-            <button className="cs2-topbar-bell" aria-label="Notifications">
-              <Icon name="bell" />
-              {readyToSendCount + (pendingCount - readyToSendCount) > 0 && <span className="cs2-bell-dot" />}
-            </button>
-          </header>
-
-          {/* Hero */}
-          <section className="cs2-hero">
-            <div className="cs2-hero-greet">Hi, {CLIENT_FIRST} 👋</div>
-            <h1 className="cs2-hero-title">
-              {pendingCount === 0
-                ? `You're all done.`
-                : `${pendingCount} pick${pendingCount === 1 ? '' : 's'} left.`}
-            </h1>
-            <p className="cs2-hero-sub">
-              {pendingCount === 0 ? 'Sit back — your builder takes it from here.' : 'Take your time. Save what you like, ask questions, decide when ready.'}
-            </p>
-
-            <div className="cs2-stats">
-              <div className="cs2-stat">
-                <div className="cs2-stat-num cs2-stat-num-action">{pendingCount}</div>
-                <div className="cs2-stat-label">Need you</div>
-              </div>
-              <div className="cs2-stat">
-                <div className="cs2-stat-num cs2-stat-num-done">{doneCount}</div>
-                <div className="cs2-stat-label">Approved</div>
-              </div>
-              <div className="cs2-stat">
-                <div className="cs2-stat-num cs2-stat-num-budget">{fmtMoney(remaining)}</div>
-                <div className="cs2-stat-label">Budget left</div>
-              </div>
-            </div>
-
-            {readyToSendCount > 0 && (
-              <button className="cs2-send-cta" onClick={() => showToast(`Sent ${readyToSendCount} to your builder`)}>
-                Send {readyToSendCount} to builder
-                <Icon name="arrow-right" />
-              </button>
-            )}
-          </section>
-
-          {tab === 'decide' && (
-            <>
-              {/* Up next horizontal scroll */}
-              {upNext.length > 0 && (
-                <section className="cs2-block">
-                  <h2 className="cs2-block-title">Up next</h2>
-                  <div className="cs2-upnext">
-                    {upNext.map(({ cat, st }) => {
-                      const due = dueText(cat.dueDate, false);
-                      const top4 = cat.options.slice(0, 4);
-                      return (
-                        <button key={cat.id} className="cs2-upcard" onClick={() => setOpenCatId(cat.id)}>
-                          <div className="cs2-upcard-mosaic">
-                            {top4.map((o, i) => (
-                              <div key={o.id} className={`cs2-upcard-tile cs2-upcard-tile-${i}`} style={{ backgroundImage: `url(${o.image})` }} />
-                            ))}
-                          </div>
-                          <div className="cs2-upcard-body">
-                            <div className="cs2-upcard-row">
-                              <h3 className="cs2-upcard-name">{cat.name}</h3>
-                              <span className={`cs2-pill cs2-pill-${st.tone}`}>{st.label}</span>
-                            </div>
-                            <div className="cs2-upcard-row">
-                              <span className={`cs2-due cs2-due-${due.tone}`}>{due.label}</span>
-                              <span className="cs2-upcard-budget">{fmtMoney(cat.allowance)} budget</span>
-                            </div>
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </section>
-              )}
-
-              {/* All categories list */}
-              <section className="cs2-block">
-                <h2 className="cs2-block-title">All categories</h2>
-                <ul className="cs2-cats">
-                  {selectionGroups.map((cat, i) => {
-                    const st = statuses[i];
-                    const due = dueText(cat.dueDate, st.key === 'approved');
-                    const thumb = cat.options[0]?.image;
-                    return (
-                      <li key={cat.id}>
-                        <button className="cs2-cat-row" onClick={() => setOpenCatId(cat.id)}>
-                          <div className="cs2-cat-thumb" style={thumb ? { backgroundImage: `url(${thumb})` } : undefined} />
-                          <div className="cs2-cat-mid">
-                            <div className="cs2-cat-name">{cat.name}</div>
-                            <div className="cs2-cat-meta">
-                              <span className={`cs2-pill cs2-pill-${st.tone}`}>{st.label}</span>
-                              <span className={`cs2-due cs2-due-${due.tone}`}>{due.label}</span>
-                            </div>
-                          </div>
-                          <Icon name="chevron-right" />
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </section>
-            </>
-          )}
-
-          {tab === 'saved' && (
-            <section className="cs2-block">
-              <h2 className="cs2-block-title">Saved for later</h2>
-              {savedOptions.length === 0 ? (
-                <div className="cs2-empty">
-                  <div className="cs2-empty-icon">♡</div>
-                  <div className="cs2-empty-title">Nothing saved yet</div>
-                  <div className="cs2-empty-sub">Tap the heart on any option to save it for later.</div>
-                </div>
-              ) : (
-                <div className="cs2-saved-grid">
-                  {savedOptions.map(o => (
-                    <article key={o.id} className="cs2-saved-card">
-                      <div className="cs2-saved-img" style={{ backgroundImage: `url(${o.image})` }} onClick={() => setLightbox({ src: o.image, name: o.name })} />
-                      <button className="cs2-saved-heart cs2-saved-heart-on" onClick={() => toggleSaved(o.id)} aria-label="Remove">
-                        <Icon name="heart-fill" />
-                      </button>
-                      <div className="cs2-saved-body">
-                        <div className="cs2-saved-cat">{o.catName}</div>
-                        <div className="cs2-saved-name">{o.name}</div>
-                        <div className="cs2-saved-price">{fmtMoney(o.price)}</div>
-                      </div>
-                    </article>
-                  ))}
-                </div>
-              )}
-            </section>
-          )}
-
-          {tab === 'updates' && (
-            <section className="cs2-block">
-              <h2 className="cs2-block-title">Updates</h2>
-              <ul className="cs2-updates">
-                {updates.map(u => (
-                  <li key={u.id} className="cs2-update">
-                    <div className="cs2-update-avatar">{u.who[0]}</div>
-                    <div className="cs2-update-body">
-                      <div className="cs2-update-meta"><strong>{u.who}</strong> · {u.when}</div>
-                      <div className="cs2-update-text">{u.text}</div>
-                      <div className="cs2-update-tag">{u.cat}</div>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
-
-          <div className="cs2-spacer" />
-        </div>
-
-        {/* Bottom tab bar */}
-        <nav className="cs2-tabbar">
-          <button className={`cs2-tab ${tab === 'decide' ? 'cs2-tab-on' : ''}`} onClick={() => setTab('decide')}>
-            <Icon name="grid" />
-            <span>Decide</span>
-          </button>
-          <button className={`cs2-tab ${tab === 'saved' ? 'cs2-tab-on' : ''}`} onClick={() => setTab('saved')}>
-            <Icon name="heart" />
-            <span>Saved {saved.size > 0 ? `(${saved.size})` : ''}</span>
-          </button>
-          <button className={`cs2-tab ${tab === 'updates' ? 'cs2-tab-on' : ''}`} onClick={() => setTab('updates')}>
-            <Icon name="bell" />
-            <span>Updates</span>
-          </button>
-        </nav>
-
-        {/* Category sheet */}
-        {openCat && openStatus && (
-          <CategorySheet
-            cat={openCat}
-            status={openStatus}
-            picked={picked}
-            saved={saved}
-            skipped={skipped}
-            onPick={pickOption}
-            onSkip={skipOption}
-            onToggleSaved={toggleSaved}
-            onAsk={(id) => { setAskingId(id); setAskDraft(''); }}
-            onClose={() => setOpenCatId(null)}
-            onImage={(src, name) => setLightbox({ src, name })}
-          />
-        )}
-
-        {/* Ask sheet */}
-        {askingId && (() => {
-          const opt = selectionGroups.flatMap(c => c.options).find(o => o.id === askingId);
-          if (!opt) return null;
-          return (
-            <div className="cs2-modal-overlay" onClick={() => setAskingId(null)}>
-              <div className="cs2-ask" onClick={e => e.stopPropagation()}>
-                <div className="cs2-ask-grip" />
-                <div className="cs2-ask-header">
-                  <div>
-                    <div className="cs2-ask-title">Ask about this</div>
-                    <div className="cs2-ask-sub">{opt.name}</div>
-                  </div>
-                  <button className="cs2-ask-close" onClick={() => setAskingId(null)} aria-label="Close"><Icon name="x" /></button>
-                </div>
-                <textarea
-                  className="cs2-ask-input"
-                  value={askDraft}
-                  onChange={e => setAskDraft(e.target.value)}
-                  placeholder="What's your question?"
-                  autoFocus
-                  rows={4}
-                />
-                <button
-                  className="cs2-ask-send"
-                  disabled={!askDraft.trim()}
-                  onClick={() => { setAskingId(null); showToast('Question sent to builder'); }}
-                >
-                  Send to builder
-                </button>
-              </div>
-            </div>
-          );
-        })()}
-
-        {/* Lightbox */}
-        {lightbox && (
-          <div className="cs2-lightbox" onClick={() => setLightbox(null)}>
-            <button className="cs2-lightbox-close" aria-label="Close"><Icon name="x" /></button>
-            <img src={lightbox.src} alt={lightbox.name} />
-            <div className="cs2-lightbox-cap">{lightbox.name}</div>
-          </div>
-        )}
-
-        {/* Toast */}
-        {toast && (
-          <div className="cs2-toast" role="status" aria-live="polite">
-            <Icon name="check" /> {toast}
-          </div>
-        )}
-      </div>
-    </>
-  );
-}
-
-/* ── Category sheet ── */
-function CategorySheet({
-  cat, status, picked, saved, skipped, onPick, onSkip, onToggleSaved, onAsk, onClose, onImage,
-}: {
-  cat: Category;
-  status: { key: string; label: string; tone: string };
-  picked: Set<string>; saved: Set<string>; skipped: Set<string>;
-  onPick: (id: string, group: string, catId: string) => void;
-  onSkip: (id: string) => void;
-  onToggleSaved: (id: string) => void;
-  onAsk: (id: string) => void;
-  onClose: () => void;
-  onImage: (src: string, name: string) => void;
+/* ── Swipe Selection Mode ── */
+function SwipeMode({ group, onDone, onToggle, onViewImage }: {
+  group: typeof selectionGroups[0];
+  onDone: () => void;
+  onToggle: (optId: string) => void;
+  onViewImage?: (src: string, name: string) => void;
 }) {
-  const groups = Array.from(new Set(cat.options.map(o => o.group)));
-  const due = dueText(cat.dueDate, status.key === 'approved');
-  const pickedHere = cat.options.filter(o => picked.has(o.id));
-  const spent = pickedHere.reduce((s, o) => s + o.price, 0);
-  const overUnder = cat.allowance - spent;
+  const [idx, setIdx] = useState(0);
+  const [swipeDir, setSwipeDir] = useState<'left' | 'right' | null>(null);
+  const [history, setHistory] = useState<{ optId: string; action: 'add' | 'skip' | 'decline' }[]>([]);
+
+  const selectedSoFar = group.options.filter(o => o.selected).reduce((s, o) => s + o.price, 0);
+  const opt = group.options[idx];
+  const isLast = idx >= group.options.length;
+
+  const [, setDeclined] = useState<Set<string>>(new Set());
+
+  const handleAction = useCallback((action: 'add' | 'decline' | 'skip') => {
+    if (!opt) return;
+    if (action === 'skip') {
+      setDeclined(prev => new Set(prev).add(opt.id));
+    }
+    setSwipeDir(action === 'add' ? 'right' : 'left');
+    setHistory(prev => [...prev, { optId: opt.id, action }]);
+    if (action === 'add' && !opt.selected) onToggle(opt.id);
+    if (action === 'decline' && opt.selected) onToggle(opt.id);
+    setTimeout(() => {
+      setSwipeDir(null);
+      setIdx(i => i + 1);
+    }, 250);
+  }, [opt, onToggle]);
+
+  const handleUndo = () => {
+    if (history.length === 0) return;
+    const last = history[history.length - 1];
+    setHistory(prev => prev.slice(0, -1));
+    onToggle(last.optId);
+    setIdx(i => i - 1);
+  };
+
+  const remainingIfAdded = opt ? group.allowance - selectedSoFar - (opt.selected ? 0 : opt.price) : 0;
+
+  if (isLast) {
+    const finalTotal = group.options.filter(o => o.selected).reduce((s, o) => s + o.price, 0);
+    const finalDiff = group.allowance - finalTotal;
+    return (
+      <div className="sw-overlay">
+        <div className="sw-container sw-review">
+          <div className="sw-review-icon">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="12" fill="#DDFDEF"/><path d="M7 12.5l3 3 7-7" stroke="#057E4B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          </div>
+          <h2 className="sw-review-title">Review your selections</h2>
+          <p className="sw-review-sub">{group.name}</p>
+
+          <div className="sw-review-items">
+            {group.options.map(o => (
+              <div key={o.id} className={`sw-review-item ${o.selected ? 'sw-review-item-on' : 'sw-review-item-off'}`} onClick={() => onToggle(o.id)}>
+                <div className="sw-review-item-left">
+                  {o.selected ? (
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" fill="#057E4B"/><path d="M8 12l3 3 5-5" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  ) : (
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="#DEE3EB" strokeWidth="2"/></svg>
+                  )}
+                  <span style={{ textDecoration: o.selected ? 'none' : 'line-through', opacity: o.selected ? 1 : 0.5 }}>{o.name}</span>
+                </div>
+                <span style={{ opacity: o.selected ? 1 : 0.5 }}>${fmt(o.price)}</span>
+              </div>
+            ))}
+          </div>
+
+          <div className="sw-review-summary">
+            <div className="sw-review-row"><span>Allowance</span><span>${fmt(group.allowance)}</span></div>
+            <div className="sw-review-row"><span>Selected</span><span>-${fmt(finalTotal)}</span></div>
+            <div className={`sw-review-row sw-review-total ${finalDiff < 0 ? 'cs-over' : 'cs-under'}`}>
+              <span>{finalDiff >= 0 ? 'Remaining' : 'Overage'}</span>
+              <span>{finalDiff < 0 ? '+' : ''}${fmt(Math.abs(finalDiff))}</span>
+            </div>
+          </div>
+
+          <div className="sw-review-actions">
+            <BdsButton text="Submit choices" displayType="primary" onClick={onDone} />
+            <BdsButton text="Save and go back" displayType="tertiary" onClick={onDone} />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="cs2-sheet-overlay" onClick={onClose}>
-      <div className="cs2-sheet" onClick={e => e.stopPropagation()}>
-        <div className="cs2-sheet-grip" />
-        <header className="cs2-sheet-header">
-          <div>
-            <div className="cs2-sheet-eyebrow">
-              <span className={`cs2-pill cs2-pill-${status.tone}`}>{status.label}</span>
-              <span className={`cs2-due cs2-due-${due.tone}`}>{due.label}</span>
+    <div className="sw-overlay">
+      <div className="sw-container">
+        {/* Top bar */}
+        <div className="sw-topbar">
+          <button className="sw-close" onClick={onDone}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+          <div className="sw-progress">
+            <span className="sw-progress-text">{idx + 1} of {group.options.length}</span>
+            <div className="sw-progress-bar">
+              <div className="sw-progress-fill" style={{ width: `${((idx + 1) / group.options.length) * 100}%` }} />
             </div>
-            <h2 className="cs2-sheet-title">{cat.name}</h2>
-            <p className="cs2-sheet-sub">{cat.description}</p>
           </div>
-          <button className="cs2-sheet-close" onClick={onClose} aria-label="Close"><Icon name="x" /></button>
-        </header>
-
-        {/* Budget bar */}
-        <div className="cs2-budget">
-          <div className="cs2-budget-row">
-            <span className="cs2-budget-label">Your budget</span>
-            <span className="cs2-budget-amt">{fmtMoney(cat.allowance)}</span>
-          </div>
-          <div className="cs2-budget-bar">
-            <div
-              className={`cs2-budget-fill ${spent > cat.allowance ? 'cs2-budget-fill-over' : ''}`}
-              style={{ width: `${Math.min(100, (spent / cat.allowance) * 100)}%` }}
-            />
-          </div>
-          <div className="cs2-budget-row">
-            <span className="cs2-budget-spent">{fmtMoney(spent)} picked so far</span>
-            <span className={`cs2-budget-rem ${overUnder < 0 ? 'cs2-over' : ''}`}>
-              {overUnder >= 0 ? `${fmtMoney(overUnder)} left` : `${fmtMoney(Math.abs(overUnder))} over`}
-            </span>
+          <div className="sw-budget-pill">
+            <span className="sw-budget-label">Budget left</span>
+            <span className={`sw-budget-amt ${selectedSoFar > group.allowance ? 'cs-over' : ''}`}>${fmt(group.allowance - selectedSoFar)}</span>
           </div>
         </div>
 
-        <div className="cs2-sheet-body">
-          {groups.map(g => (
-            <div key={g} className="cs2-group">
-              <h3 className="cs2-group-title">{g}</h3>
-              <div className="cs2-options">
-                {(() => {
-                  const optsInGroup = cat.options.filter(o => o.group === g);
-                  const baseOpt = optsInGroup.find(o => o.tier === 'base');
-                  const builderPickIds = new Set(['fl-l2', 'tl-s3', 'pl-kf2', 'cb-mv2', 'ap-d2']);
-                  return optsInGroup.map(opt => {
-                  const isPicked = picked.has(opt.id);
-                  const isSaved = saved.has(opt.id);
-                  const isSkipped = skipped.has(opt.id);
-                  const delta = baseOpt && opt.tier === 'upgrade' ? opt.price - baseOpt.price : 0;
-                  const isBuilderPick = builderPickIds.has(opt.id);
-                  return (
-                    <article
-                      key={opt.id}
-                      className={`cs2-opt ${isPicked ? 'cs2-opt-picked' : ''} ${isSkipped ? 'cs2-opt-skipped' : ''}`}
-                    >
-                      <div className="cs2-opt-img-wrap" onClick={() => onImage(opt.image, opt.name)}>
-                        <div className="cs2-opt-img" style={{ backgroundImage: `url(${opt.image})` }} />
-                        {opt.tier === 'base' && <span className="cs2-opt-tier cs2-opt-tier-base">Included</span>}
-                        {opt.tier === 'upgrade' && <span className="cs2-opt-tier">Upgrade</span>}
-                        {isBuilderPick && <span className="cs2-opt-pick">★ Builder's pick</span>}
-                        {isPicked && <div className="cs2-opt-picked-overlay"><Icon name="check" /></div>}
-                      </div>
-                      <div className="cs2-opt-content">
-                        <div className="cs2-opt-row">
-                          <div className="cs2-opt-name">{opt.name}</div>
-                          <button
-                            className={`cs2-heart ${isSaved ? 'cs2-heart-on' : ''}`}
-                            onClick={() => onToggleSaved(opt.id)}
-                            aria-label={isSaved ? 'Saved' : 'Save'}
-                          >
-                            <Icon name={isSaved ? 'heart-fill' : 'heart'} />
-                          </button>
-                        </div>
-                        <div className="cs2-opt-vendor">{opt.vendor}</div>
-                        <div className="cs2-opt-price-row">
-                          <span className="cs2-opt-price">{fmtMoney(opt.price)}</span>
-                          {delta > 0 && <span className="cs2-opt-delta">+{fmtMoney(delta)} over base</span>}
-                          {opt.tier === 'base' && optsInGroup.some(o => o.tier === 'upgrade') && (
-                            <span className="cs2-opt-delta cs2-opt-delta-good">Save vs upgrade</span>
-                          )}
-                        </div>
-                        {status.key !== 'approved' && (
-                          <div className="cs2-opt-actions">
-                            <button className="cs2-act cs2-act-ask" onClick={() => onAsk(opt.id)}>
-                              <Icon name="chat" /> Ask
-                            </button>
-                            <button
-                              className={`cs2-act cs2-act-skip ${isSkipped ? 'cs2-act-skip-on' : ''}`}
-                              onClick={() => onSkip(opt.id)}
-                            >
-                              <Icon name="x" /> Skip
-                            </button>
-                            <button
-                              className={`cs2-act cs2-act-pick ${isPicked ? 'cs2-act-pick-on' : ''}`}
-                              onClick={() => onPick(opt.id, opt.group, cat.id)}
-                            >
-                              <Icon name="check" /> {isPicked ? 'Picked' : 'Pick'}
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    </article>
-                  );
-                });
-                })()}
-              </div>
+        {/* Card */}
+        <div className={`sw-card ${swipeDir === 'right' ? 'sw-card-right' : ''} ${swipeDir === 'left' ? 'sw-card-left' : ''}`}>
+          {opt.image ? (
+            <div className="sw-card-img" style={{ backgroundImage: `url(${opt.image})`, cursor: 'zoom-in' }} onClick={() => onViewImage?.(opt.image, opt.name)}>
+              <button className="sw-zoom-btn" onClick={(e) => { e.stopPropagation(); onViewImage?.(opt.image, opt.name); }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+              </button>
             </div>
-          ))}
+          ) : (
+            <div className="sw-card-img sw-card-img-empty">
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#C7D0D9" strokeWidth="1"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+            </div>
+          )}
+          <div className="sw-card-body">
+            <div className="sw-card-vendor">{opt.vendor}</div>
+            <div className="sw-card-name">{opt.name}</div>
+            <div className="sw-card-price">${fmt(opt.price)}</div>
+            <div className={`sw-card-impact ${remainingIfAdded < 0 ? 'cs-over' : ''}`}>
+              {!opt.selected
+                ? remainingIfAdded >= 0
+                  ? `$${fmt(remainingIfAdded)} remaining if you add this`
+                  : `$${fmt(Math.abs(remainingIfAdded))} over budget if you add this`
+                : 'Currently in your selections'
+              }
+            </div>
+          </div>
+        </div>
+
+        {/* Action buttons */}
+        <div className="sw-actions">
+          <div className="sw-action-col">
+            <button className="sw-btn sw-btn-decline" onClick={() => handleAction('decline')} title="Skip">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+            <span className="sw-action-label sw-hint-decline">Decline</span>
+          </div>
+          <div className="sw-action-col">
+            <button className="sw-btn sw-btn-skip" onClick={() => handleAction('skip')} title="Skip for now">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><polyline points="12 5 19 12 12 19"/></svg>
+            </button>
+            <span className="sw-action-label">Skip</span>
+          </div>
+          {history.length > 0 && (
+            <div className="sw-action-col">
+              <button className="sw-btn sw-btn-undo" onClick={handleUndo} title="Undo">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+              </button>
+              <span className="sw-action-label">Undo</span>
+            </div>
+          )}
+          <div className="sw-action-col">
+            <button className="sw-btn sw-btn-add" onClick={() => handleAction('add')} title="Add to selections">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+            </button>
+            <span className="sw-action-label sw-hint-add">Choose</span>
+          </div>
         </div>
       </div>
     </div>
   );
 }
 
-/* ── Icons ── */
-function Icon({ name }: { name: string }) {
-  switch (name) {
-    case 'check': return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>;
-    case 'x': return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>;
-    case 'heart': return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z" /></svg>;
-    case 'heart-fill': return <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z" /></svg>;
-    case 'chat': return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" /></svg>;
-    case 'bell': return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 01-3.46 0" /></svg>;
-    case 'grid': return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></svg>;
-    case 'arrow-right': return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" /></svg>;
-    case 'chevron-right': return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6" /></svg>;
-    case 'phone': return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="2" width="14" height="20" rx="2" /><line x1="12" y1="18" x2="12.01" y2="18" /></svg>;
-    case 'desktop': return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" /><line x1="8" y1="21" x2="16" y2="21" /><line x1="12" y1="17" x2="12" y2="21" /></svg>;
-    default: return null;
-  }
+/* ── Main Component ── */
+type Persona = 'prototype-bds';
+const personaConfig: Record<Persona, { label: string; jobName: string; heroTitle: string; heroDesc: string; showAllowance: boolean; showTiers: boolean; showDelta: boolean; showForecast: boolean; pricingLabel: string }> = {
+  'prototype-bds': { label: 'Custom / Remodel', jobName: 'Johnson Residence — Full Remodel', heroTitle: 'Selections', heroDesc: 'Review and approve materials and finishes for your project. Your allowance budget is shown for each category.', showAllowance: true, showTiers: false, showDelta: false, showForecast: false, pricingLabel: 'Approved price' },
+};
+
+export default function ClientSelections2() {
+  const [persona] = useState<Persona>('prototype-bds');
+  const pc = personaConfig[persona];
+  const isPrototype = persona === 'prototype-bds';
+  const isBds = true;
+  const [approvedExpanded, setApprovedExpanded] = useState(false);
+  const [favoritedOptions, setFavoritedOptions] = useState<Set<string>>(new Set([
+    'fl-l2', 'fl-mb1',
+    'tl-s3',
+    'pl-mf2', 'pl-kf2',
+    'cb-mv2',
+    'ap-d2',
+  ]));
+  const [hasInteracted, setHasInteracted] = useState(false);
+  const toggleFavorite = (optId: string) => {
+    setHasInteracted(true);
+    setFavoritedOptions(prev => {
+      const n = new Set(prev);
+      if (n.has(optId)) n.delete(optId); else n.add(optId);
+      return n;
+    });
+  };
+  const [linkFetching, setLinkFetching] = useState<Record<string, boolean>>({});
+  const [imageFromLink, setImageFromLink] = useState<Record<string, boolean>>({});
+  const fetchImageFromLink = async (gid: string, url: string) => {
+    if (!url.trim() || !/^https?:\/\//i.test(url)) return;
+    setLinkFetching(prev => ({ ...prev, [gid]: true }));
+    try {
+      const res = await fetch(`https://api.microlink.io/?url=${encodeURIComponent(url)}`);
+      const json = await res.json();
+      const imgUrl = json?.data?.image?.url;
+      if (imgUrl) {
+        const wasFromLink = imageFromLink[gid] || false;
+        setRequestImages(prev => {
+          const cur = prev[gid] || [];
+          const next = wasFromLink && cur.length > 0 ? [imgUrl, ...cur.slice(1)] : [imgUrl, ...cur];
+          return { ...prev, [gid]: next };
+        });
+        setImageFromLink(prev => ({ ...prev, [gid]: true }));
+      }
+    } catch (e) {
+      // Silent fail — user can still add a manual photo
+    } finally {
+      setLinkFetching(prev => ({ ...prev, [gid]: false }));
+    }
+  };
+  const resetRequest = (gid: string) => {
+    setOpenRequestGroups(prev => { const n = new Set(prev); n.delete(gid); return n; });
+    setRequestText(prev => { const { [gid]: _, ...rest } = prev; return rest; });
+    setRequestLink(prev => { const { [gid]: _, ...rest } = prev; return rest; });
+    setRequestImages(prev => { const { [gid]: _, ...rest } = prev; return rest; });
+    setImageFromLink(prev => { const { [gid]: _, ...rest } = prev; return rest; });
+    setLinkFetching(prev => { const { [gid]: _, ...rest } = prev; return rest; });
+  };
+  const submitRequest = (gid: string) => {
+    const text = (requestText[gid] || '').trim();
+    const link = (requestLink[gid] || '').trim();
+    const images = requestImages[gid] || [];
+    if (!gid || !text) return;
+    if (!link) {
+      showToast('Add a product link to send the request');
+      return;
+    }
+    setRequestedGroups(prev => new Set(prev).add(gid));
+    const newReq = { groupId: gid, text, link, images, autoApprove: false, date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) };
+    setRequests(prev => {
+      const sameGroup = prev.findIndex(r => r.groupId === gid);
+      if (sameGroup >= 0) {
+        const updated = [...prev];
+        updated[sameGroup] = newReq;
+        return updated;
+      }
+      return [...prev, newReq];
+    });
+    showToast('Request sent — your builder will review it');
+    resetRequest(gid);
+  };
+  const [viewMode, setViewMode] = useState<'grid' | 'compact'>('grid');
+  const [expandedId] = useState<string | null>(null);
+  const [selections, setSelections] = useState(selectionGroups);
+  const [filter, setFilter] = useState<'all' | 'action' | 'approved' | 'favorites'>('all');
+  const [swipeGroupId, setSwipeGroupId] = useState<string | null>(null);
+  const [previewMode, setPreviewMode] = useState<'desktop' | 'mobile'>('desktop');
+
+  const [lightboxImg, setLightboxImg] = useState<{images: string[]; name: string; index: number; url?: string} | null>(null);
+  const [detailItem, setDetailItem] = useState<{ groupId: string; optionId: string } | null>(null);
+  const [modalImgIdx, setModalImgIdx] = useState(0);
+  const [commentsPanelOpen, setCommentsPanelOpen] = useState(false);
+  const [compareSet, setCompareSet] = useState<Set<string>>(new Set());
+  const [showCompare, setShowCompare] = useState(false);
+  useEffect(() => { setModalImgIdx(0); }, [detailItem?.optionId]);
+  const toggleCompare = (optId: string) => {
+    setCompareSet(prev => {
+      const n = new Set(prev);
+      if (n.has(optId)) n.delete(optId);
+      else if (n.size >= 4) { showToast('Compare up to 4 items at a time'); return prev; }
+      else n.add(optId);
+      return n;
+    });
+  };
+  type OptionMessage = { id: string; from: 'client' | 'builder'; text: string; ts: string };
+  const [optionMessages, setOptionMessages] = useState<Record<string, OptionMessage[]>>({
+    'fl-l2': [
+      { id: 'm-1', from: 'builder', text: 'This one will need a 7–10 day lead time. Let me know and we can confirm with the supplier.', ts: 'Apr 22' },
+    ],
+  });
+  const [draftMessage, setDraftMessage] = useState('');
+  const [openRequestGroups, setOpenRequestGroups] = useState<Set<string>>(new Set());
+  const [requestText, setRequestText] = useState<Record<string, string>>({});
+  const [requestLink, setRequestLink] = useState<Record<string, string>>({});
+  const [requestImages, setRequestImages] = useState<Record<string, string[]>>({});
+  const [, setAutoApprove] = useState(true);
+  const [submittedGroups, setSubmittedGroups] = useState<Set<string>>(new Set());
+  const [declinedOptions, setDeclinedOptions] = useState<Set<string>>(new Set());
+  const [cardImgIndex, setCardImgIndex] = useState<Record<string, number>>({});
+  const [showDeclined, setShowDeclined] = useState<Set<string>>(new Set());
+  const [, setRequestedGroups] = useState<Set<string>>(new Set());
+  const [requests, setRequests] = useState<{groupId: string; text: string; link: string; images: string[]; autoApprove: boolean; date: string}[]>([]);
+  const [toastMsg, setToastMsg] = useState<string | null>(null);
+  const [forecastExpanded, setForecastExpanded] = useState(false);
+  const [showReviewModal, setShowReviewModal] = useState(false);
+
+  // Tab state: "selections" = existing list; "showroom" = browse + scan; "moodboard" = collage view.
+  const [activeTab, setActiveTab] = useState<'selections' | 'showroom' | 'moodboard'>('selections');
+  // Browse catalog: pick a category first (null = picker landing), then show only that group.
+  const [browseCategory, setBrowseCategory] = useState<string | null>(null);
+
+  // Custom mood board items — client-added inspiration from web/upload, optionally shared with builder.
+  type CustomMoodboardItem = { id: string; room: string; category?: string; image: string; title: string; notes: string; sharedWithBuilder: boolean; sharedAt?: string };
+  const [customMoodboardItems, setCustomMoodboardItems] = useState<CustomMoodboardItem[]>([
+    // Kitchen
+    { id: 'mb-seed-k1', room: 'Kitchen', category: 'Cabinets & countertops', image: 'https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?w=800', title: 'White cabinets, brass pulls', notes: '', sharedWithBuilder: false },
+    { id: 'mb-seed-k2', room: 'Kitchen', category: 'Tile', image: 'https://images.unsplash.com/photo-1565538810643-b5bdb714032a?w=800', title: 'Marble waterfall island', notes: '', sharedWithBuilder: false },
+    { id: 'mb-seed-k3', room: 'Kitchen', image: 'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=800', title: 'Open shelves + greenery', notes: '', sharedWithBuilder: false },
+    // Living room
+    { id: 'mb-seed-l1', room: 'Living room', image: 'https://images.unsplash.com/photo-1567696911980-2eed69a46042?w=800', title: 'Cozy reading nook', notes: '', sharedWithBuilder: false },
+    { id: 'mb-seed-l2', room: 'Living room', image: 'https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=800', title: 'Statement chandelier', notes: '', sharedWithBuilder: false },
+    { id: 'mb-seed-l3', room: 'Living room', image: 'https://images.unsplash.com/photo-1600210492486-724fe5c67fb0?w=800', title: 'Warm neutrals palette', notes: '', sharedWithBuilder: false },
+    // Bathroom
+    { id: 'mb-seed-b1', room: 'Bathroom', category: 'Tile', image: 'https://images.unsplash.com/photo-1552321554-5fefe8c9ef14?w=800', title: 'Marble walk-in shower', notes: '', sharedWithBuilder: false },
+    { id: 'mb-seed-b2', room: 'Bathroom', image: 'https://images.unsplash.com/photo-1620626011761-996317b8d101?w=800', title: 'Freestanding tub', notes: '', sharedWithBuilder: false },
+    { id: 'mb-seed-b3', room: 'Bathroom', category: 'Plumbing', image: 'https://images.unsplash.com/photo-1564540583246-934409427776?w=800', title: 'Brushed brass fixtures', notes: '', sharedWithBuilder: false },
+  ]);
+  const [addInspirationOpen, setAddInspirationOpen] = useState(false);
+  const [matchesOpenForId, setMatchesOpenForId] = useState<string | null>(null);
+  const moodboardRooms = ['Kitchen', 'Living room', 'Bathroom', 'Other'];
+  const emptyInspiration = { link: '', image: '', title: '', notes: '', room: 'Kitchen', category: '' };
+  const [inspirationDraft, setInspirationDraft] = useState(emptyInspiration);
+  const [inspirationFetching, setInspirationFetching] = useState(false);
+  const updateInspiration = (patch: Partial<typeof emptyInspiration>) => setInspirationDraft(prev => ({ ...prev, ...patch }));
+  const fetchInspirationImage = async (url: string) => {
+    if (!url.trim() || !/^https?:\/\//i.test(url)) return;
+    setInspirationFetching(true);
+    try {
+      const res = await fetch(`https://api.microlink.io/?url=${encodeURIComponent(url)}`);
+      const json = await res.json();
+      const imgUrl = json?.data?.image?.url;
+      if (imgUrl) setInspirationDraft(prev => ({ ...prev, image: imgUrl }));
+    } catch (e) {
+      // silent
+    } finally {
+      setInspirationFetching(false);
+    }
+  };
+  const openAddInspiration = (room?: string) => {
+    setInspirationDraft({ ...emptyInspiration, room: room || 'Kitchen' });
+    setAddInspirationOpen(true);
+  };
+  const closeAddInspiration = () => {
+    setAddInspirationOpen(false);
+    setInspirationDraft(emptyInspiration);
+    setInspirationFetching(false);
+  };
+  const submitInspiration = () => {
+    // Accept the link itself as the image if microlink didn't extract one (common when pasting direct image URLs).
+    const looksLikeImage = (u: string) => /^https?:\/\/.+\.(jpg|jpeg|png|webp|gif|avif|svg)(\?|$)/i.test(u);
+    let image = inspirationDraft.image;
+    if (!image && inspirationDraft.link && looksLikeImage(inspirationDraft.link)) {
+      image = inspirationDraft.link;
+    }
+    if (!image) {
+      showToast('Upload an image or paste a direct image URL');
+      return;
+    }
+    const item: CustomMoodboardItem = {
+      id: `mb-${Date.now()}`,
+      room: inspirationDraft.room,
+      category: inspirationDraft.category || undefined,
+      image,
+      title: inspirationDraft.title.trim() || 'Inspiration',
+      notes: inspirationDraft.notes.trim(),
+      sharedWithBuilder: false,
+    };
+    setCustomMoodboardItems(prev => [...prev, item]);
+    closeAddInspiration();
+    showToast(`Added to ${item.room} mood board`);
+  };
+  const shareInspiration = (id: string) => {
+    setCustomMoodboardItems(prev => prev.map(it => it.id === id ? { ...it, sharedWithBuilder: true, sharedAt: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) } : it));
+    showToast('Shared with your builder for review');
+  };
+  const removeInspiration = (id: string) => {
+    setCustomMoodboardItems(prev => prev.filter(it => it.id !== id));
+  };
+  const handleInspirationUpload = (file: File | null) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const src = ev.target?.result as string;
+      if (src) setInspirationDraft(prev => ({ ...prev, image: src }));
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const showToast = (msg: string) => {
+    setToastMsg(msg);
+    setTimeout(() => setToastMsg(null), 3000);
+  };
+
+  // Load saved progress on mount
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('client-selections-progress-v3');
+      if (!raw) return;
+      const saved = JSON.parse(raw);
+      if (saved.selections) setSelections(saved.selections);
+      if (saved.declinedOptions) setDeclinedOptions(new Set(saved.declinedOptions));
+      if (saved.submittedGroups) setSubmittedGroups(new Set(saved.submittedGroups));
+      if (saved.requests) setRequests(saved.requests);
+      if (saved.customMoodboardItems) setCustomMoodboardItems(saved.customMoodboardItems);
+    } catch (e) {
+      console.warn('Failed to load saved selections', e);
+    }
+  }, []);
+
+  const handleSaveProgress = () => {
+    try {
+      localStorage.setItem('client-selections-progress-v3', JSON.stringify({
+        selections,
+        declinedOptions: Array.from(declinedOptions),
+        submittedGroups: Array.from(submittedGroups),
+        requests,
+        customMoodboardItems,
+      }));
+      showToast('Selections saved');
+    } catch (e) {
+      showToast('Could not save — browser storage may be full');
+    }
+  };
+
+  const declineOption = (optionId: string, groupId: string) => {
+    setHasInteracted(true);
+    if (submittedGroups.has(groupId)) {
+      setSubmittedGroups(prev => { const n = new Set(prev); n.delete(groupId); return n; });
+    }
+    setDeclinedOptions(prev => new Set(prev).add(optionId));
+    // Also deselect if it was selected
+    setSelections(prev => prev.map(g =>
+      g.id === groupId ? { ...g, options: g.options.map(o => o.id === optionId ? { ...o, selected: false } : o) } : g
+    ));
+  };
+
+  const undeclineOption = (optionId: string) => {
+    setHasInteracted(true);
+    setDeclinedOptions(prev => { const n = new Set(prev); n.delete(optionId); return n; });
+  };
+
+  const toggleOption = (groupId: string, optionId: string) => {
+    setHasInteracted(true);
+    // Remove from submitted if user changes their mind
+    if (submittedGroups.has(groupId)) {
+      setSubmittedGroups(prev => { const n = new Set(prev); n.delete(groupId); return n; });
+    }
+    setSelections(prev => prev.map(g => {
+      if (g.id !== groupId) return g;
+      const targetOpt = g.options.find(o => o.id === optionId);
+      if (!targetOpt) return g;
+      const isSelecting = !targetOpt.selected;
+      const optGroup = (targetOpt as any).group;
+
+      // Auto-decline siblings only for non-prototype personas (prototype allows multi-select)
+      if (!isPrototype) {
+        if (isSelecting && optGroup) {
+          const siblings = g.options.filter(o => (o as any).group === optGroup && o.id !== optionId);
+          const hasGroupSiblings = siblings.length > 0;
+          if (hasGroupSiblings) {
+            const newDeclined = new Set(declinedOptions);
+            siblings.forEach(sib => newDeclined.add(sib.id));
+            setDeclinedOptions(newDeclined);
+            const declinedNames = siblings.map(s => s.name);
+            if (declinedNames.length > 0) showToast(`${declinedNames.join(', ')} auto-declined`);
+            return { ...g, options: g.options.map(o => {
+              if (o.id === optionId) return { ...o, selected: true };
+              if ((o as any).group === optGroup && o.id !== optionId) return { ...o, selected: false };
+              return o;
+            })};
+          }
+        }
+
+        if (!isSelecting && optGroup) {
+          const siblings = g.options.filter(o => (o as any).group === optGroup && o.id !== optionId);
+          if (siblings.length > 0) {
+            const newDeclined = new Set(declinedOptions);
+            siblings.forEach(sib => newDeclined.delete(sib.id));
+            setDeclinedOptions(newDeclined);
+            const restoredNames = siblings.filter(s => declinedOptions.has(s.id)).map(s => s.name);
+            if (restoredNames.length > 0) showToast(`${restoredNames.join(', ')} restored`);
+          }
+        }
+      }
+
+      // Remove from declined if re-selecting
+      if (isSelecting && declinedOptions.has(optionId)) {
+        setDeclinedOptions(prev => { const n = new Set(prev); n.delete(optionId); return n; });
+      }
+
+      return { ...g, options: g.options.map(o => o.id === optionId ? { ...o, selected: !o.selected } : o) };
+    }));
+  };
+
+  // Calculate upgrade cost — only the delta above the base option counts against the allowance
+  const getUpgradeCost = (group: typeof selectionGroups[0]) => {
+    let cost = 0;
+    const optGroups = new Map<string, any[]>();
+    group.options.forEach(opt => {
+      const g = (opt as any).group || opt.id;
+      if (!optGroups.has(g)) optGroups.set(g, []);
+      optGroups.get(g)!.push(opt);
+    });
+    optGroups.forEach((opts) => {
+      const selected = opts.find(o => o.selected);
+      if (!selected) return;
+      if ((selected as any).tier === 'base') return; // no extra cost
+      const baseOpt = opts.find(o => (o as any).tier === 'base');
+      if (baseOpt) {
+        cost += selected.price - baseOpt.price; // only the delta
+      } else {
+        cost += selected.price; // no base option exists, full price
+      }
+    });
+    return cost;
+  };
+
+  const getSelectedTotal = (group: typeof selectionGroups[0]) => {
+    return group.options.filter(o => o.selected).reduce((s, o) => s + o.price, 0);
+  };
+
+  const totalAllowance = selections.reduce((s, g) => s + g.allowance, 0);
+  const totalUpgradeCost = selections.reduce((s, g) => s + getUpgradeCost(g), 0);
+  const totalSelectedPrice = selections.reduce((s, g) => s + getSelectedTotal(g), 0);
+  const totalRemaining = totalAllowance - totalSelectedPrice;
+  const getDynamicStatus = (group: typeof selectionGroups[0]) => {
+    if (group.status === 'approved') return 'approved';
+    const anySelected = group.options.some(o => o.selected);
+    if (isPrototype) {
+      // Prototype: no "one per group" constraint — any selection counts as ready
+      return anySelected ? 'ready' : group.status;
+    }
+    const optGroups = new Set(group.options.map(o => (o as any).group || o.id));
+    const made = Array.from(optGroups).filter(g =>
+      group.options.some(o => ((o as any).group || o.id) === g && o.selected)
+    ).length;
+    if (made === optGroups.size) return 'ready';
+    if (made > 0) return 'in_progress';
+    return group.status;
+  };
+
+  const dynamicStatuses = selections.map(g => getDynamicStatus(g));
+  const actionCount = dynamicStatuses.filter(s => s === 'overdue' || s === 'action_needed').length;
+  const readyCount = dynamicStatuses.filter(s => s === 'ready').length;
+  const approvedCount = dynamicStatuses.filter(s => s === 'approved').length;
+  const completedCount = approvedCount + readyCount;
+  // Awaiting = groups where no decision has been made yet (mirrors V2/V3 "picks left")
+  const awaitingCount = selections.length - completedCount;
+
+  /* ── Forecast calculations ── */
+  const CONTRACT_PRICE = 485000;
+  // Only count impact from categories where at least one option is selected
+  const selectionsImpact = selections.reduce((s, g) => {
+    const selectedTotal = g.options.filter(o => o.selected).reduce((a, o) => a + o.price, 0);
+    if (selectedTotal === 0) return s; // no selections made yet — don't count this category
+    return s + (selectedTotal - g.allowance);
+  }, 0);
+  const pendingCategories = selections.filter((_g, i) => {
+    const ds = dynamicStatuses[i];
+    return ds !== 'approved' && ds !== 'ready';
+  });
+  const pendingEstimate = pendingCategories.reduce((s, g) => {
+    const avgPrice = g.options.length > 0 ? g.options.reduce((a, o) => a + o.price, 0) / g.options.length : 0;
+    const selectedInGroup = g.options.filter(o => o.selected).reduce((a, o) => a + o.price, 0);
+    if (selectedInGroup > 0) return s + (selectedInGroup - g.allowance);
+    const cheapest = g.options.length > 0 ? Math.min(...g.options.map(o => o.price)) : 0;
+    const estimated = (cheapest + avgPrice) / 2;
+    return s + Math.max(0, estimated - g.allowance);
+  }, 0);
+  const projectedPrice = CONTRACT_PRICE + selectionsImpact + (pendingCategories.length > 0 ? pendingEstimate : 0);
+
+  // High-end forecast: most expensive option per sub-group in each category
+  const highEndImpact = selections.reduce((s, g) => {
+    const optGroups = new Map<string, any[]>();
+    g.options.forEach(opt => {
+      const gKey = (opt as any).group || opt.id;
+      if (!optGroups.has(gKey)) optGroups.set(gKey, []);
+      optGroups.get(gKey)!.push(opt);
+    });
+    let groupMax = 0;
+    optGroups.forEach(opts => {
+      groupMax += Math.max(...opts.map(o => o.price));
+    });
+    return s + (groupMax - g.allowance);
+  }, 0);
+  const highEndPrice = CONTRACT_PRICE + highEndImpact;
+
+  // Groups ready to submit (all choices made, not yet submitted or approved)
+  const pendingSubmit = selections.filter((g, i) =>
+    dynamicStatuses[i] === 'ready' &&
+    !submittedGroups.has(g.id)
+  );
+
+  const handleSubmitAll = () => {
+    setSelections(prev => prev.map(g => {
+      if (pendingSubmit.some(p => p.id === g.id)) {
+        return { ...g, status: 'approved' as const };
+      }
+      return g;
+    }));
+    showToast('Selections submitted.');
+  };
+
+  const sorted = [...selections].sort((a, b) => {
+    const aApproved = a.status === 'approved' ? 1 : 0;
+    const bApproved = b.status === 'approved' ? 1 : 0;
+    return aApproved - bApproved;
+  });
+
+  const filtered = filter === 'all' ? sorted
+    : filter === 'action' ? sorted.filter(s => { const ds = getDynamicStatus(s); return ds === 'overdue' || ds === 'action_needed' || ds === 'pending'; })
+    : filter === 'favorites' ? sorted
+        .filter(s => s.options.some(o => favoritedOptions.has(o.id)))
+        .map(s => ({ ...s, options: s.options.filter(o => favoritedOptions.has(o.id)) }))
+    : sorted.filter(s => { const ds = getDynamicStatus(s); return ds === 'approved' || ds === 'ready'; });
+
+  const swipeGroup = selections.find(g => g.id === swipeGroupId);
+
+  return (
+    <>
+      {swipeGroup && (
+        <SwipeMode
+          group={swipeGroup}
+          onDone={() => setSwipeGroupId(null)}
+          onToggle={(optId) => toggleOption(swipeGroup.id, optId)}
+          onViewImage={(src, name) => setLightboxImg({images: [src], name, index: 0})/* swipe mode doesn't pass url */}
+        />
+      )}
+      {/* Lightbox */}
+      {lightboxImg && (
+        <div className="sw-overlay lb-overlay" onClick={() => setLightboxImg(null)}>
+          <button className="lb-close" onClick={() => setLightboxImg(null)}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+          <div className="lb-content" onClick={e => e.stopPropagation()}>
+            <div className="lb-img-row">
+              {lightboxImg.images.length > 1 && lightboxImg.index > 0 && (
+                <button className="lb-arrow" onClick={() => setLightboxImg({...lightboxImg, index: lightboxImg.index - 1})}>
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+                </button>
+              )}
+              <img src={lightboxImg.images[lightboxImg.index]} alt={lightboxImg.name} className="lb-img" />
+              {lightboxImg.images.length > 1 && lightboxImg.index < lightboxImg.images.length - 1 && (
+                <button className="lb-arrow" onClick={() => setLightboxImg({...lightboxImg, index: lightboxImg.index + 1})}>
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+                </button>
+              )}
+            </div>
+            {lightboxImg.images.length > 1 && (
+              <div className="lb-dots">
+                {lightboxImg.images.map((_, i) => (
+                  <button key={i} className={`lb-dot ${i === lightboxImg.index ? 'lb-dot-active' : ''}`} onClick={(e) => { e.stopPropagation(); setLightboxImg({...lightboxImg, index: i}); }} />
+                ))}
+              </div>
+            )}
+            {lightboxImg.url ? (
+              <a className="lb-caption lb-caption-link" href={lightboxImg.url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}>
+                {lightboxImg.name}
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+              </a>
+            ) : (
+              <div className="lb-caption">{lightboxImg.name}</div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Desktop / Mobile preview toggle — fixed top-right of the viewport */}
+      <div className="cs-preview-toggle" role="tablist" aria-label="Preview mode">
+        <button
+          type="button"
+          className={`cs-preview-toggle-btn ${previewMode === 'desktop' ? 'cs-preview-toggle-btn-active' : ''}`}
+          aria-pressed={previewMode === 'desktop'}
+          onClick={() => setPreviewMode('desktop')}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="20" height="13" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+          Desktop
+        </button>
+        <button
+          type="button"
+          className={`cs-preview-toggle-btn ${previewMode === 'mobile' ? 'cs-preview-toggle-btn-active' : ''}`}
+          aria-pressed={previewMode === 'mobile'}
+          onClick={() => setPreviewMode('mobile')}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="2" width="12" height="20" rx="2"/><line x1="11" y1="18" x2="13" y2="18"/></svg>
+          Mobile
+        </button>
+      </div>
+
+      <div className={`cs-page ${isBds ? 'bds-scope bds-real-scope' : ''} ${previewMode === 'mobile' ? 'cs-page-mobile' : ''}`}>
+        {/* Hero */}
+        <div className="cs-hero">
+          <h1 className="cs-hero-title">{pc.heroTitle}</h1>
+        </div>
+
+        {/* Budget stats */}
+        <div className="cs-hero-stats">
+          {pc.showForecast ? (
+            /* Prototype: delta-first forecast bar — net impact is the headline, full breakdown behind toggle */
+            <>
+              <div className="cs-fbar">
+                {/* Always visible: progress + net impact */}
+                <div className="cs-fbar-headline" onClick={() => setForecastExpanded(!forecastExpanded)}>
+                  <div className="cs-fbar-headline-left">
+                    <div className="cs-fbar-label">{completedCount}/{selections.length} categories complete</div>
+                    <div className={`cs-fbar-value ${selectionsImpact > 0 ? 'cs-over' : selectionsImpact < 0 ? 'cs-under' : ''}`}>
+                      {selectionsImpact === 0
+                        ? 'On budget'
+                        : selectionsImpact > 0
+                          ? `+$${fmt(selectionsImpact)} from selections`
+                          : `-$${fmt(Math.abs(selectionsImpact))} under budget`
+                      }
+                    </div>
+                  </div>
+                  <button className="cs-fbar-toggle" aria-expanded={forecastExpanded}>
+                    <span className="cs-fbar-toggle-text">{forecastExpanded ? 'Hide details' : 'See details'}</span>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: forecastExpanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s ease' }}><polyline points="6 9 12 15 18 9"/></svg>
+                  </button>
+                </div>
+
+                {/* Collapsible breakdown */}
+                {forecastExpanded && (
+                  <div className="cs-fbar-breakdown">
+                    <div className="cs-fbar-row">
+                      <div className="cs-fbar-item">
+                        <div className="cs-fbar-label">Contract price</div>
+                        <div className="cs-fbar-value">${fmt(CONTRACT_PRICE)}</div>
+                      </div>
+                      <div className="cs-fbar-arrow">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#C7D0D9" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><polyline points="12 5 19 12 12 19"/></svg>
+                      </div>
+                      <div className="cs-fbar-item">
+                        <div className="cs-fbar-label">Selections impact</div>
+                        <div className={`cs-fbar-value ${selectionsImpact > 0 ? 'cs-over' : selectionsImpact < 0 ? 'cs-under' : ''}`}>
+                          {selectionsImpact > 0 ? '+' : selectionsImpact < 0 ? '-' : ''}${fmt(Math.abs(selectionsImpact))}
+                        </div>
+                      </div>
+                      <div className="cs-fbar-arrow">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#C7D0D9" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><polyline points="12 5 19 12 12 19"/></svg>
+                      </div>
+                      <div className="cs-fbar-item cs-fbar-item-projected">
+                        <div className="cs-fbar-label">Projected price</div>
+                        <div className="cs-fbar-value cs-fbar-value-projected">${fmt(projectedPrice)}</div>
+                      </div>
+                    </div>
+                    {/* High-end callout inside breakdown */}
+                    <div className="cs-fbar-highend">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+                      <span>If all premium options are selected, your price could reach <strong>${fmt(highEndPrice)}</strong></span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </>
+          ) : pc.showDelta ? (
+            /* Spec: two-card layout — Upgrades + Progress */
+            (() => {
+              const hasUpgrades = totalUpgradeCost > 0;
+              const upcoming = selections
+                .map((s, i) => ({ s, ds: dynamicStatuses[i] }))
+                .filter(({ ds }) => ds !== 'approved' && ds !== 'ready')
+                .sort((a, b) => new Date(a.s.dueDate).getTime() - new Date(b.s.dueDate).getTime());
+              const nextDue = upcoming[0];
+              return (
+                <div className="cs-hero-cards">
+                  <div className="cs-hero-card cs-hero-card-budget">
+                    <span className={`cs-budget-pill cs-budget-pill-corner ${hasUpgrades ? 'cs-budget-pill-over' : 'cs-budget-pill-under'}`}>
+                      {hasUpgrades ? 'Upgraded' : 'Base package'}
+                    </span>
+                    <div className="cs-hero-card-hero">
+                      ${fmt(totalUpgradeCost)} <span className="cs-hero-card-hero-unit">in upgrades</span>
+                    </div>
+                    <div className="cs-hero-card-sub">above your base contract</div>
+                  </div>
+
+                  <div className="cs-hero-card">
+                    <div className="cs-hero-card-hero">
+                      {awaitingCount}
+                    </div>
+                    <div className="cs-hero-card-sub">
+                      {awaitingCount === 1 ? 'category awaiting your approval' : 'categories awaiting your approval'}
+                    </div>
+                    {nextDue ? (
+                      <div className="cs-next-due">
+                        <button className="cs-next-due-link" onClick={() => {
+                          const el = document.getElementById(`cs-group-${nextDue.s.id}`);
+                          if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        }}>{nextDue.s.name}</button>
+                        <span>due {formatDate(nextDue.s.dueDate)}</span>
+                        {nextDue.ds === 'overdue' && (() => {
+                          const days = Math.floor((Date.now() - new Date(nextDue.s.dueDate).getTime()) / (1000 * 60 * 60 * 24));
+                          return <span className="cs-next-due-late">{days} day{days === 1 ? '' : 's'} late</span>;
+                        })()}
+                      </div>
+                    ) : (
+                      <div className="cs-next-due cs-next-due-ok">All caught up</div>
+                    )}
+                  </div>
+                </div>
+              );
+            })()
+          ) : (
+            /* Custom/Remodel: two-card layout — Budget + Progress (original). */
+            (() => {
+              const isOver = totalRemaining < 0;
+              const upcoming = selections
+                .map((s, i) => ({ s, ds: dynamicStatuses[i] }))
+                .filter(({ ds }) => ds !== 'approved' && ds !== 'ready')
+                .sort((a, b) => new Date(a.s.dueDate).getTime() - new Date(b.s.dueDate).getTime());
+              const nextDue = upcoming[0];
+              return (
+                <div className="cs-hero-cards">
+                  <div className="cs-hero-card cs-hero-card-budget">
+                    <span className={`cs-budget-pill cs-budget-pill-corner ${isOver ? 'cs-budget-pill-over' : 'cs-budget-pill-under'}`}>
+                      {isOver ? 'Overage' : 'Within budget'}
+                    </span>
+                    <div className="cs-hero-card-hero">
+                      ${fmt(Math.abs(totalRemaining))} <span className="cs-hero-card-hero-unit">{isOver ? 'overage' : 'remaining'}</span>
+                    </div>
+                    <div className="cs-hero-card-sub">of ${fmt(totalAllowance)} allowance</div>
+                  </div>
+
+                  <div className="cs-hero-card">
+                    <div className="cs-hero-card-hero">
+                      {awaitingCount}
+                    </div>
+                    <div className="cs-hero-card-sub">
+                      {awaitingCount === 1 ? 'category awaiting your approval' : 'categories awaiting your approval'}
+                    </div>
+                    {(() => {
+                      if (!nextDue) {
+                        return <div className="cs-next-due cs-next-due-ok">All caught up</div>;
+                      }
+                      const overdueItems = upcoming.filter(u => u.ds === 'overdue');
+                      if (overdueItems.length > 1) {
+                        const oldest = overdueItems[0];
+                        const days = Math.floor((Date.now() - new Date(oldest.s.dueDate).getTime()) / (1000 * 60 * 60 * 24));
+                        return (
+                          <div className="cs-next-due cs-next-due-stack">
+                            <span className="cs-next-due-summary">{overdueItems.length} selections overdue</span>
+                            <span className="cs-next-due-oldest">
+                              <button className="cs-next-due-link" onClick={() => {
+                                const el = document.getElementById(`cs-group-${oldest.s.id}`);
+                                if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                              }}>{oldest.s.name}</button>
+                              {' — '}
+                              <span className="cs-next-due-late-plain">{days} day{days === 1 ? '' : 's'} late</span>
+                            </span>
+                          </div>
+                        );
+                      }
+                      const days = Math.floor((Date.now() - new Date(nextDue.s.dueDate).getTime()) / (1000 * 60 * 60 * 24));
+                      return (
+                        <div className="cs-next-due">
+                          <button className="cs-next-due-link" onClick={() => {
+                            const el = document.getElementById(`cs-group-${nextDue.s.id}`);
+                            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                          }}>{nextDue.s.name}</button>
+                          <span>due {formatDate(nextDue.s.dueDate)}</span>
+                          {nextDue.ds === 'overdue' && <span className="cs-next-due-late">{days} day{days === 1 ? '' : 's'} late</span>}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                </div>
+              );
+            })()
+          )}
+        </div>
+
+        {/* Top-level tabs — "My selections" (default list) vs "Showroom" (log items found in person) */}
+        <div className="cs-tabs-row">
+          <div className="cs-tabs">
+            <button className={`cs-tab ${activeTab === 'selections' ? 'cs-tab-active' : ''}`} onClick={() => setActiveTab('selections')}>
+              My selections
+            </button>
+            <button className={`cs-tab ${activeTab === 'showroom' ? 'cs-tab-active' : ''}`} onClick={() => setActiveTab('showroom')}>
+              Showroom
+            </button>
+            <button className={`cs-tab ${activeTab === 'moodboard' ? 'cs-tab-active' : ''}`} onClick={() => setActiveTab('moodboard')}>
+              Mood board
+            </button>
+          </div>
+        </div>
+
+        {activeTab === 'selections' && (
+        <>
+        {/* Up next — horizontal scroll of categories that still need a decision, with image mosaic */}
+        {(() => {
+          const upNext = selections
+            .map((s, i) => ({ s, ds: dynamicStatuses[i] }))
+            .filter(({ ds }) => ds !== 'approved' && ds !== 'ready')
+            .sort((a, b) => new Date(a.s.dueDate).getTime() - new Date(b.s.dueDate).getTime())
+            .slice(0, 4);
+          if (upNext.length === 0) return null;
+          return (
+            <section className="cs-upnext-section">
+              <h2 className="cs-upnext-title">Up next</h2>
+              <div className="cs-upnext-row">
+                {upNext.map(({ s, ds }) => {
+                  const top4 = s.options.slice(0, 4);
+                  const sc = statusConfig[ds as keyof typeof statusConfig] || statusConfig.pending;
+                  const due = new Date(s.dueDate);
+                  const today = new Date();
+                  const daysUntilDue = Math.ceil((due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+                  const dueLabel = daysUntilDue < 0
+                    ? `${Math.abs(daysUntilDue)} day${Math.abs(daysUntilDue) === 1 ? '' : 's'} late`
+                    : daysUntilDue === 0
+                      ? 'Due today'
+                      : `Due in ${daysUntilDue} day${daysUntilDue === 1 ? '' : 's'}`;
+                  return (
+                    <button
+                      key={s.id}
+                      className="cs-upnext-card"
+                      onClick={() => {
+                        const el = document.getElementById(`cs-group-${s.id}`);
+                        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                      }}
+                    >
+                      <div className="cs-upnext-mosaic">
+                        {top4.map((o, i) => (
+                          <div
+                            key={o.id}
+                            className={`cs-upnext-tile cs-upnext-tile-${i}`}
+                            style={{ backgroundImage: o.image ? `url(${o.image})` : undefined }}
+                          />
+                        ))}
+                        {top4.length < 4 && Array.from({ length: 4 - top4.length }).map((_, i) => (
+                          <div key={`ph-${i}`} className="cs-upnext-tile cs-upnext-tile-empty" />
+                        ))}
+                      </div>
+                      <div className="cs-upnext-body">
+                        <div className="cs-upnext-row-line">
+                          <h3 className="cs-upnext-name">{s.name}</h3>
+                          <span
+                            className="cs-upnext-pill"
+                            style={{ background: sc.bg, color: sc.color }}
+                          >{sc.label}</span>
+                        </div>
+                        <div className="cs-upnext-row-line cs-upnext-meta">
+                          <span className={ds === 'overdue' ? 'cs-upnext-due-late' : 'cs-upnext-due'}>{dueLabel}</span>
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+          );
+        })()}
+
+        <div className="cs-filters">
+          <div className="cs-filter-left">
+            <label className="cs-filter-select-wrap">
+              <span className="cs-filter-select-label">Show</span>
+              <select
+                className="cs-filter-select"
+                value={filter}
+                onChange={(e) => setFilter(e.target.value as 'all' | 'action' | 'approved' | 'favorites')}
+              >
+                <option value="all">All categories ({selections.length})</option>
+                <option value="action">Needs attention ({actionCount})</option>
+                <option value="favorites">Favorites ({favoritedOptions.size})</option>
+                <option value="approved">Completed ({completedCount})</option>
+              </select>
+            </label>
+          </div>
+          <div className="cs-view-toggle">
+            <button className={`cs-view-btn ${viewMode === 'grid' ? 'cs-view-active' : ''}`} onClick={() => setViewMode('grid')} title="Card grid">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+            </button>
+            <button className={`cs-view-btn ${viewMode === 'compact' ? 'cs-view-active' : ''}`} onClick={() => setViewMode('compact')} title="Compact list">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <div className="cs-cards">
+          {(() => {
+            const renderCard = (group: typeof selections[0]) => {
+            const upgradeCost = getUpgradeCost(group);
+            const selectedTotal = getSelectedTotal(group);
+            const diff = group.allowance - selectedTotal;
+            void expandedId; // keep state for swipe mode
+            const dynamicStatus = getDynamicStatus(group);
+            const sc = statusConfig[dynamicStatus as keyof typeof statusConfig];
+            const dueDays = daysUntil(group.dueDate);
+            const isOverdue = group.status === 'overdue';
+            const optGroups = new Set(group.options.map(o => (o as any).group || o.id));
+            const totalChoices = optGroups.size;
+            const madeChoices = Array.from(optGroups).filter(g =>
+              group.options.some(o => ((o as any).group || o.id) === g && o.selected)
+            ).length;
+
+            return (
+              <div key={group.id} id={`cs-group-${group.id}`} className={`cs-section ${isOverdue ? 'cs-card-overdue' : ''}`}>
+                {/* Section header */}
+                <div className="cs-section-header">
+                  <div className="cs-section-left">
+                    <span className="cs-status-dot" style={{ background: sc.color }} />
+                    <div className="cs-section-title-block">
+                      <div className="cs-section-title-row">
+                        <h3 className="cs-section-name">{group.name}</h3>
+                        <BdsBadge
+                          text={sc.label}
+                          displayType={
+                            dynamicStatus === 'overdue' ? 'danger'
+                            : dynamicStatus === 'action_needed' ? 'warning'
+                            : dynamicStatus === 'approved' || dynamicStatus === 'ready' ? 'success'
+                            : dynamicStatus === 'in_progress' ? 'info'
+                            : 'default'
+                          }
+                        />
+                      </div>
+                      {(group as any).vendor && (
+                        <div className="cs-section-vendor">
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l1.5-5h15L21 9"/><path d="M5 9v11h14V9"/><path d="M9 22V12h6v10"/></svg>
+                          <span>{(group as any).vendor}</span>
+                        </div>
+                      )}
+                      <span className="cs-section-meta">
+                        {!isPrototype && <>{madeChoices} of {totalChoices} choices made &middot; </>}
+                        {isPrototype && group.options.filter(o => o.selected).length > 0 && <>{group.options.filter(o => o.selected).length} selected &middot; </>}
+                        Due {formatDate(group.dueDate)} ({dueDays})
+                      </span>
+                    </div>
+                  </div>
+                  <div className="cs-section-right">
+                    {pc.showDelta ? (
+                      /* Spec: show allowance $0 + additional cost */
+                      <>
+                        <div className="cs-section-stat">
+                          <span className="cs-section-stat-label">Allowance</span>
+                          <span className="cs-section-stat-value">$0.00</span>
+                        </div>
+                        {upgradeCost > 0 && (
+                          <div className="cs-section-stat">
+                            <span className="cs-section-stat-label">Additional cost</span>
+                            <span className="cs-section-stat-value cs-over">${fmt(upgradeCost)}</span>
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      /* Custom/Remodel: show allowance and remaining */
+                      <>
+                        <div className="cs-section-stat">
+                          <span className="cs-section-stat-label">Allowance</span>
+                          <span className="cs-section-stat-value">${fmt(group.allowance)}</span>
+                        </div>
+                        <div className="cs-section-stat">
+                          <span className="cs-section-stat-label">{diff >= 0 ? 'Remaining' : 'Over'}</span>
+                          <span className={`cs-section-stat-value ${diff >= 0 ? 'cs-under' : 'cs-over'}`}>
+                            {diff >= 0 ? `$${fmt(diff)}` : `-$${fmt(Math.abs(diff))}`}
+                          </span>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                  <div className="cs-section-body">
+
+                    {/* Shopping card grid */}
+                    {(() => {
+                      const optGroupMap = new Map<string, any[]>();
+                      group.options.forEach(opt => {
+                        const g = (opt as any).group || 'Other';
+                        if (!optGroupMap.has(g)) optGroupMap.set(g, []);
+                        optGroupMap.get(g)!.push(opt);
+                      });
+                      return Array.from(optGroupMap.entries()).map(([gName, unsortedOpts]) => {
+                        const opts = [...unsortedOpts].sort((a, b) => {
+                          if (group.status === 'approved') {
+                            // Chosen first, then unchosen, then declined
+                            const aStatus = a.selected ? 0 : declinedOptions.has(a.id) ? 2 : 1;
+                            const bStatus = b.selected ? 0 : declinedOptions.has(b.id) ? 2 : 1;
+                            if (aStatus !== bStatus) return aStatus - bStatus;
+                          }
+                          // Within same status, base before upgrade
+                          const tierOrder = { base: 0, upgrade: 1 };
+                          const aTier = (a as any).tier || 'upgrade';
+                          const bTier = (b as any).tier || 'upgrade';
+                          return (tierOrder[aTier as keyof typeof tierOrder] ?? 1) - (tierOrder[bTier as keyof typeof tierOrder] ?? 1);
+                        });
+                        const isMultiChoice = opts.length > 1;
+                        const isApproved = group.status === 'approved';
+                        const declinedKey = `${group.id}-${gName}`;
+                        const isDeclinedExpanded = showDeclined.has(declinedKey);
+                        const chosenOpts = isApproved && !isDeclinedExpanded ? opts.filter(o => o.selected) : opts;
+                        const hiddenCount = isApproved ? opts.filter(o => !o.selected).length : 0;
+                        // Note: sort already places chosen above declined when approved
+                        const selectedInGroup = opts.filter(o => o.selected).length;
+                        return (
+                          <div key={gName} className={`cs-opt-group ${isPrototype ? 'cs-opt-group-proto' : ''}`}>
+                            {(isMultiChoice || isPrototype) && (
+                              <div className={`cs-opt-group-header ${!isPrototype ? 'cs-opt-group-header-sticky' : 'cs-opt-group-header-proto'}`}>
+                                <span className="cs-opt-group-name">{gName}</span>
+                                {isPrototype && group.status !== 'approved' && (
+                                  <span className="cs-opt-group-count">
+                                    {selectedInGroup > 0 ? `${selectedInGroup} selected` : `${opts.length} options`}
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                            {viewMode === 'compact' ? (
+                              /* ── Compact row view (like builder side) ── */
+                              <div className="cs-compact-list">
+                                {chosenOpts.map(opt => {
+                                  const isDeclined = declinedOptions.has(opt.id);
+                                  const baseOpt = opts.find(o => (o as any).tier === 'base');
+                                  const delta = baseOpt && (opt as any).tier === 'upgrade' ? opt.price - baseOpt.price : 0;
+                                  const statusLabel = isDeclined ? 'Declined' : '';
+                                  const statusCls = isDeclined ? 'cs-row-status-declined' : '';
+                                  return (
+                                    <div key={opt.id} className={`cs-compact-row ${opt.selected ? 'cs-compact-row-selected' : ''} ${isDeclined ? 'cs-compact-row-declined' : ''}`}>
+                                      <div className="cs-compact-thumb" style={{ backgroundImage: opt.image ? `url(${opt.image})` : undefined }} onClick={() => opt.image && setLightboxImg({images: (opt as any).images || [opt.image], name: opt.name, index: 0, url: (opt as any).url})} />
+                                      <div className="cs-compact-info">
+                                        <div className="cs-compact-name-row">
+                                          <span className="cs-compact-name" style={{ textDecoration: isDeclined ? 'line-through' : 'none', opacity: isDeclined ? 0.5 : 1 }}>{opt.name}</span>
+                                          {statusLabel && <span className={`cs-compact-status ${statusCls}`}>{statusLabel}</span>}
+                                        </div>
+                                        {opt.vendor && <span className="cs-compact-vendor">{opt.vendor}</span>}
+                                      </div>
+                                      <div className="cs-compact-price">
+                                        {pc.showTiers ? (
+                                          (opt as any).tier === 'base' ? (
+                                            <><span className="cs-tier-badge cs-tier-base">Included</span><span className="cs-preview-price-included">$0</span></>
+                                          ) : (opt as any).tier === 'upgrade' ? (
+                                            <><span className="cs-tier-badge cs-tier-upgrade">Upgrade</span><span>${fmt(delta)}</span></>
+                                          ) : <span>${fmt(opt.price)}</span>
+                                        ) : pc.showDelta ? (
+                                          (opt as any).tier === 'base' ? <span className="cs-preview-price-included">$0</span>
+                                          : <span>${fmt(delta)}</span>
+                                        ) : <span>${fmt(opt.price)}</span>}
+                                        {pc.showForecast && !isPrototype && !opt.selected && !declinedOptions.has(opt.id) && group.status !== 'approved' && (() => {
+                                          const currentGroupSelected = group.options.filter(o => o.selected).reduce((s, o) => s + o.price, 0);
+                                          const sameGroupOpts = group.options.filter(o => (o as any).group === (opt as any).group);
+                                          const currentSameGroupSelected = sameGroupOpts.find(o => o.selected);
+                                          const wouldReplace = currentSameGroupSelected ? currentSameGroupSelected.price : 0;
+                                          const newGroupSelected = currentGroupSelected - wouldReplace + opt.price;
+                                          const jobImpact = newGroupSelected - group.allowance;
+                                          const currentImpact = currentGroupSelected - group.allowance;
+                                          const netChange = jobImpact - currentImpact;
+                                          return (
+                                            <span className={`cs-forecast-inline ${netChange > 0 ? 'cs-forecast-inline-up' : netChange < 0 ? 'cs-forecast-inline-down' : ''}`}>
+                                              {netChange > 0 ? '+' : netChange < 0 ? '-' : ''}${fmt(Math.abs(netChange))}
+                                            </span>
+                                          );
+                                        })()}
+                                      </div>
+                                      <div className="cs-compact-actions">
+                                        {group.status !== 'approved' && (
+                                          isDeclined ? (
+                                            <button className="cs-icon-btn cs-icon-btn-undo" onClick={() => undeclineOption(opt.id)} title="Undo">
+                                              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+                                            </button>
+                                          ) : opt.selected ? (
+                                            <button className="cs-icon-btn cs-icon-btn-undo" onClick={() => toggleOption(group.id, opt.id)} title="Undo">
+                                              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+                                            </button>
+                                          ) : (
+                                            <>
+                                              <button className="cs-icon-btn cs-icon-btn-decline" onClick={() => declineOption(opt.id, group.id)} title="Skip">
+                                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                                              </button>
+                                              <button className="cs-icon-btn cs-icon-btn-approve" onClick={() => toggleOption(group.id, opt.id)} title="Choose">
+                                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+                                              </button>
+                                            </>
+                                          )
+                                        )}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            ) : (
+                              /* ── Card views: grid (original) or list (big picture) ── */
+                              <div className={viewMode === 'grid' ? 'cs-shop-grid' : 'cs-shop-list'}>
+                                {chosenOpts.map(opt => {
+                                  const isDeclined = declinedOptions.has(opt.id);
+                                  const baseOpt = opts.find(o => (o as any).tier === 'base');
+                                  const delta = baseOpt && (opt as any).tier === 'upgrade' ? opt.price - baseOpt.price : 0;
+                                  return (
+                                    <div key={opt.id} className={`cs-shop-card ${opt.selected ? 'cs-shop-card-selected' : ''} ${isDeclined ? 'cs-shop-card-declined' : ''}`}>
+                                      {(() => {
+                                        const images = (opt as any).images || (opt.image ? [opt.image] : []);
+                                        const imgIdx = cardImgIndex[opt.id] || 0;
+                                        const currentImg = images[imgIdx] || opt.image;
+                                        const hasMultiple = images.length > 1;
+                                        return (
+                                          <div
+                                            className="cs-shop-img"
+                                            style={{ backgroundImage: currentImg ? `url(${currentImg})` : undefined, opacity: isDeclined ? 0.4 : 1, cursor: 'pointer' }}
+                                            onClick={() => setDetailItem({ groupId: group.id, optionId: opt.id })}
+                                          >
+                                            {!currentImg && <div className="cs-shop-img-empty"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#C7D0D9" strokeWidth="1"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg></div>}
+                                            {opt.selected && <div className="cs-shop-badge-selected"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M5 13l4 4L19 7" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg></div>}
+                                            <button
+                                              className={`cs-shop-fav ${favoritedOptions.has(opt.id) ? 'cs-shop-fav-on' : ''}`}
+                                              onClick={(e) => { e.stopPropagation(); toggleFavorite(opt.id); }}
+                                              title={favoritedOptions.has(opt.id) ? 'Remove from favorites' : 'Save for later'}
+                                              aria-label={favoritedOptions.has(opt.id) ? 'Remove from favorites' : 'Save for later'}
+                                            >
+                                              <svg width="18" height="18" viewBox="0 0 24 24" fill={favoritedOptions.has(opt.id) ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+                                            </button>
+                                            {group.status !== 'approved' && !opt.selected && (
+                                              <button
+                                                onClick={(e) => { e.stopPropagation(); toggleCompare(opt.id); }}
+                                                title={compareSet.has(opt.id) ? 'Remove from compare' : 'Add to compare'}
+                                                aria-label={compareSet.has(opt.id) ? 'Remove from compare' : 'Add to compare'}
+                                                style={{
+                                                  position: 'absolute', bottom: 10, left: 10, zIndex: 5,
+                                                  display: 'inline-flex', alignItems: 'center', gap: 6,
+                                                  padding: '5px 10px', border: 'none', cursor: 'pointer',
+                                                  background: compareSet.has(opt.id) ? '#004FD6' : 'rgba(255,255,255,0.95)',
+                                                  color: compareSet.has(opt.id) ? '#fff' : '#202227',
+                                                  fontSize: 11, fontWeight: 600, borderRadius: 999,
+                                                  boxShadow: '0 2px 6px rgba(0,0,0,0.15)',
+                                                }}
+                                              >
+                                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                                  {compareSet.has(opt.id)
+                                                    ? <polyline points="20 6 9 17 4 12" />
+                                                    : <><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></>}
+                                                </svg>
+                                                Compare
+                                              </button>
+                                            )}
+                                            {hasMultiple && imgIdx > 0 && (
+                                              <button className="cs-shop-arrow cs-shop-arrow-left" onClick={(e) => { e.stopPropagation(); setCardImgIndex(prev => ({...prev, [opt.id]: imgIdx - 1})); }}>
+                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+                                              </button>
+                                            )}
+                                            {hasMultiple && imgIdx < images.length - 1 && (
+                                              <button className="cs-shop-arrow cs-shop-arrow-right" onClick={(e) => { e.stopPropagation(); setCardImgIndex(prev => ({...prev, [opt.id]: imgIdx + 1})); }}>
+                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+                                              </button>
+                                            )}
+                                            {hasMultiple && (
+                                              <div className="cs-shop-dots">
+                                                {images.map((_: string, i: number) => (
+                                                  <span key={i} className={`cs-shop-dot ${i === imgIdx ? 'cs-shop-dot-active' : ''}`} onClick={(e) => { e.stopPropagation(); setCardImgIndex(prev => ({...prev, [opt.id]: i})); }} />
+                                                ))}
+                                              </div>
+                                            )}
+                                          </div>
+                                        );
+                                      })()}
+                                      <div
+                                        className="cs-shop-info"
+                                        style={{ opacity: isDeclined ? 0.5 : 1, cursor: 'pointer' }}
+                                        onClick={(e) => {
+                                          if ((e.target as HTMLElement).closest('button')) return;
+                                          setDetailItem({ groupId: group.id, optionId: opt.id });
+                                        }}
+                                      >
+                                        <div className="cs-shop-name-row">
+                                          <span className="cs-shop-name" style={{ textDecoration: isDeclined ? 'line-through' : 'none' }}>
+                                            {packageItems[opt.id] && (
+                                              <span className="cs-shop-pkg-badge">
+                                                {packageItems[opt.id].length} items
+                                              </span>
+                                            )}
+                                            {opt.name}
+                                          </span>
+                                          {isDeclined && <span className="cs-shop-declined-badge">Declined</span>}
+                                        </div>
+                                        <div className="cs-shop-price-row">
+                                          {pc.showTiers ? (
+                                            (opt as any).tier === 'base' ? (
+                                              <><span className="cs-tier-badge cs-tier-base">Included</span><span className="cs-shop-price cs-preview-price-included">$0</span></>
+                                            ) : (opt as any).tier === 'upgrade' ? (
+                                              <><span className="cs-tier-badge cs-tier-upgrade">Upgrade</span><span className="cs-shop-price">${fmt(delta)}</span></>
+                                            ) : <span className="cs-shop-price">${fmt(opt.price)}</span>
+                                          ) : pc.showDelta ? (
+                                            (opt as any).tier === 'base' ? <span className="cs-shop-price cs-preview-price-included">$0</span>
+                                            : <span className="cs-shop-price">${fmt(delta)}</span>
+                                          ) : <span className="cs-shop-price">${fmt(opt.price)}</span>}
+                                        </div>
+                                        {pc.showForecast && !isPrototype && !opt.selected && !isDeclined && group.status !== 'approved' && (() => {
+                                          const currentGroupSelected = group.options.filter(o => o.selected).reduce((s, o) => s + o.price, 0);
+                                          const sameGroupOpts = group.options.filter(o => (o as any).group === (opt as any).group);
+                                          const currentSameGroupSelected = sameGroupOpts.find(o => o.selected);
+                                          const wouldReplace = currentSameGroupSelected ? currentSameGroupSelected.price : 0;
+                                          const newGroupSelected = currentGroupSelected - wouldReplace + opt.price;
+                                          const jobImpact = newGroupSelected - group.allowance;
+                                          const currentImpact = currentGroupSelected - group.allowance;
+                                          const netChange = jobImpact - currentImpact;
+                                          return (
+                                            <div className={`cs-forecast-card-impact ${netChange > 0 ? 'cs-forecast-inline-up' : netChange < 0 ? 'cs-forecast-inline-down' : ''}`}>
+                                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20v-4"/></svg>
+                                              {netChange > 0 ? '+' : netChange < 0 ? '-' : ''}${fmt(Math.abs(netChange))}
+                                            </div>
+                                          );
+                                        })()}
+                                        {group.status !== 'approved' && (
+                                          <div className="cs-shop-actions">
+                                            {isDeclined ? (
+                                              <BdsButton text="Undo" displayType="secondary" className="cs-prev-btn-sm" onClick={() => undeclineOption(opt.id)} />
+                                            ) : opt.selected ? (
+                                              <BdsButton text="Undo" displayType="secondary" className="cs-prev-btn-sm" onClick={() => toggleOption(group.id, opt.id)} />
+                                            ) : (
+                                              <>
+                                                <BdsButton text="Decline" displayType="secondary" className="cs-prev-btn-sm" onClick={() => declineOption(opt.id, group.id)} />
+                                                <BdsButton text="Choose" displayType="primary" className="cs-prev-btn-sm" onClick={() => toggleOption(group.id, opt.id)} />
+                                              </>
+                                            )}
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                            {/* All declined in this group — prompt to request or show existing request */}
+                            {group.status !== 'approved' && opts.every(o => declinedOptions.has(o.id)) && (() => {
+                              const existingRequest = requests.find(r => r.groupId === group.id && r.text.toLowerCase().includes(gName.toLowerCase()));
+                              if (existingRequest) {
+                                return null;
+                              }
+                              return (
+                                <div className="cs-all-declined">
+                                  <div className="cs-all-declined-text">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#854D00" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><circle cx="12" cy="16" r="1" fill="#854D00"/></svg>
+                                    <span>You've skipped all {gName.toLowerCase()} options. Request a different one or undo to choose.</span>
+                                  </div>
+                                  <button className="cs-prev-btn cs-prev-request" onClick={(e) => {
+                                    e.stopPropagation();
+                                    setOpenRequestGroups(prev => new Set(prev).add(group.id));
+                                    setRequestText(prev => ({ ...prev, [group.id]: `Looking for a different ${gName.toLowerCase()} option — declined the current choices.` }));
+                                  }}>Request a different {gName.toLowerCase()}</button>
+                                </div>
+                              );
+                            })()}
+                            {isApproved && hiddenCount > 0 && (
+                              <button className="cs-show-declined" onClick={() => setShowDeclined(prev => {
+                                const next = new Set(prev);
+                                if (next.has(declinedKey)) next.delete(declinedKey); else next.add(declinedKey);
+                                return next;
+                              })}>
+                                {isDeclinedExpanded ? 'Hide declined options' : `Show declined options (${hiddenCount})`}
+                              </button>
+                            )}
+                          </div>
+                        );
+                      });
+                    })()}
+
+                    {/* Pending requests */}
+                    {requests.filter(r => r.groupId === group.id).length > 0 && (
+                      <div className="cs-requests-list">
+                        <div className="cs-requests-title">Your requests</div>
+                        {requests.filter(r => r.groupId === group.id).map((r, i) => (
+                          <div key={i} className="cs-request-item">
+                            <div className="cs-request-item-top">
+                              <span className="cs-request-pending-badge">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                                Under review
+                              </span>
+                              <span className="cs-request-item-date">Sent {r.date}</span>
+                            </div>
+                            <div className="cs-request-review-status">
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#004FD6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                              <span>Your builder is reviewing this request. You'll be notified when they respond.</span>
+                            </div>
+                            <div className="cs-request-item-text">{r.text}</div>
+                            {r.link && (
+                              <a className="cs-request-item-link" href={r.link} target="_blank" rel="noopener noreferrer">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                                {r.link.length > 50 ? r.link.slice(0, 50) + '...' : r.link}
+                              </a>
+                            )}
+                            {r.images.length > 0 && (
+                              <div className="cs-request-item-imgs">
+                                {r.images.map((src, idx) => (
+                                  <img key={idx} src={src} alt={`Attached ${idx + 1}`} className="cs-request-item-img" />
+                                ))}
+                              </div>
+                            )}
+                            {r.autoApprove && <div className="cs-request-item-auto">Auto-select if approved</div>}
+                            <BdsButton
+                              text="Edit request"
+                              displayType="secondary"
+                              className="cs-request-item-edit"
+                              icon={<BdsIcon name="edit" size={14} />}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setOpenRequestGroups(prev => new Set(prev).add(group.id));
+                                setRequestText(prev => ({ ...prev, [group.id]: r.text }));
+                                setRequestLink(prev => ({ ...prev, [group.id]: r.link }));
+                                setRequestImages(prev => ({ ...prev, [group.id]: r.images }));
+                                setImageFromLink(prev => ({ ...prev, [group.id]: r.images.length > 0 && !!r.link }));
+                                setAutoApprove(r.autoApprove);
+                              }}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Actions — request opens as a popup modal (rendered at component root) */}
+                    {group.status !== 'approved' && (
+                      <div className="cs-section-actions">
+                        <BdsButton text="Request an option" displayType="secondary" onClick={() => setOpenRequestGroups(prev => new Set(prev).add(group.id))} />
+                      </div>
+                    )}
+                  </div>
+              </div>
+            );
+            };
+
+            if (filtered.length === 0) {
+              return (
+                <div className="cs-empty-state">
+                  <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#C7D0D9" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
+                  <div className="cs-empty-title">
+                    {filter === 'action' ? "You're all caught up" : filter === 'favorites' ? 'No favorites yet' : 'No completed selections yet'}
+                  </div>
+                  <div className="cs-empty-desc">
+                    {filter === 'action' ? 'No selections need your attention right now.' : filter === 'favorites' ? 'Tap the star on any option to save it here for later.' : 'Selections will appear here once approved.'}
+                  </div>
+                </div>
+              );
+            }
+            if (filter === 'all') {
+              // Use original status for grouping so cards don't jump while making choices
+              const overdue = filtered.filter(g => g.status === 'overdue');
+              const dueSoon = filtered.filter(g => g.status === 'action_needed');
+              const notStarted = filtered.filter(g => g.status === 'pending');
+              const approved = filtered.filter(g => g.status === 'approved');
+              return (
+                <>
+                  {overdue.length > 0 && (
+                    <>
+                      <h2 className="cs-group-title cs-group-overdue">
+                        <svg className="cs-group-title-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                          <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+                        </svg>
+                        <span>Overdue</span>
+                        <span className="cs-group-title-count">{overdue.length}</span>
+                      </h2>
+                      {overdue.map(renderCard)}
+                    </>
+                  )}
+                  {dueSoon.length > 0 && (
+                    <>
+                      <h2 className="cs-group-title">
+                        <svg className="cs-group-title-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                          <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+                        </svg>
+                        <span>Choices due soon</span>
+                        <span className="cs-group-title-count">{dueSoon.length}</span>
+                      </h2>
+                      {dueSoon.map(renderCard)}
+                    </>
+                  )}
+                  {notStarted.length > 0 && (
+                    <>
+                      <h2 className="cs-group-title">
+                        <svg className="cs-group-title-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                          <circle cx="12" cy="12" r="10"/>
+                        </svg>
+                        <span>Not started</span>
+                        <span className="cs-group-title-count">{notStarted.length}</span>
+                      </h2>
+                      {notStarted.map(renderCard)}
+                    </>
+                  )}
+                  {approved.length > 0 && (
+                    <>
+                      <h2
+                        className="cs-group-title cs-group-title-clickable cs-group-approved"
+                        onClick={() => setApprovedExpanded(e => !e)}
+                      >
+                        <svg className="cs-group-title-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                          <polyline points="20 6 9 17 4 12"/>
+                        </svg>
+                        <span>Approved</span>
+                        <span className="cs-group-title-count">{approved.length}</span>
+                        <svg className="cs-group-title-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: approvedExpanded ? 'rotate(180deg)' : 'none' }}>
+                          <polyline points="6 9 12 15 18 9" />
+                        </svg>
+                      </h2>
+                      {approvedExpanded && approved.map(renderCard)}
+                    </>
+                  )}
+                </>
+              );
+            }
+            return filtered.map(renderCard);
+          })()}
+        </div>
+        </>
+        )}
+
+        {activeTab === 'showroom' && (
+          <div className="cs-showroom cs-showroom-mobile">
+            {/* BROWSE: pick a category first, then see catalog for just that category */}
+            {!browseCategory && (
+              <div className="cs-catalog-picker">
+                <div className="cs-catalog-picker-intro">What are you shopping for?</div>
+                <div className="cs-catalog-picker-grid">
+                  {selections.map(g => {
+                    const favCount = g.options.filter(o => favoritedOptions.has(o.id)).length;
+                    return (
+                      <button key={g.id} className="cs-catalog-picker-card" onClick={() => setBrowseCategory(g.name)}>
+                        <div className="cs-catalog-picker-card-imgs" aria-hidden="true">
+                          {g.options.slice(0, 3).map(o => (
+                            <span key={o.id} className="cs-catalog-picker-card-img" style={{ backgroundImage: `url(${o.image})` }} />
+                          ))}
+                        </div>
+                        <div className="cs-catalog-picker-card-body">
+                          <div className="cs-catalog-picker-card-title">{g.name}</div>
+                          <div className="cs-catalog-picker-card-meta">
+                            {g.options.length} options · ${fmt(g.allowance)} budget
+                            {favCount > 0 && <span className="cs-catalog-picker-card-fav"> · {favCount} ❤</span>}
+                          </div>
+                        </div>
+                        <svg className="cs-catalog-picker-card-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+            {browseCategory && (
+              <div className="cs-catalog">
+                <BdsButton
+                  text="All categories"
+                  displayType="tertiary"
+                  icon={<BdsIcon name="chevron-left" size={14} />}
+                  onClick={() => setBrowseCategory(null)}
+                  className="cs-catalog-back"
+                />
+
+                {selections.filter(g => g.name === browseCategory).map(g => (
+                  <div key={g.id} className="cs-catalog-group">
+                    <div className="cs-catalog-group-head">
+                      <div>
+                        <div className="cs-catalog-group-name">{g.name}</div>
+                        <div className="cs-catalog-group-vendor">{g.vendor} · {g.options.length} options · ${fmt(g.allowance)} budget</div>
+                      </div>
+                    </div>
+                    <div className="cs-catalog-grid">
+                      {g.options.map(opt => {
+                        const isFav = favoritedOptions.has(opt.id);
+                        return (
+                          <div key={opt.id} className="cs-catalog-card">
+                            <div className="cs-catalog-img" style={{ backgroundImage: `url(${opt.image})` }} onClick={() => setLightboxImg({ images: (opt as any).images || [opt.image], name: opt.name, index: 0 })} role="button" aria-label={`View ${opt.name}`} />
+                            <button className={`cs-catalog-fav ${isFav ? 'cs-catalog-fav-on' : ''}`} onClick={() => toggleFavorite(opt.id)} aria-label={isFav ? 'Remove from favorites' : 'Add to favorites'}>
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill={isFav ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+                            </button>
+                            <div className="cs-catalog-meta">
+                              <div className="cs-catalog-name">{opt.name}</div>
+                              <div className="cs-catalog-price">${fmt(opt.price)}</div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+
+          </div>
+        )}
+
+        {/* MOOD BOARD: top-level tab — collage grouped by room */}
+        {activeTab === 'moodboard' && (() => {
+          const deriveRoom = (g: string): string => {
+            const s = g.toLowerCase();
+            if (s.includes('kitchen')) return 'Kitchen';
+            if (s.includes('bath') || s.includes('powder') || s.includes('shower')) return 'Bathroom';
+            if (s.includes('living') || s.includes('dining')) return 'Living room';
+            return 'Other';
+          };
+          const moodboardItems: Array<{ groupName: string; opt: typeof selections[0]['options'][0]; status: 'selected' | 'favorite' }> = [];
+          selections.forEach(g => {
+            g.options.forEach(opt => {
+              if (opt.selected) moodboardItems.push({ groupName: g.name, opt, status: 'selected' });
+              else if (favoritedOptions.has(opt.id)) moodboardItems.push({ groupName: g.name, opt, status: 'favorite' });
+            });
+          });
+          type RoomTile =
+            | { kind: 'catalog'; opt: typeof moodboardItems[0]['opt']; status: 'selected' | 'favorite'; sourceLabel: string }
+            | { kind: 'custom'; item: CustomMoodboardItem };
+          const byRoom: Record<string, RoomTile[]> = {};
+          moodboardItems.forEach(it => {
+            const room = deriveRoom((it.opt as any).group || it.groupName);
+            (byRoom[room] = byRoom[room] || []).push({ kind: 'catalog', opt: it.opt, status: it.status, sourceLabel: (it.opt as any).group || it.groupName });
+          });
+          customMoodboardItems.forEach(ci => {
+            (byRoom[ci.room] = byRoom[ci.room] || []).push({ kind: 'custom', item: ci });
+          });
+          const presetRooms = moodboardRooms.filter(r => byRoom[r]?.length);
+          const customRooms = Object.keys(byRoom).filter(r => !moodboardRooms.includes(r) && byRoom[r]?.length);
+          const roomEntries = [...presetRooms, ...customRooms].map(r => [r, byRoom[r]] as const);
+          const totalTiles = moodboardItems.length + customMoodboardItems.length;
+          return (
+            <div className="cs-moodboard cs-showroom-mobile cs-moodboard-collage">
+              <div className="cs-moodboard-head">
+                <div className="cs-moodboard-head-row">
+                  <div>
+                    <div className="cs-moodboard-title">Mood board</div>
+                    <div className="cs-moodboard-sub">A live collage by room — picks, favorites, and inspiration. Share with your designer or builder.</div>
+                  </div>
+                  <div className="cs-moodboard-head-actions">
+                    <BdsButton
+                      text="Add"
+                      displayType="primary"
+                      icon={<BdsIcon name="plus" size={14} />}
+                      onClick={() => openAddInspiration()}
+                    />
+                    {totalTiles > 0 && (
+                      <BdsButton
+                        text="Share"
+                        displayType="secondary"
+                        icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>}
+                        onClick={() => showToast('Mood board shared with your builder')}
+                        ariaLabel="Share with builder"
+                      />
+                    )}
+                  </div>
+                </div>
+              </div>
+              {totalTiles === 0 ? (
+                <div className="cs-moodboard-empty">
+                  <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#C7D0D9" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                  <div className="cs-moodboard-empty-title">Nothing on your board yet</div>
+                  <div className="cs-moodboard-empty-sub">Favorite items in Showroom, approve selections, or add inspiration from the web.</div>
+                  <BdsButton text="Add inspiration" displayType="primary" icon={<BdsIcon name="plus" size={14} />} onClick={() => openAddInspiration()} className="cs-moodboard-empty-cta" />
+                </div>
+              ) : (
+                <div className="cs-moodboard-rooms">
+                  {roomEntries.map(([room, tiles]) => (
+                    <div key={room} className="cs-moodboard-room">
+                      <div className="cs-moodboard-room-head">
+                        <span className="cs-moodboard-room-name">{room}</span>
+                        <div className="cs-moodboard-room-right">
+                          <span className="cs-moodboard-room-count">{tiles.length} {tiles.length === 1 ? 'item' : 'items'}</span>
+                          <button className="cs-moodboard-room-add" onClick={() => openAddInspiration(room)} aria-label={`Add inspiration to ${room}`}>
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                          </button>
+                        </div>
+                      </div>
+                      <div className="cs-moodboard-grid">
+                        {tiles.map((tile, i) => tile.kind === 'catalog' ? (
+                          <div key={`c-${tile.opt.id}-${i}`} className={`cs-moodboard-tile cs-moodboard-tile-${tile.status}`}>
+                            <img src={tile.opt.image} alt={tile.opt.name} className="cs-moodboard-img" />
+                            <div className="cs-moodboard-tile-meta">
+                              <div className="cs-moodboard-tile-room">{tile.sourceLabel}</div>
+                              <div className="cs-moodboard-tile-name">{tile.opt.name}</div>
+                            </div>
+                            <span className={`cs-moodboard-badge cs-moodboard-badge-${tile.status}`}>
+                              {tile.status === 'selected' ? 'Selected' : 'Favorite'}
+                            </span>
+                          </div>
+                        ) : (() => {
+                          const matchGroup = tile.item.category ? selections.find(g => g.name === tile.item.category) : null;
+                          const matchAllowance = matchGroup?.allowance ?? 0;
+                          const matchSpent = matchGroup?.options.filter(o => o.selected).reduce((s, o) => s + o.price, 0) ?? 0;
+                          const matchRemaining = matchAllowance - matchSpent;
+                          const inBudgetMatches = matchGroup ? matchGroup.options.filter(o => !o.selected && o.price <= Math.max(matchRemaining, matchAllowance * 0.5)).slice(0, 4) : [];
+                          const isOpen = matchesOpenForId === tile.item.id;
+                          return (
+                            <Fragment key={`m-${tile.item.id}`}>
+                              <div className="cs-moodboard-tile cs-moodboard-tile-custom">
+                                <img src={tile.item.image} alt={tile.item.title} className="cs-moodboard-img" />
+                                <div className="cs-moodboard-tile-meta">
+                                  <div className="cs-moodboard-tile-room">Inspiration</div>
+                                  <div className="cs-moodboard-tile-name">{tile.item.title}</div>
+                                </div>
+                                <span className={`cs-moodboard-badge cs-moodboard-badge-${tile.item.sharedWithBuilder ? 'shared' : 'inspiration'}`}>
+                                  {tile.item.sharedWithBuilder ? 'Shared' : 'Inspiration'}
+                                </span>
+                                {inBudgetMatches.length > 0 && (
+                                  <button className="cs-moodboard-match-pill" onClick={() => setMatchesOpenForId(isOpen ? null : tile.item.id)}>
+                                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                                    {inBudgetMatches.length} in budget
+                                  </button>
+                                )}
+                                <div className="cs-moodboard-tile-actions">
+                                  {!tile.item.sharedWithBuilder && (
+                                    <button className="cs-moodboard-tile-action" onClick={() => shareInspiration(tile.item.id)} aria-label="Share with builder" title="Share with builder">
+                                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+                                    </button>
+                                  )}
+                                  <button className="cs-moodboard-tile-action cs-moodboard-tile-action-remove" onClick={() => removeInspiration(tile.item.id)} aria-label="Remove" title="Remove">
+                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                                  </button>
+                                </div>
+                              </div>
+                              {isOpen && matchGroup && (
+                                <div className="cs-moodboard-matches">
+                                  <div className="cs-moodboard-matches-head">
+                                    <span><strong>Catalog matches</strong> in {matchGroup.name} · ${fmt(Math.max(0, matchRemaining))} left</span>
+                                    <button className="cs-moodboard-matches-close" onClick={() => setMatchesOpenForId(null)} aria-label="Close">
+                                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                                    </button>
+                                  </div>
+                                  <div className="cs-moodboard-matches-grid">
+                                    {inBudgetMatches.map(opt => (
+                                      <div key={opt.id} className="cs-moodboard-match-card">
+                                        <div className="cs-moodboard-match-img" style={{ backgroundImage: `url(${opt.image})` }} />
+                                        <div className="cs-moodboard-match-meta">
+                                          <div className="cs-moodboard-match-name">{opt.name}</div>
+                                          <div className="cs-moodboard-match-price">${fmt(opt.price)}</div>
+                                        </div>
+                                        <button className={`cs-moodboard-match-fav ${favoritedOptions.has(opt.id) ? 'cs-moodboard-match-fav-on' : ''}`} onClick={() => toggleFavorite(opt.id)} aria-label="Favorite">
+                                          <svg width="13" height="13" viewBox="0 0 24 24" fill={favoritedOptions.has(opt.id) ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+                                        </button>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </Fragment>
+                          );
+                        })())}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
+        {/* Add inspiration sheet (mood-board scoped, but rendered at top level) */}
+        {addInspirationOpen && (
+          <div className="cs-sheet-backdrop" onClick={closeAddInspiration}>
+            <div className="cs-sheet" onClick={e => e.stopPropagation()} role="dialog" aria-label="Add inspiration">
+              <div className="cs-sheet-grab" aria-hidden />
+              <div className="cs-sheet-head">
+                <button className="cs-sheet-close" onClick={closeAddInspiration} aria-label="Close">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+                <div className="cs-sheet-title">Add inspiration</div>
+                <div style={{ width: 36 }} />
+              </div>
+              <div className="cs-sheet-body">
+                <label className={`cs-sheet-photo ${inspirationDraft.image ? 'cs-sheet-photo-filled' : ''}`}>
+                  {inspirationDraft.image ? (
+                    <>
+                      <img src={inspirationDraft.image} alt="Inspiration" />
+                      <span className="cs-sheet-photo-retake">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                        Replace
+                      </span>
+                    </>
+                  ) : (
+                    <div className="cs-sheet-photo-empty">
+                      <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+                      <div className="cs-sheet-photo-empty-title">Tap to upload an image</div>
+                      <div className="cs-sheet-photo-empty-sub">Or paste a link below</div>
+                    </div>
+                  )}
+                  <input type="file" accept="image/*" onChange={e => handleInspirationUpload(e.target.files?.[0] ?? null)} />
+                </label>
+
+                <div className="cs-sheet-section">
+                  <div className="cs-sheet-section-label">Or paste a link — Pinterest, Houzz, or a direct image URL</div>
+                  <div className="cs-request-link-wrap">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                    <BdsInput
+                      id="inspiration-link"
+                      className="cs-request-link-input"
+                      placeholder="https://..."
+                      value={inspirationDraft.link}
+                      onChange={(_, v) => {
+                        const patch: Partial<typeof emptyInspiration> = { link: v };
+                        if (/^https?:\/\/.+\.(jpg|jpeg|png|webp|gif|avif|svg)(\?|$)/i.test(v)) patch.image = v;
+                        updateInspiration(patch);
+                      }}
+                      onBlur={e => fetchInspirationImage(e.target.value)}
+                      onPaste={e => {
+                        const pasted = e.clipboardData.getData('text');
+                        if (/^https?:\/\/.+\.(jpg|jpeg|png|webp|gif|avif|svg)(\?|$)/i.test(pasted)) updateInspiration({ image: pasted });
+                        setTimeout(() => fetchInspirationImage(pasted), 0);
+                      }}
+                    />
+                    {inspirationFetching && <span className="cs-link-spinner" aria-label="Fetching preview" />}
+                  </div>
+                </div>
+
+                <div className="cs-sheet-section">
+                  <div className="cs-sheet-section-label">Which block?</div>
+                  <div className="cs-sheet-allowance-chips">
+                    {moodboardRooms.map(r => (
+                      <button
+                        key={r}
+                        className={`cs-sheet-al-chip ${inspirationDraft.room === r ? 'cs-sheet-al-chip-selected' : ''}`}
+                        onClick={() => updateInspiration({ room: r })}
+                      >
+                        <span className="cs-sheet-al-chip-name">{r}</span>
+                      </button>
+                    ))}
+                  </div>
+                  <BdsInput
+                    id="inspiration-custom-room"
+                    className="cs-inspiration-custom-room"
+                    placeholder="Or name your own block (e.g. Front porch, Wine cellar)"
+                    value={moodboardRooms.includes(inspirationDraft.room) ? '' : inspirationDraft.room}
+                    onChange={(_, v) => updateInspiration({ room: v || 'Other' })}
+                  />
+                </div>
+
+                <div className="cs-sheet-section">
+                  <div className="cs-sheet-section-label">What is it? <span className="cs-sheet-section-hint">(we'll find catalog matches in your budget)</span></div>
+                  <div className="cs-sheet-allowance-chips">
+                    {selections.map(g => (
+                      <button
+                        key={g.id}
+                        className={`cs-sheet-al-chip ${inspirationDraft.category === g.name ? 'cs-sheet-al-chip-selected' : ''}`}
+                        onClick={() => updateInspiration({ category: inspirationDraft.category === g.name ? '' : g.name })}
+                      >
+                        <span className="cs-sheet-al-chip-name">{g.name}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <details className="cs-sheet-details">
+                  <summary>Add a title or note <span className="cs-sheet-details-hint">(optional)</span></summary>
+                  <div className="cs-sheet-details-body">
+                    <label className="cs-showroom-label">Title</label>
+                    <BdsInput id="inspiration-title" value={inspirationDraft.title} onChange={(_id, v) => updateInspiration({ title: v })} placeholder="e.g. Warm wood-tone vanity" />
+                    <label className="cs-showroom-label">Notes</label>
+                    <BdsTextArea id="inspiration-notes" value={inspirationDraft.notes} onChange={(_id, v) => updateInspiration({ notes: v })} placeholder="What you love about it, where it should go, etc." rows={2} />
+                  </div>
+                </details>
+              </div>
+              <div className="cs-sheet-foot">
+                <BdsButton text="Add to mood board" displayType="primary" onClick={submitInspiration} className="cs-sheet-send" />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Toast — BDS notification pattern */}
+        {toastMsg && (
+          <div className="cs-toast cs-toast-bds" role="status" aria-live="polite">
+            <span className="cs-toast-icon" aria-hidden="true">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            </span>
+            <span className="cs-toast-text">{toastMsg}</span>
+          </div>
+        )}
+      </div>
+
+      {/* Review modal before submit */}
+      {showReviewModal && (
+        <div className="sw-overlay" style={{background: 'rgba(0,0,0,0.5)', zIndex: 1500}} onClick={() => setShowReviewModal(false)}>
+          <div className="cs-review-modal" onClick={e => e.stopPropagation()}>
+            <div className="cs-review-modal-header">
+              <h3 className="cs-review-modal-title">Review your selections</h3>
+              <button className="cs-review-modal-close" onClick={() => setShowReviewModal(false)}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+            <p className="cs-review-modal-sub">Once submitted, these selections are locked in. Please review before confirming.</p>
+            <div className="cs-review-modal-list">
+              {pendingSubmit.map(group => {
+                const selectedOpts = group.options.filter(o => o.selected);
+                const groupTotal = selectedOpts.reduce((s, o) => s + o.price, 0);
+                const diff = group.allowance - groupTotal;
+                return (
+                  <div key={group.id} className="cs-review-modal-group">
+                    <div className="cs-review-modal-group-name">{group.name}</div>
+                    <div className="cs-review-modal-items">
+                      {selectedOpts.map(opt => (
+                        <div key={opt.id} className="cs-review-modal-item">
+                          <div className="cs-review-modal-item-thumb" style={{ backgroundImage: opt.image ? `url(${opt.image})` : undefined }} />
+                          <span className="cs-review-modal-item-name">{opt.name}</span>
+                          <span className="cs-review-modal-item-price">${fmt(opt.price)}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="cs-review-modal-summary">
+                      <span>Allowance: ${fmt(group.allowance)}</span>
+                      <span className={diff < 0 ? 'cs-over' : diff > 0 ? 'cs-under' : ''}>
+                        {diff >= 0 ? `Remaining: $${fmt(diff)}` : `Over: -$${fmt(Math.abs(diff))}`}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="cs-review-modal-actions">
+              <BdsButton text="Submit" displayType="primary" onClick={() => { setShowReviewModal(false); handleSubmitAll(); }} />
+              <BdsButton text="Go back" displayType="tertiary" onClick={() => setShowReviewModal(false)} />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Option detail modal — V2-inspired info layer for any selection option */}
+      {detailItem && (() => {
+        const group = selections.find(g => g.id === detailItem.groupId);
+        const opt = group?.options.find(o => o.id === detailItem.optionId);
+        if (!group || !opt) return null;
+        const isDeclined = declinedOptions.has(opt.id);
+        const status: 'awaiting' | 'selected' | 'declined' =
+          opt.selected ? 'selected' : isDeclined ? 'declined' : 'awaiting';
+        const statusMap = {
+          selected: { bg: 'rgba(5, 126, 75, 0.10)', fg: '#057E4B', label: 'Selected' },
+          declined: { bg: 'rgba(26, 41, 57, 0.06)', fg: '#4E555F', label: 'Declined' },
+        } as const;
+        const sc = status === 'awaiting' ? null : statusMap[status];
+
+        // Forecast: same math as the inline forecast tag — net change vs. the current group selection
+        const currentGroupSelected = group.options.filter(o => o.selected).reduce((s, o) => s + o.price, 0);
+        const sameSubgroupOpts = group.options.filter(o => (o as any).group === (opt as any).group);
+        const currentSameSubSelected = sameSubgroupOpts.find(o => o.selected);
+        const wouldReplace = currentSameSubSelected ? currentSameSubSelected.price : 0;
+        const newGroupSelected = currentGroupSelected - wouldReplace + opt.price;
+        const remainingIfApproved = group.allowance - newGroupSelected;
+
+        // Specs derived from option fields. Real product data would replace these.
+        const styleFromName = opt.name.includes('—') ? opt.name.split('—').pop()!.trim() : null;
+        const specs: { label: string; value: string }[] = [
+          { label: 'Brand', value: opt.vendor },
+          ...(styleFromName ? [{ label: 'Style / color', value: styleFromName }] : []),
+          { label: 'Application', value: (opt as any).group || group.name },
+          { label: 'Tier', value: (opt as any).tier === 'upgrade' ? 'Premium upgrade' : 'Standard' },
+          { label: 'Vendor', value: group.vendor },
+        ];
+
+        const messages = optionMessages[opt.id] || [];
+        const sendMessage = () => {
+          const t = draftMessage.trim();
+          if (!t) return;
+          const newMsg: OptionMessage = {
+            id: `m-${Date.now()}`,
+            from: 'client',
+            text: t,
+            ts: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+          };
+          setOptionMessages(prev => ({ ...prev, [opt.id]: [...(prev[opt.id] || []), newMsg] }));
+          setDraftMessage('');
+          showToast('Question sent to your builder');
+        };
+
+        const closeModal = () => { setDetailItem(null); setDraftMessage(''); };
+        const handleApprove = () => { toggleOption(group.id, opt.id); closeModal(); };
+        const handleDecline = () => { declineOption(opt.id, group.id); closeModal(); };
+
+        const modalImages: string[] = (opt as any).images || (opt.image ? [opt.image] : []);
+        const safeIdx = Math.min(modalImgIdx, Math.max(0, modalImages.length - 1));
+        const heroImg = modalImages[safeIdx];
+        const hasMultipleImages = modalImages.length > 1;
+
+        return (
+          <div
+            style={{
+              position: 'fixed', inset: 0, zIndex: 200,
+              background: '#fff',
+              display: 'flex', flexDirection: 'column',
+            }}
+          >
+            <div
+              style={{
+                position: 'relative', background: '#fff',
+                width: '100%', height: '100%',
+                display: 'flex', flexDirection: 'column',
+                overflow: 'hidden',
+              }}
+            >
+              {/* Builder-style page header */}
+              <div className="pg-hdr cs-detail-hdr" style={{ flexShrink: 0 }}>
+                <div className="pg-hdr-content">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0, flex: 1 }}>
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                        <span className="pg-title" style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{opt.name}</span>
+                        {sc && (
+                          <span style={{
+                            display: 'inline-block', padding: '3px 10px', fontSize: 11, fontWeight: 600,
+                            background: sc.bg, color: sc.fg, borderRadius: 999, whiteSpace: 'nowrap',
+                          }}>{sc.label}</span>
+                        )}
+                      </div>
+                      <button className="od-back-link" onClick={closeModal}>&larr; Back to selections</button>
+                    </div>
+                  </div>
+                  <div className="pg-hdr-right">
+                    <button
+                      className="cs-detail-hdr-icon-btn"
+                      onClick={() => setCommentsPanelOpen(true)}
+                      aria-label={`Comments${messages.length > 0 ? ` (${messages.length})` : ''}`}
+                      title="Comments"
+                    >
+                      <BdsIcon name={messages.length > 0 ? 'comments-filled' : 'comments'} size={20} />
+                      {messages.length > 0 && (
+                        <span className="cs-detail-hdr-icon-badge">{messages.length}</span>
+                      )}
+                    </button>
+                    {group.status !== 'approved' && (
+                      status === 'selected' ? (
+                        <BdsButton text="Undo" displayType="secondary" onClick={handleDecline} />
+                      ) : status === 'declined' ? (
+                        <BdsButton text="Undo decline" displayType="secondary" onClick={() => { undeclineOption(opt.id); closeModal(); }} />
+                      ) : (
+                        <>
+                          <BdsButton text="Decline" displayType="secondary" onClick={handleDecline} />
+                          <BdsButton text="Choose" displayType="primary" onClick={handleApprove} />
+                        </>
+                      )
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Body — builder OptionDetailPage layout, read-only */}
+              <div className="od-body cs-detail-body">
+                <div className="od-content">
+                  {/* Details + Specs/Images two-column */}
+                  <div className="od-two-col cs-detail-two-col">
+                    {/* Left — Details (read-only) */}
+                    <div>
+                      <h3 className="od-section-title">Details</h3>
+
+                      <div className="od-field">
+                        <label className="fl">Title</label>
+                        <div className="cs-detail-readonly">{opt.name}</div>
+                      </div>
+
+                      <div className="od-field">
+                        <label className="fl">Description</label>
+                        <div className="cs-detail-readonly cs-detail-readonly-multiline">
+                          {packageItems[opt.id]
+                            ? `Coordinated ${opt.name.toLowerCase()} package from ${opt.vendor}. Includes ${packageItems[opt.id].length} items — fixtures, accessories, and installation. Approving this locks in the entire set.`
+                            : (opt as any).tier === 'upgrade'
+                              ? `Premium upgrade option from ${opt.vendor}. Selecting this adds to your base allowance.`
+                              : `Standard option from ${opt.vendor}, included in your base allowance.`}
+                        </div>
+                      </div>
+
+                      <div className="od-field">
+                        <label className="fl">Allowance</label>
+                        <div className="cs-detail-readonly">{group.name}</div>
+                      </div>
+
+                      <div className="od-field-row" style={{ display: 'flex', gap: 16 }}>
+                        <div className="od-field" style={{ flex: 1 }}>
+                          <label className="fl">Category</label>
+                          <div className="cs-detail-readonly">{(opt as any).group || group.name}</div>
+                        </div>
+                        <div className="od-field" style={{ flex: 1 }}>
+                          <label className="fl">Tier</label>
+                          <div className="cs-detail-readonly">
+                            {(opt as any).tier === 'upgrade' ? 'Premium upgrade' : 'Standard'}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="od-field">
+                        <label className="fl">Product URL</label>
+                        {(opt as any).url ? (
+                          <div className="cs-detail-readonly cs-detail-readonly-link">
+                            <a href={(opt as any).url} target="_blank" rel="noopener noreferrer">
+                              {(opt as any).url}
+                            </a>
+                          </div>
+                        ) : (
+                          <div className="cs-detail-readonly cs-detail-readonly-empty">—</div>
+                        )}
+                      </div>
+
+                      {/* Allowance impact callout */}
+                      <div className="cs-detail-impact">
+                        <div className="cs-detail-impact-label">
+                          {status === 'selected' ? 'Allowance impact' : 'If you choose this'}
+                        </div>
+                        <div className="cs-detail-impact-body">
+                          {remainingIfApproved >= 0 ? (
+                            <>You'll have <strong>${fmt(remainingIfApproved)} left</strong> in the {group.name.toLowerCase()} allowance.</>
+                          ) : (
+                            <>You'll be <strong style={{ color: '#B5254C' }}>${fmt(Math.abs(remainingIfApproved))} over</strong> the {group.name.toLowerCase()} allowance.</>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Right — Image gallery + Specs */}
+                    <div>
+                      <h3 className="od-section-title">Images</h3>
+                      <div className="cs-detail-gallery">
+                        <div
+                          className="cs-detail-gallery-hero"
+                          style={{ backgroundImage: heroImg ? `url(${heroImg})` : undefined }}
+                        >
+                          {hasMultipleImages && safeIdx > 0 && (
+                            <button
+                              className="cs-detail-gallery-arrow cs-detail-gallery-arrow-left"
+                              onClick={() => setModalImgIdx(safeIdx - 1)}
+                              aria-label="Previous image"
+                            >
+                              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6" /></svg>
+                            </button>
+                          )}
+                          {hasMultipleImages && safeIdx < modalImages.length - 1 && (
+                            <button
+                              className="cs-detail-gallery-arrow cs-detail-gallery-arrow-right"
+                              onClick={() => setModalImgIdx(safeIdx + 1)}
+                              aria-label="Next image"
+                            >
+                              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6" /></svg>
+                            </button>
+                          )}
+                          {hasMultipleImages && (
+                            <div className="cs-detail-gallery-dots">
+                              {modalImages.map((_, i) => (
+                                <span
+                                  key={i}
+                                  onClick={() => setModalImgIdx(i)}
+                                  className={`cs-detail-gallery-dot ${i === safeIdx ? 'cs-detail-gallery-dot-active' : ''}`}
+                                />
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        {hasMultipleImages && (
+                          <div className="cs-detail-gallery-thumbs">
+                            {modalImages.map((img, i) => (
+                              <button
+                                key={i}
+                                onClick={() => setModalImgIdx(i)}
+                                aria-label={`View image ${i + 1}`}
+                                className={`cs-detail-gallery-thumb ${i === safeIdx ? 'cs-detail-gallery-thumb-active' : ''}`}
+                                style={{ backgroundImage: `url(${img})` }}
+                              />
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      <h3 className="od-section-title" style={{ marginTop: 24 }}>Specs</h3>
+                      <div className="cs-detail-specs">
+                        {specs.map((s, i) => (
+                          <div key={i} className="cs-detail-specs-row">
+                            <div className="cs-detail-specs-label">{s.label}</div>
+                            <div className="cs-detail-specs-value">{s.value}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  <hr className="od-divider" />
+
+                  {/* Price details — read-only. Packaged options show every included line item. */}
+                  {(() => {
+                    const pkg = packageItems[opt.id];
+                    return (
+                      <>
+                        <h3 className="od-section-title">{pkg ? "What's included" : 'Price details'}</h3>
+                        <div className="od-price-table-wrap">
+                          <div className="od-price-scroll">
+                            <table className="od-price-table">
+                              <thead>
+                                <tr>
+                                  <th>Item</th>
+                                  <th>Description</th>
+                                  <th style={{ textAlign: 'right' }}>Quantity</th>
+                                  <th>Unit</th>
+                                  <th style={{ textAlign: 'right' }}>Unit cost</th>
+                                  <th>Cost type</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {pkg ? (
+                                  pkg.map((it, i) => (
+                                    <tr key={i} className="cs-detail-price-row">
+                                      <td><strong>{it.name}</strong></td>
+                                      <td style={{ color: 'var(--g600)' }}>Part of {opt.name}</td>
+                                      <td style={{ textAlign: 'right' }}>{it.qty}</td>
+                                      <td>{it.unit}</td>
+                                      <td style={{ textAlign: 'right' }}>${fmt(it.price)}</td>
+                                      <td>{it.name.toLowerCase().includes('labor') ? 'Labor' : 'Selection'}</td>
+                                    </tr>
+                                  ))
+                                ) : (
+                                  <tr className="cs-detail-price-row">
+                                    <td><strong>{opt.name}</strong></td>
+                                    <td style={{ color: 'var(--g600)' }}>From {opt.vendor}</td>
+                                    <td style={{ textAlign: 'right' }}>1</td>
+                                    <td>ea</td>
+                                    <td style={{ textAlign: 'right' }}>${fmt(opt.price)}</td>
+                                    <td>{(opt as any).tier === 'upgrade' ? 'Selection (upgrade)' : 'Selection'}</td>
+                                  </tr>
+                                )}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                        <div className="od-price-footer">
+                          <div><strong>{pkg ? 'Package total' : 'Total price'}: ${fmt(opt.price)}</strong></div>
+                          {pkg && (
+                            <span style={{ color: 'var(--g500)', fontSize: 12 }}>
+                              {pkg.length} items included
+                            </span>
+                          )}
+                        </div>
+                      </>
+                    );
+                  })()}
+
+                </div>
+              </div>
+
+              {/* Comments side panel — slide-in from right with chat-style thread */}
+              {commentsPanelOpen && (
+                <>
+                  <div
+                    className="cs-comments-panel-overlay"
+                    onClick={() => setCommentsPanelOpen(false)}
+                  />
+                  <aside className="cs-comments-panel" role="dialog" aria-label="Comments">
+                    <header className="cs-comments-panel-hdr">
+                      <h3>Comments</h3>
+                      <button
+                        className="cs-comments-panel-close"
+                        onClick={() => setCommentsPanelOpen(false)}
+                        aria-label="Close comments"
+                      >
+                        <BdsIcon name="x" size={18} />
+                      </button>
+                    </header>
+                    <div className="cs-comments-panel-body">
+                      {messages.length === 0 ? (
+                        <div className="cs-comments-panel-empty">
+                          <BdsIcon name="comments" size={32} />
+                          <div className="cs-comments-panel-empty-title">No comments yet</div>
+                          <div className="cs-comments-panel-empty-sub">Ask your builder anything about this option.</div>
+                        </div>
+                      ) : (
+                        <div className="cs-comments-panel-thread">
+                          {messages.map(m => (
+                            <div key={m.id} className={`cs-detail-comment cs-detail-comment-${m.from}`}>
+                              <div>{m.text}</div>
+                              <div className="cs-detail-comment-meta">
+                                {m.from === 'client' ? 'You' : 'Your builder'} · {m.ts}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <footer className="cs-comments-panel-footer">
+                      <input
+                        className="cs-comments-panel-input"
+                        value={draftMessage}
+                        onChange={e => setDraftMessage(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') sendMessage(); }}
+                        placeholder="Ask a question…"
+                      />
+                      <BdsButton
+                        text="Send"
+                        displayType="primary"
+                        onClick={sendMessage}
+                        disabled={!draftMessage.trim()}
+                        icon={<BdsIcon name="send" size={14} />}
+                      />
+                    </footer>
+                  </aside>
+                </>
+              )}
+
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Request an option — popup modal (replaces inline form for cleaner flow) */}
+      {(() => {
+        const openId = openRequestGroups.values().next().value;
+        if (!openId) return null;
+        const group = selections.find(g => g.id === openId);
+        if (!group) return null;
+        const close = () => resetRequest(openId);
+        const text = requestText[openId] || '';
+        const link = requestLink[openId] || '';
+        const images = requestImages[openId] || [];
+        return (
+          <div
+            onClick={close}
+            style={{
+              position: 'fixed', inset: 0, zIndex: 230,
+              background: 'rgba(20, 28, 50, 0.55)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              padding: 24,
+            }}
+          >
+            <div
+              onClick={e => e.stopPropagation()}
+              style={{
+                background: '#fff', borderRadius: 14,
+                width: '100%', maxWidth: 520,
+                maxHeight: 'calc(100vh - 48px)',
+                display: 'flex', flexDirection: 'column',
+                boxShadow: '0 20px 60px rgba(20, 28, 50, 0.25)',
+                overflow: 'hidden',
+              }}
+            >
+              <div style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: '16px 20px', borderBottom: '1px solid #EAEEF5', flexShrink: 0,
+              }}>
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: '#666D7C', textTransform: 'uppercase', letterSpacing: 0.4 }}>{group.name}</div>
+                  <h3 style={{ margin: '2px 0 0', fontSize: 18, fontWeight: 700, color: '#202227' }}>Request another option</h3>
+                </div>
+                <button
+                  onClick={close}
+                  aria-label="Close"
+                  style={{
+                    width: 32, height: 32, border: 'none', borderRadius: 999,
+                    background: '#F1F4FA', cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#202227" strokeWidth="2.5" strokeLinecap="round">
+                    <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                </button>
+              </div>
+
+              <div style={{ overflowY: 'auto', padding: 20 }}>
+                <div className="cs-inline-request-label">
+                  Product link <span className="cs-inline-request-required" aria-label="required">*</span>
+                </div>
+                <div className="cs-request-link-wrap cs-inline-request-link">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                  <BdsInput
+                    id={`request-link-${openId}`}
+                    className="cs-request-link-input"
+                    placeholder="Paste a product link — we'll pull the image"
+                    value={link}
+                    onChange={(_, v) => setRequestLink(prev => ({ ...prev, [openId]: v }))}
+                    onBlur={e => fetchImageFromLink(openId, e.target.value)}
+                    onPaste={e => {
+                      const pasted = e.clipboardData.getData('text');
+                      setTimeout(() => fetchImageFromLink(openId, pasted), 0);
+                    }}
+                    autoFocus
+                  />
+                  {linkFetching[openId] && <span className="cs-link-spinner" aria-label="Fetching preview" />}
+                  {link && (
+                    <button
+                      className="cs-inline-request-remove"
+                      onClick={() => {
+                        setRequestLink(prev => ({ ...prev, [openId]: '' }));
+                        if (imageFromLink[openId]) {
+                          setRequestImages(prev => ({ ...prev, [openId]: (prev[openId] || []).slice(1) }));
+                          setImageFromLink(prev => ({ ...prev, [openId]: false }));
+                        }
+                      }}
+                      aria-label="Clear link"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </button>
+                  )}
+                </div>
+
+                <div className="cs-inline-request-label cs-inline-request-label-spaced">Notes</div>
+                <BdsTextArea
+                  id={`request-text-${openId}`}
+                  className="cs-request-input cs-inline-request-textarea"
+                  placeholder="e.g. Something more modern · matte black finish · similar price to the Delta faucet"
+                  value={text}
+                  onChange={(_, v) => setRequestText(prev => ({ ...prev, [openId]: v }))}
+                  rows={3}
+                />
+
+                {images.length > 0 && (
+                  <div className="cs-inline-request-photos">
+                    {images.map((src, idx) => (
+                      <div key={`${idx}-${src.slice(0, 40)}`} className="cs-inline-request-photo">
+                        <img src={src} alt={`Attached ${idx + 1}`} />
+                        {idx === 0 && imageFromLink[openId] && <span className="cs-photo-source-tag">From link</span>}
+                        <button
+                          className="cs-inline-request-remove"
+                          onClick={() => {
+                            setRequestImages(prev => ({ ...prev, [openId]: (prev[openId] || []).filter((_, i) => i !== idx) }));
+                            if (idx === 0 && imageFromLink[openId]) setImageFromLink(prev => ({ ...prev, [openId]: false }));
+                          }}
+                          aria-label={`Remove photo ${idx + 1}`}
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <label className="cs-inline-request-add-photo">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                  {images.length > 0 ? 'Add another photo' : 'Add a photo (optional)'}
+                  <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      const reader = new FileReader();
+                      reader.onload = ev => {
+                        const src = ev.target?.result as string;
+                        if (src) setRequestImages(prev => ({ ...prev, [openId]: [...(prev[openId] || []), src] }));
+                      };
+                      reader.readAsDataURL(file);
+                    }
+                    e.currentTarget.value = '';
+                  }} />
+                </label>
+              </div>
+
+              <div style={{
+                flexShrink: 0, padding: 16, background: '#fff',
+                borderTop: '1px solid #EAEEF5', display: 'flex', gap: 10, justifyContent: 'flex-end',
+              }}>
+                <BdsButton text="Cancel" displayType="tertiary" onClick={close} />
+                <BdsButton
+                  text="Send request"
+                  displayType="primary"
+                  disabled={!text.trim() || !link.trim()}
+                  onClick={() => submitRequest(openId)}
+                  icon={<BdsIcon name="send" size={14} />}
+                />
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Compare floating action bar — BDS FAB pattern */}
+      {/* BDS: production should use BdsFloatingActionBar with selectedCount + onDeselect + primaryActions */}
+      {compareSet.size > 0 && !showCompare && !detailItem && !showReviewModal && (
+        <div className="cs-compare-fab" role="toolbar" aria-label="Compare selections">
+          <div className="cs-compare-fab-section cs-compare-fab-selected">
+            <span className="cs-compare-fab-count">{compareSet.size} Selected</span>
+            <button
+              className="cs-compare-fab-deselect"
+              aria-label="Clear compare selection"
+              onClick={() => setCompareSet(new Set())}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+          </div>
+          <div className="cs-compare-fab-section">
+            <button
+              className="cs-compare-fab-primary"
+              disabled={compareSet.size < 2}
+              onClick={() => setShowCompare(true)}
+            >
+              Compare
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Compare modal — side-by-side product comparison */}
+      {showCompare && (() => {
+        const items: { group: typeof selections[0]; opt: typeof selections[0]['options'][0] }[] = [];
+        compareSet.forEach(id => {
+          for (const g of selections) {
+            const o = g.options.find(o => o.id === id);
+            if (o) { items.push({ group: g, opt: o }); break; }
+          }
+        });
+        if (items.length === 0) { setShowCompare(false); return null; }
+
+        const closeCompare = () => setShowCompare(false);
+        const styleFromName = (name: string) => name.includes('—') ? name.split('—').pop()!.trim() : '—';
+        const tierLabel = (o: any) => o.tier === 'upgrade' ? 'Premium upgrade' : o.tier === 'base' ? 'Standard' : '—';
+
+        const rows: { label: string; render: (it: typeof items[0]) => React.ReactNode }[] = [
+          { label: 'Price', render: ({ opt }) => <strong style={{ fontSize: 16 }}>${fmt(opt.price)}</strong> },
+          { label: 'Brand', render: ({ opt }) => opt.vendor },
+          { label: 'Style / color', render: ({ opt }) => styleFromName(opt.name) },
+          { label: 'Application', render: ({ opt, group }) => (opt as any).group || group.name },
+          { label: 'Tier', render: ({ opt }) => tierLabel(opt) },
+          { label: 'Vendor', render: ({ group }) => group.vendor },
+          { label: 'Status', render: ({ opt }) => {
+            if (opt.selected) return <span style={{ color: '#057E4B', fontWeight: 600 }}>Selected</span>;
+            if (declinedOptions.has(opt.id)) return <span style={{ color: '#666D7C' }}>Declined</span>;
+            return <span style={{ color: '#666D7C' }}>Awaiting</span>;
+          } },
+          { label: 'Product link', render: ({ opt }) => (opt as any).url
+            ? <a href={(opt as any).url} target="_blank" rel="noopener noreferrer" style={{ color: '#004FD6', fontSize: 12, textDecoration: 'none' }}>View →</a>
+            : <span style={{ color: '#8E96A0' }}>—</span>,
+          },
+        ];
+
+        return (
+          <div
+            style={{
+              position: 'fixed', inset: 0, zIndex: 220,
+              background: '#fff',
+              display: 'flex', flexDirection: 'column',
+            }}
+          >
+            <div
+              style={{
+                background: '#fff',
+                width: '100%', height: '100%',
+                display: 'flex', flexDirection: 'column',
+                overflow: 'hidden',
+              }}
+            >
+              <div style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: '16px 20px', borderBottom: '1px solid #EAEEF5', flexShrink: 0,
+              }}>
+                <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#202227' }}>
+                  Compare {items.length} {items.length === 1 ? 'option' : 'options'}
+                </h3>
+                <button
+                  onClick={closeCompare}
+                  aria-label="Close"
+                  style={{
+                    width: 36, height: 36, border: 'none', borderRadius: 999,
+                    background: '#F1F4FA', cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#202227" strokeWidth="2.5" strokeLinecap="round">
+                    <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                </button>
+              </div>
+
+              <div style={{ overflow: 'auto', padding: 16 }}>
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: `140px repeat(${items.length}, minmax(180px, ${items.length <= 2 ? '280px' : items.length === 3 ? '320px' : '1fr'}))`,
+                  gap: 0,
+                  margin: '0 auto',
+                  maxWidth: 'fit-content',
+                }}>
+                  {/* Header row: thumbnails + names */}
+                  <div />
+                  {items.map(({ opt, group }) => (
+                    <div key={opt.id} style={{ padding: 12, borderBottom: '1px solid #EAEEF5' }}>
+                      <div style={{
+                        width: '100%',
+                        maxWidth: items.length === 2 ? 200 : items.length === 3 ? 240 : 280,
+                        aspectRatio: '4 / 3', borderRadius: 10,
+                        backgroundImage: opt.image ? `url(${opt.image})` : undefined,
+                        backgroundSize: 'cover', backgroundPosition: 'center', backgroundColor: '#F1F4FA',
+                        marginBottom: 8,
+                      }} />
+                      <div style={{ fontSize: 11, color: '#666D7C', textTransform: 'uppercase', letterSpacing: 0.4 }}>{group.name}</div>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: '#202227', lineHeight: 1.3, marginTop: 2 }}>{opt.name}</div>
+                      <button
+                        onClick={() => toggleCompare(opt.id)}
+                        style={{
+                          marginTop: 6, padding: '3px 8px', fontSize: 11, fontWeight: 600,
+                          border: '1px solid #DEE3EB', borderRadius: 999, background: '#fff',
+                          color: '#666D7C', cursor: 'pointer',
+                        }}
+                      >Remove</button>
+                    </div>
+                  ))}
+
+                  {/* Spec rows */}
+                  {rows.map((row) => (
+                    <Fragment key={row.label}>
+                      <div style={{
+                        padding: '12px 8px', fontSize: 12, fontWeight: 600,
+                        color: '#666D7C', textTransform: 'uppercase', letterSpacing: 0.4,
+                        borderBottom: '1px solid #F1F4FA', alignSelf: 'center',
+                      }}>{row.label}</div>
+                      {items.map(it => (
+                        <div key={`${it.opt.id}-${row.label}`} style={{
+                          padding: '12px', fontSize: 13, color: '#202227',
+                          borderBottom: '1px solid #F1F4FA',
+                        }}>{row.render(it)}</div>
+                      ))}
+                    </Fragment>
+                  ))}
+
+                  {/* Action row */}
+                  <div style={{
+                    padding: '12px 8px', fontSize: 12, fontWeight: 600,
+                    color: '#666D7C', textTransform: 'uppercase', letterSpacing: 0.4,
+                    alignSelf: 'center',
+                  }}>Decision</div>
+                  {items.map(({ opt, group }) => {
+                    const isSelected = opt.selected;
+                    const isDecl = declinedOptions.has(opt.id);
+                    return (
+                      <div key={`${opt.id}-action`} style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        {isSelected ? (
+                          <BdsButton text="Undo" displayType="secondary" className="cs-prev-btn-sm" onClick={() => toggleOption(group.id, opt.id)} />
+                        ) : isDecl ? (
+                          <BdsButton text="Undo decline" displayType="secondary" className="cs-prev-btn-sm" onClick={() => undeclineOption(opt.id)} />
+                        ) : (
+                          <>
+                            <BdsButton
+                              text="Choose"
+                              displayType="primary"
+                              className="cs-prev-btn-sm"
+                              onClick={() => toggleOption(group.id, opt.id)}
+                            />
+                            <BdsButton
+                              text="Decline"
+                              displayType="tertiary"
+                              className="cs-prev-btn-sm"
+                              onClick={() => declineOption(opt.id, group.id)}
+                            />
+                          </>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Sticky footer — only show once user has taken an action in this session */}
+      {hasInteracted && (
+      <div className={`cs-sticky-footer ${isBds ? 'bds-scope bds-real-scope' : ''}`}>
+        <div className="cs-sticky-inner">
+          <div className="cs-sticky-info">
+            {pendingSubmit.length > 0 ? (
+              <><strong>{pendingSubmit.length} selection{pendingSubmit.length > 1 ? 's' : ''}</strong> ready — submit to lock in your choices</>
+            ) : null}
+          </div>
+          <div className="cs-sticky-actions">
+            <BdsButton text="Save" displayType="secondary" className="cs-save-btn" onClick={handleSaveProgress} />
+            {pendingSubmit.length > 0 && (
+              <BdsButton text="Review & submit" displayType="primary" onClick={() => setShowReviewModal(true)} />
+            )}
+          </div>
+        </div>
+      </div>
+      )}
+    </>
+  );
 }

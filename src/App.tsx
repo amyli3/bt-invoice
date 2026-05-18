@@ -24,6 +24,7 @@ import ChangeOrderPage from './components/ChangeOrderPage';
 import ChangeOrderListPage from './components/ChangeOrderListPage';
 import EstimatePage from './components/EstimatePage';
 import ClientSelections from './components/ClientSelections';
+import ClientSelections2 from './components/ClientSelections2';
 import ClientSelections3 from './components/ClientSelections3';
 import ClientPortal, { ClientTopNav } from './components/ClientPortal';
 import MobileBudget from './components/MobileBudget';
@@ -335,7 +336,18 @@ export default function App() {
     );
   }
 
-  if (activePage === 'client-selections-2' || activePage === 'client-selections-3') {
+  if (activePage === 'client-selections-2') {
+    return (
+      <div style={{display: 'flex', flexDirection: 'column', height: '100vh'}}>
+        <ClientTopNav onNavigate={(page) => setActivePage(page as PageType)} />
+        <div style={{flex: 1, overflow: 'auto'}}>
+          <ClientSelections2 />
+        </div>
+      </div>
+    );
+  }
+
+  if (activePage === 'client-selections-3') {
     return (
       <div style={{display: 'flex', flexDirection: 'column', height: '100vh'}}>
         <ClientTopNav onNavigate={(page) => setActivePage(page as PageType)} />
