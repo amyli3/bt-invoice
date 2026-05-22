@@ -205,14 +205,20 @@ export function computePanelGroups(grouper: (item: V4CostCode) => string): Panel
   });
   return Array.from(groups.entries()).map(([category, items]) => ({
     category,
-    items,
+    items: [...items].sort((a, b) => Number(a.code) - Number(b.code)),
     originalBudget: items.reduce((s, i) => s + i.originalBudget, 0),
     revisedBudget: items.reduce((s, i) => s + i.revisedBudget, 0),
     variance: items.reduce((s, i) => s + i.variance, 0),
   }));
 }
 
-export const panelByCategory = computePanelGroups(item => item.rangeLabel);
+const leadingNumber = (label: string) => {
+  const m = label.match(/^(\d+)/);
+  return m ? Number(m[1]) : Number.POSITIVE_INFINITY;
+};
+
+export const panelByCategory = computePanelGroups(item => item.rangeLabel)
+  .sort((a, b) => leadingNumber(a.category) - leadingNumber(b.category));
 export const panelByEstimate = computePanelGroups(item => item.estimateGroup);
 export const panelByLocation = computePanelGroups(item => item.location);
 export const panelVarianceTotal = panelByCategory.reduce((s, g) => s + g.variance, 0);

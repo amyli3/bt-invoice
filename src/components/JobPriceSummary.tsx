@@ -273,17 +273,21 @@ const ActivityKindIcon = ({ kind }: { kind: string }) => {
 
 export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection, onBack }: { jobOpen?: boolean; onToggleJob?: () => void; onOpenSelection?: (sel: { name: string; category: string; price: number; allowanceName?: string; status: string }) => void; onBack?: () => void; onOpenJCB?: () => void }) {
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
+  // v41 (cost category) budget difference: free-form notes the builder types to
+  // record what drove the variance. Keyed by category label.
+  const [categoryNotes, setCategoryNotes] = useState<Record<string, string>>({});
   const [activeSlice, setActiveSlice] = useState<'slice1' | 'slice2' | 'slice3' | 'slice4' | 'slice5'>('slice1');
   // Slice 4 = sandbox for Kendall's open book client financials brief (page 7003570340).
   // v1 inline expandable, v2 always-on list, v3 drill-through, v4 grouped sections,
   // v5 visual contribution bar — iteration of v2 that swaps three nested rows for a stacked
   // bar + decision callout (Sarah review, May 2026).
-  const [slice4Version, setSlice4Version] = useState<'v1' | 'v2' | 'v3' | 'v4' | 'v41' | 'v411' | 'v45' | 'v5'>('v1');
+  const [slice4Version, setSlice4Version] = useState<'v1' | 'v2' | 'v3' | 'v4' | 'v41' | 'v41notes' | 'v411' | 'v45' | 'v5'>('v1');
   const [slice4DrillOpen, setSlice4DrillOpen] = useState(false);
   const [showPrint, setShowPrint] = useState(false);
   const [printOptions, setPrintOptions] = useState({
     changeOrders: true,
     payments: true,
+    expandAllowances: true,
   });
   type SortColumn = 'title' | 'date' | 'price' | 'impact' | 'budget' | 'spent' | 'remaining';
   type SortDir = 'asc' | 'desc';
@@ -503,11 +507,15 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
           <div className="jps-print-controls-title">Display on printout</div>
           <label className="jps-print-checkbox">
             <input type="checkbox" checked={printOptions.changeOrders} onChange={e => setPrintOptions({ ...printOptions, changeOrders: e.target.checked })} />
-            Show approved change orders
+            Show change orders
           </label>
           <label className="jps-print-checkbox">
             <input type="checkbox" checked={printOptions.payments} onChange={e => setPrintOptions({ ...printOptions, payments: e.target.checked })} />
-            Show payments received
+            Show payments
+          </label>
+          <label className="jps-print-checkbox">
+            <input type="checkbox" checked={printOptions.expandAllowances} onChange={e => setPrintOptions({ ...printOptions, expandAllowances: e.target.checked })} />
+            Expand allowances with selections
           </label>
           <div className="jps-print-controls-actions">
             <BdsButton text="Cancel" displayType="secondary" onClick={() => setShowPrint(false)} />
@@ -582,17 +590,17 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
               <table className="jps-print-table">
                 <thead>
                   <tr>
-                    {printSortableHeader(gridId, 'title', 'Allowance')}
+                    {printSortableHeader(gridId, 'title', 'Title')}
                     {printSortableHeader(gridId, 'date', 'Date', 'jps-print-th-date')}
-                    {printSortableHeader(gridId, 'budget', 'Budget', 'jps-print-th-right')}
-                    {printSortableHeader(gridId, 'spent', 'Spent', 'jps-print-th-right')}
+                    {printSortableHeader(gridId, 'budget', 'Allowance', 'jps-print-th-right')}
+                    {printSortableHeader(gridId, 'spent', 'Price', 'jps-print-th-right')}
                     {printSortableHeader(gridId, 'remaining', 'Remaining', 'jps-print-th-right')}
                   </tr>
                 </thead>
                 <tbody>
                   {sortedAllowances.map(({ group: g, spent, remaining }, i) => {
-                    // Always show nested items — slice 1 print has no collapsed view.
                     const nestedItems = includePending ? g.items : g.items.filter(it => it.status === 'approved');
+                    const showNested = printOptions.expandAllowances;
                     return (
                       <Fragment key={i}>
                         <tr className="jps-print-allowance-row jps-print-allowance-row-expanded">
@@ -602,7 +610,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                           <td className="jps-print-td-right"><strong>{fmt(spent)}</strong></td>
                           <td className="jps-print-td-right"><strong>{fmt(remaining)}</strong></td>
                         </tr>
-                        {nestedItems.map((it, j) => (
+                        {showNested && nestedItems.map((it, j) => (
                           <tr key={`${i}-${j}`} className="jps-print-nested-row">
                             <td className="jps-print-nested-cell">
                               <span className="jps-print-nested-name">{it.name}</span>
@@ -725,7 +733,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
           {/* Change orders table */}
           {printOptions.changeOrders && approvedChangeOrders.length > 0 && (
             <section className="jps-print-section">
-              <h3 className="jps-print-section-title">Approved change orders</h3>
+              <h3 className="jps-print-section-title">Change orders</h3>
               <table className="jps-print-table">
                 <thead>
                   <tr>
@@ -810,7 +818,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
           {/* Payments table */}
           {printOptions.payments && payments.length > 0 && (
             <section className="jps-print-section">
-              <h3 className="jps-print-section-title">Payments received</h3>
+              <h3 className="jps-print-section-title">Payments</h3>
               <table className="jps-print-table">
                 <thead>
                   <tr>
@@ -926,10 +934,9 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
             }}
             tabs={[
               { key: 'slice1', label: 'Slice 1' },
-              { key: 'slice5', label: 'Openbook (demo)' },
+              { key: 'slice5', label: 'Openbook' },
               { key: 'slice2', label: 'Slice 2' },
               { key: 'slice3', label: 'Slice 3' },
-              { key: 'slice4', label: 'Openbook (WIP)' },
             ]}
           />
         </div>
@@ -1037,19 +1044,9 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
 
                     {isOpen && hasItems && (() => {
                       const approvedTotal = approvedItems.reduce((s, i) => s + i.price, 0);
-                      const hasImpact = approvedTotal > group.budget;
-                      const gridClass = hasImpact ? 'jps-table-allowance-dated' : 'jps-table-allowance-dated-no-impact';
-                      // Compute contract impact in chronological order so attribution stays factual regardless of display sort.
-                      const chronological = [...approvedItems].sort((a, b) => dateToTs(a.date) - dateToTs(b.date));
-                      const impactByName = new Map<string, number>();
-                      chronological.forEach((item, i) => {
-                        const prevUsed = chronological.slice(0, i).reduce((s, it) => s + it.price, 0);
-                        const prevRemaining = group.budget - prevUsed;
-                        const lineImpact = prevRemaining <= 0 ? item.price : prevRemaining < item.price ? item.price - prevRemaining : 0;
-                        impactByName.set(item.name, lineImpact);
-                      });
+                      const gridClass = 'jps-table-allowance-dated-no-impact';
                       const gridId = `s1-al-${group.name}`;
-                      const displayItems = sortItems(gridId, approvedItems.map(it => ({ ...it, _impact: impactByName.get(it.name) ?? 0 })));
+                      const displayItems = sortItems(gridId, approvedItems);
                       return (
                       <div className="jps-cat-body">
                         <div className="jps-table">
@@ -1057,47 +1054,25 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                             {sortableHeader(gridId, 'title', 'Title', 'jps-col-title')}
                             {sortableHeader(gridId, 'date', 'Date', 'jps-col-date')}
                             {sortableHeader(gridId, 'price', 'Price (incl. tax)', 'jps-col-price')}
-                            {hasImpact && sortableHeader(gridId, 'impact', 'Contract impact', 'jps-col-impact')}
                           </div>
 
-                          {displayItems.map((item, i) => {
-                            const lineImpact = impactByName.get(item.name) ?? 0;
-                            return (
-                              <div key={i} className={`jps-table-row ${gridClass}`}>
-                                <div className="jps-col-title">
-                                  <div><span className="jps-item-name" onClick={() => onOpenSelection?.({ name: item.name, category: item.category, price: item.price, allowanceName: item.allowanceName, status: item.status })}>{item.name}</span></div>
-                                </div>
-                                <div className="jps-col-date">{item.date || '—'}</div>
-                                <div className="jps-col-price">{fmt(withTax(item.price))}</div>
-                                {hasImpact && (
-                                  <div className="jps-col-impact">
-                                    {lineImpact === 0
-                                      ? <span className="jps-impact-neutral">—</span>
-                                      : <span className="jps-impact-up">{fmtSigned(withTax(lineImpact))}</span>
-                                    }
-                                  </div>
-                                )}
+                          {displayItems.map((item, i) => (
+                            <div key={i} className={`jps-table-row ${gridClass}`}>
+                              <div className="jps-col-title">
+                                <div><span className="jps-item-name" onClick={() => onOpenSelection?.({ name: item.name, category: item.category, price: item.price, allowanceName: item.allowanceName, status: item.status })}>{item.name}</span></div>
                               </div>
-                            );
-                          })}
+                              <div className="jps-col-date">{item.date || '—'}</div>
+                              <div className="jps-col-price">{fmt(withTax(item.price))}</div>
+                            </div>
+                          ))}
 
-                          {(() => {
-                            const diff = approvedTotal - group.budget;
-                            return (
-                              <div className={`jps-table-row ${gridClass} jps-row-allowance-summary`}>
-                                <div className="jps-col-title">
-                                  <span className="jps-item-name">Total</span>
-                                </div>
-                                <div className="jps-col-date"></div>
-                                <div className="jps-col-price">{fmt(withTax(approvedTotal))}</div>
-                                {hasImpact && (
-                                  <div className="jps-col-impact">
-                                    {diff > 0 && <span className="jps-summary-impact">{fmtSigned(withTax(diff))} overage</span>}
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })()}
+                          <div className={`jps-table-row ${gridClass} jps-row-allowance-summary`}>
+                            <div className="jps-col-title">
+                              <span className="jps-item-name">Total</span>
+                            </div>
+                            <div className="jps-col-date"></div>
+                            <div className="jps-col-price">{fmt(withTax(approvedTotal))}</div>
+                          </div>
                         </div>
                       </div>
                       );
@@ -1320,21 +1295,10 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
 
                     {isOpen && hasItems && (() => {
                       const approvedTotal = approvedItems.reduce((s, i) => s + i.price, 0);
-                      const hasImpact = approvedTotal > group.budget;
-                      const gridClass = hasImpact ? 'jps-table-allowance-dated' : 'jps-table-allowance-dated-no-impact';
-                      // Pre-compute chronological line impact so attribution stays stable under any sort.
-                      const chronological = [...approvedItems].sort((a, b) => dateToTs(a.date) - dateToTs(b.date));
-                      const impactByName = new Map<string, number>();
-                      chronological.forEach((item, idx) => {
-                        const prevUsed = chronological.slice(0, idx).reduce((s, it) => s + it.price, 0);
-                        const prevRemaining = group.budget - prevUsed;
-                        const lineImpact = prevRemaining <= 0 ? item.price : prevRemaining < item.price ? item.price - prevRemaining : 0;
-                        impactByName.set(item.name, lineImpact);
-                      });
-                      const withImpact = approvedItems.map(it => ({ ...it, _impact: impactByName.get(it.name) ?? 0 }));
+                      const gridClass = 'jps-table-allowance-dated-no-impact';
                       const gridId = `s3-al-${group.name}`;
                       const gridSort = getSort(gridId);
-                      const sortedFlat = sortItems(gridId, withImpact);
+                      const sortedFlat = sortItems(gridId, approvedItems);
                       return (
                       <div className="jps-cat-body">
                         <div className="jps-table">
@@ -1342,7 +1306,6 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                             {sortableHeader(gridId, 'title', 'Title', 'jps-col-title')}
                             {sortableHeader(gridId, 'date', 'Date', 'jps-col-date')}
                             {sortableHeader(gridId, 'price', 'Price', 'jps-col-price')}
-                            {hasImpact && sortableHeader(gridId, 'impact', 'Contract impact', 'jps-col-impact')}
                           </div>
 
                           {/* Approved items — grouped by location if allowance spans multiple AND user hasn't re-sorted away from default */}
@@ -1353,68 +1316,35 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                                   <div className="jps-col-title"><span className="jps-subgroup-label">{loc}</span></div>
                                   <div className="jps-col-date"></div>
                                   <div className="jps-col-price"></div>
-                                  {hasImpact && <div className="jps-col-impact"></div>}
                                 </div>
-                                {items.map((item, i) => {
-                                  const lineImpact = impactByName.get(item.name) ?? 0;
-                                  return (
-                                    <div key={i} className={`jps-table-row ${gridClass}`}>
-                                      <div className="jps-col-title">
-                                        <div><span className="jps-item-name" onClick={() => onOpenSelection?.({ name: item.name, category: item.category, price: item.price, allowanceName: item.allowanceName, status: item.status })}>{item.name}</span></div>
-                                      </div>
-                                      <div className="jps-col-date">{item.date || '—'}</div>
-                                      <div className="jps-col-price">{fmt(item.price)}</div>
-                                      {hasImpact && (
-                                        <div className="jps-col-impact">
-                                          {lineImpact === 0
-                                            ? <span className="jps-impact-neutral">—</span>
-                                            : <span className="jps-impact-up">{fmtSigned(lineImpact)}</span>
-                                          }
-                                        </div>
-                                      )}
+                                {items.map((item, i) => (
+                                  <div key={i} className={`jps-table-row ${gridClass}`}>
+                                    <div className="jps-col-title">
+                                      <div><span className="jps-item-name" onClick={() => onOpenSelection?.({ name: item.name, category: item.category, price: item.price, allowanceName: item.allowanceName, status: item.status })}>{item.name}</span></div>
                                     </div>
-                                  );
-                                })}
+                                    <div className="jps-col-date">{item.date || '—'}</div>
+                                    <div className="jps-col-price">{fmt(item.price)}</div>
+                                  </div>
+                                ))}
                               </Fragment>
                             ))
                           ) : (
-                            sortedFlat.map((item, i) => {
-                              const lineImpact = impactByName.get(item.name) ?? 0;
-                              return (
-                                <div key={i} className={`jps-table-row ${gridClass}`}>
-                                  <div className="jps-col-title">
-                                    <div><span className="jps-item-name" onClick={() => onOpenSelection?.({ name: item.name, category: item.category, price: item.price, allowanceName: item.allowanceName, status: item.status })}>{item.name}</span></div>
-                                  </div>
-                                  <div className="jps-col-date">{item.date || '—'}</div>
-                                  <div className="jps-col-price">{fmt(item.price)}</div>
-                                  {hasImpact && (
-                                    <div className="jps-col-impact">
-                                      {lineImpact === 0
-                                        ? <span className="jps-impact-neutral">—</span>
-                                        : <span className="jps-impact-up">{fmtSigned(lineImpact)}</span>
-                                      }
-                                    </div>
-                                  )}
+                            sortedFlat.map((item, i) => (
+                              <div key={i} className={`jps-table-row ${gridClass}`}>
+                                <div className="jps-col-title">
+                                  <div><span className="jps-item-name" onClick={() => onOpenSelection?.({ name: item.name, category: item.category, price: item.price, allowanceName: item.allowanceName, status: item.status })}>{item.name}</span></div>
                                 </div>
-                              );
-                            })
+                                <div className="jps-col-date">{item.date || '—'}</div>
+                                <div className="jps-col-price">{fmt(item.price)}</div>
+                              </div>
+                            ))
                           )}
 
-                          {(() => {
-                            const diff = approvedTotal - group.budget;
-                            return (
-                              <div className={`jps-table-row ${gridClass} jps-row-allowance-summary`}>
-                                <div className="jps-col-title"><span className="jps-item-name">Total</span></div>
-                                <div className="jps-col-date"></div>
-                                <div className="jps-col-price">{fmt(approvedTotal)}</div>
-                                {hasImpact && (
-                                  <div className="jps-col-impact">
-                                    {diff > 0 && <span className="jps-summary-impact">{fmtSigned(diff)} overage</span>}
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })()}
+                          <div className={`jps-table-row ${gridClass} jps-row-allowance-summary`}>
+                            <div className="jps-col-title"><span className="jps-item-name">Total</span></div>
+                            <div className="jps-col-date"></div>
+                            <div className="jps-col-price">{fmt(approvedTotal)}</div>
+                          </div>
                         </div>
 
                         {/* Pending pill — location shown inline when allowance spans multiple rooms */}
@@ -1704,19 +1634,9 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
 
                 {isOpen && group.items.length > 0 && (() => {
                   const approvedTotal = approvedItems.reduce((s, i) => s + i.price, 0);
-                  const hasImpact = approvedTotal > group.budget;
-                  const gridClass = hasImpact ? 'jps-table-allowance-dated' : 'jps-table-allowance-dated-no-impact';
-                  // Compute contract impact in chronological order so attribution stays stable under any sort.
-                  const chronological = [...approvedItems].sort((a, b) => dateToTs(a.date) - dateToTs(b.date));
-                  const impactByName = new Map<string, number>();
-                  chronological.forEach((item, idx) => {
-                    const prevUsed = chronological.slice(0, idx).reduce((s, it) => s + it.price, 0);
-                    const prevRemaining = group.budget - prevUsed;
-                    const lineImpact = prevRemaining <= 0 ? item.price : prevRemaining < item.price ? item.price - prevRemaining : 0;
-                    impactByName.set(item.name, lineImpact);
-                  });
+                  const gridClass = 'jps-table-allowance-dated-no-impact';
                   const gridId = `s2-al-${group.name}`;
-                  const displayItems = sortItems(gridId, approvedItems.map(it => ({ ...it, _impact: impactByName.get(it.name) ?? 0 })));
+                  const displayItems = sortItems(gridId, approvedItems);
                   return (
                   <div className="jps-cat-body">
                     <div className="jps-table">
@@ -1724,49 +1644,27 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                         {sortableHeader(gridId, 'title', 'Title', 'jps-col-title')}
                         {sortableHeader(gridId, 'date', 'Date', 'jps-col-date')}
                         {sortableHeader(gridId, 'price', 'Price', 'jps-col-price')}
-                        {hasImpact && sortableHeader(gridId, 'impact', 'Contract impact', 'jps-col-impact')}
                       </div>
 
                       {/* Approved rows */}
-                      {displayItems.map((item, i) => {
-                        const lineImpact = impactByName.get(item.name) ?? 0;
-                        return (
-                          <div key={i} className={`jps-table-row ${gridClass}`}>
-                            <div className="jps-col-title">
-                              <div><span className="jps-item-name" onClick={() => onOpenSelection?.({ name: item.name, category: item.category, price: item.price, allowanceName: item.allowanceName, status: item.status })}>{item.name}</span></div>
-                            </div>
-                            <div className="jps-col-date">{item.date || '—'}</div>
-                            <div className="jps-col-price">{fmt(item.price)}</div>
-                            {hasImpact && (
-                              <div className="jps-col-impact">
-                                {lineImpact === 0
-                                  ? <span className="jps-impact-neutral">—</span>
-                                  : <span className="jps-impact-up">{fmtSigned(lineImpact)}</span>
-                                }
-                              </div>
-                            )}
+                      {displayItems.map((item, i) => (
+                        <div key={i} className={`jps-table-row ${gridClass}`}>
+                          <div className="jps-col-title">
+                            <div><span className="jps-item-name" onClick={() => onOpenSelection?.({ name: item.name, category: item.category, price: item.price, allowanceName: item.allowanceName, status: item.status })}>{item.name}</span></div>
                           </div>
-                        );
-                      })}
+                          <div className="jps-col-date">{item.date || '—'}</div>
+                          <div className="jps-col-price">{fmt(item.price)}</div>
+                        </div>
+                      ))}
 
                       {/* Selections total — approved-only subtotal. Sits above pending so it's unambiguously "what's locked in". */}
-                      {(() => {
-                        const diff = approvedTotal - group.budget;
-                        return (
-                          <div className={`jps-table-row ${gridClass} jps-row-allowance-summary`}>
-                            <div className="jps-col-title">
-                              <span className="jps-item-name">Total</span>
-                            </div>
-                            <div className="jps-col-date"></div>
-                            <div className="jps-col-price">{fmt(approvedTotal)}</div>
-                            {hasImpact && (
-                              <div className="jps-col-impact">
-                                {diff > 0 && <span className="jps-summary-impact">{fmtSigned(diff)} overage</span>}
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })()}
+                      <div className={`jps-table-row ${gridClass} jps-row-allowance-summary`}>
+                        <div className="jps-col-title">
+                          <span className="jps-item-name">Total</span>
+                        </div>
+                        <div className="jps-col-date"></div>
+                        <div className="jps-col-price">{fmt(approvedTotal)}</div>
+                      </div>
 
                     </div>
 
@@ -2018,7 +1916,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                 </div>
               </div>
             );
-          } else if (slice4Version === 'v4' || slice4Version === 'v41' || slice4Version === 'v411' || slice4Version === 'v45') {
+          } else if (slice4Version === 'v4' || slice4Version === 'v41' || slice4Version === 'v41notes' || slice4Version === 'v411' || slice4Version === 'v45') {
             // v4 / v4.1 / v4.5: v2-style always-on breakdown with a clickable Budget difference
             // row that opens a side panel. v4 = Cost code drill with bills, v4.1 = category totals,
             // v4.1.1 = category totals expandable to bill/PO/time-clock activity,
@@ -2157,11 +2055,12 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                 <BdsTabs
                   ariaLabel="Direction"
                   activeKey={slice4Version}
-                  onChange={(k) => setSlice4Version(k as 'v1' | 'v2' | 'v3' | 'v4' | 'v41' | 'v411' | 'v45')}
+                  onChange={(k) => setSlice4Version(k as 'v1' | 'v2' | 'v3' | 'v4' | 'v41' | 'v41notes' | 'v411' | 'v45')}
                   tabs={activeSlice === 'slice5' ? [
                     { key: 'v41', label: 'v4 · Cost category' },
-                    { key: 'v411', label: 'v4.1 · Cost category w/ activity' },
-                    { key: 'v45', label: 'v4.5 · Drill with bills (Estimate)' },
+                    { key: 'v41notes', label: 'v4.1 · Notes' },
+                    { key: 'v411', label: 'v4.2 · Largest cost' },
+                    { key: 'v45', label: 'v4.3 · Drill down (estimate)' },
                   ] : [
                     { key: 'v1', label: 'v1 · Inline expandable' },
                     { key: 'v2', label: 'v2 · Always-on list' },
@@ -2229,18 +2128,9 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
 
                       {isOpen && expandable && (() => {
                         const approvedTotal = approvedItems.reduce((s, i) => s + i.price, 0);
-                        const hasImpact = approvedTotal > group.budget;
-                        const gridClass = hasImpact ? 'jps-table-allowance-dated' : 'jps-table-allowance-dated-no-impact';
-                        const chronological = [...approvedItems].sort((a, b) => dateToTs(a.date) - dateToTs(b.date));
-                        const impactByName = new Map<string, number>();
-                        chronological.forEach((item, i) => {
-                          const prevUsed = chronological.slice(0, i).reduce((s, it) => s + it.price, 0);
-                          const prevRemaining = group.budget - prevUsed;
-                          const lineImpact = prevRemaining <= 0 ? item.price : prevRemaining < item.price ? item.price - prevRemaining : 0;
-                          impactByName.set(item.name, lineImpact);
-                        });
+                        const gridClass = 'jps-table-allowance-dated-no-impact';
                         const gridId = `s4-al-${group.name}`;
-                        const displayItems = sortItems(gridId, approvedItems.map(it => ({ ...it, _impact: impactByName.get(it.name) ?? 0 })));
+                        const displayItems = sortItems(gridId, approvedItems);
                         return (
                           <div className="jps-cat-body">
                             <div className="jps-table">
@@ -2248,43 +2138,21 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                                 {sortableHeader(gridId, 'title', 'Title', 'jps-col-title')}
                                 {sortableHeader(gridId, 'date', 'Date', 'jps-col-date')}
                                 {sortableHeader(gridId, 'price', 'Price (incl. tax)', 'jps-col-price')}
-                                {hasImpact && sortableHeader(gridId, 'impact', 'Contract impact', 'jps-col-impact')}
                               </div>
-                              {displayItems.map((item, i) => {
-                                const lineImpact = impactByName.get(item.name) ?? 0;
-                                return (
-                                  <div key={i} className={`jps-table-row ${gridClass}`}>
-                                    <div className="jps-col-title">
-                                      <div><span className="jps-item-name" onClick={() => onOpenSelection?.({ name: item.name, category: item.category, price: item.price, allowanceName: item.allowanceName, status: item.status })}>{item.name}</span></div>
-                                    </div>
-                                    <div className="jps-col-date">{item.date || '—'}</div>
-                                    <div className="jps-col-price">{fmt(withTax(item.price))}</div>
-                                    {hasImpact && (
-                                      <div className="jps-col-impact">
-                                        {lineImpact === 0
-                                          ? <span className="jps-impact-neutral">—</span>
-                                          : <span className="jps-impact-up">{fmtSigned(withTax(lineImpact))}</span>
-                                        }
-                                      </div>
-                                    )}
+                              {displayItems.map((item, i) => (
+                                <div key={i} className={`jps-table-row ${gridClass}`}>
+                                  <div className="jps-col-title">
+                                    <div><span className="jps-item-name" onClick={() => onOpenSelection?.({ name: item.name, category: item.category, price: item.price, allowanceName: item.allowanceName, status: item.status })}>{item.name}</span></div>
                                   </div>
-                                );
-                              })}
-                              {(() => {
-                                const diff = approvedTotal - group.budget;
-                                return (
-                                  <div className={`jps-table-row ${gridClass} jps-row-allowance-summary`}>
-                                    <div className="jps-col-title"><span className="jps-item-name">Total</span></div>
-                                    <div className="jps-col-date"></div>
-                                    <div className="jps-col-price">{fmt(withTax(approvedTotal))}</div>
-                                    {hasImpact && (
-                                      <div className="jps-col-impact">
-                                        {diff > 0 && <span className="jps-summary-impact">{fmtSigned(withTax(diff))} overage</span>}
-                                      </div>
-                                    )}
-                                  </div>
-                                );
-                              })()}
+                                  <div className="jps-col-date">{item.date || '—'}</div>
+                                  <div className="jps-col-price">{fmt(withTax(item.price))}</div>
+                                </div>
+                              ))}
+                              <div className={`jps-table-row ${gridClass} jps-row-allowance-summary`}>
+                                <div className="jps-col-title"><span className="jps-item-name">Total</span></div>
+                                <div className="jps-col-date"></div>
+                                <div className="jps-col-price">{fmt(withTax(approvedTotal))}</div>
+                              </div>
                             </div>
                           </div>
                         );
@@ -2345,8 +2213,8 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
               </div>
               {/* ─── End approved-changes group wrapper ─── */}
 
-              {/* ─── Budget difference (v4/v41/v411/v45) — table layout matching Change Orders ─── */}
-              {(slice4Version === 'v4' || slice4Version === 'v41' || slice4Version === 'v411' || slice4Version === 'v45') && (
+              {/* ─── Budget difference (v4/v41/v41notes/v411/v45) — table layout matching Change Orders ─── */}
+              {(slice4Version === 'v4' || slice4Version === 'v41' || slice4Version === 'v41notes' || slice4Version === 'v411' || slice4Version === 'v45') && (
                 <div className="jps-breakdown-section" id="jps-sec-budget-difference">
                   <div className="jps-section-header">
                     <BdsText as="h2" size="heavy-lg" className="jps-section-title">Budget difference</BdsText>
@@ -2356,6 +2224,8 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                       ? "The difference between revised and original budget cost for each location. Approved change orders and selection and allowance changes aren't included."
                       : slice4Version === 'v411'
                       ? "The difference between revised and original budget cost for each cost category. The largest cost is the biggest single bill, PO, or time clock entry on the cost code that's over budget. Approved change orders and selection and allowance changes aren't included."
+                      : slice4Version === 'v41' || slice4Version === 'v41notes'
+                      ? "The difference between the revised client price and the original client price for each cost category. Approved change orders and selection and allowance changes aren't included."
                       : "The difference between revised and original budget cost for each cost category. Approved change orders and selection and allowance changes aren't included."}
                   </div>
                   <div className="jps-table">
@@ -2363,6 +2233,12 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                       <div className="jps-table-header jps-table-budget-cause">
                         <div className="jps-col-title">Cost category</div>
                         <div className="jps-col-cause">Largest cost</div>
+                        <div className="jps-col-impact">Budget difference</div>
+                      </div>
+                    ) : slice4Version === 'v41notes' ? (
+                      <div className="jps-table-header jps-table-budget-notes">
+                        <div className="jps-col-title">Cost category</div>
+                        <div className="jps-col-notes">Notes</div>
                         <div className="jps-col-impact">Budget difference</div>
                       </div>
                     ) : (
@@ -2373,6 +2249,8 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                     )}
                     {(slice4Version === 'v45' ? panelByLocation : panelByCategory).map((group, gi) => {
                       const isV45 = slice4Version === 'v45';
+                      const isV41 = slice4Version === 'v41';
+                      const isV41Notes = slice4Version === 'v41notes';
                       const isV411 = slice4Version === 'v411';
                       const groupKey = `bd-loc-${group.category}`;
                       const isOpen = !!expandedGroups[groupKey];
@@ -2406,6 +2284,68 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                                 </div>
                               </div>
                             ))}
+                          </Fragment>
+                        );
+                      }
+                      if (isV41) {
+                        // v4 cost category — stripped to a simple 2-col read-only row.
+                        const groupPriceDiff = group.revisedBudget - group.originalBudget;
+                        return (
+                          <div key={gi} className="jps-table-row jps-table-budget">
+                            <div className="jps-col-title"><span className="jps-item-name">{group.category}</span></div>
+                            <div className="jps-col-impact">
+                              <span className={groupPriceDiff >= 0 ? 'jps-impact-up' : 'jps-impact-down'}>{fmtSigned(groupPriceDiff)}</span>
+                            </div>
+                          </div>
+                        );
+                      }
+                      if (isV41Notes) {
+                        // v4.1 budget difference = revised client price − original client price
+                        // (i.e., CO + selection impact). Distinct from `variance`
+                        // (spent vs revised) used elsewhere.
+                        const groupPriceDiff = group.revisedBudget - group.originalBudget;
+                        return (
+                          <Fragment key={gi}>
+                            <div
+                              className={`jps-table-row jps-table-budget-notes ${hasItems ? 'jps-table-row-toggle' : ''} ${isOpen ? 'jps-table-row-toggle-open' : ''}`}
+                              onClick={hasItems ? () => toggleGroup(groupKey) : undefined}
+                              role={hasItems ? 'button' : undefined}
+                              tabIndex={hasItems ? 0 : -1}
+                              onKeyDown={hasItems ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleGroup(groupKey); } } : undefined}
+                            >
+                              <div className="jps-col-title">
+                                {hasItems && <BdsIcon name={isOpen ? 'chevron-down' : 'chevron-right'} size={12} />}
+                                <span className="jps-item-name">{group.category}</span>
+                              </div>
+                              <div className="jps-col-notes" onClick={(e) => e.stopPropagation()}>
+                                <input
+                                  type="text"
+                                  className="jps-notes-input"
+                                  placeholder="Add a note"
+                                  value={categoryNotes[group.category] ?? ''}
+                                  onChange={(e) => setCategoryNotes(prev => ({ ...prev, [group.category]: e.target.value }))}
+                                  aria-label={`Notes for ${group.category}`}
+                                />
+                              </div>
+                              <div className="jps-col-impact">
+                                <span className={groupPriceDiff >= 0 ? 'jps-impact-up' : 'jps-impact-down'}>{fmtSigned(groupPriceDiff)}</span>
+                              </div>
+                            </div>
+                            {isOpen && group.items.map((item) => {
+                              const itemPriceDiff = item.revisedBudget - item.originalBudget;
+                              return (
+                                <div key={item.code} className="jps-table-row jps-table-budget-notes jps-table-row-nested">
+                                  <div className="jps-col-title">
+                                    <span className="jps-budget-nested-code">{item.code}</span>
+                                    <span className="jps-budget-nested-name">{item.name}</span>
+                                  </div>
+                                  <div className="jps-col-notes" />
+                                  <div className="jps-col-impact">
+                                    <span className={itemPriceDiff >= 0 ? 'jps-impact-up' : 'jps-impact-down'}>{fmtSigned(itemPriceDiff)}</span>
+                                  </div>
+                                </div>
+                              );
+                            })}
                           </Fragment>
                         );
                       }
@@ -2464,6 +2404,17 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                         <div className="jps-col-title">Total</div>
                         <div className="jps-col-cause"></div>
                         <div className="jps-col-impact">{fmtSigned(panelVarianceTotal)}</div>
+                      </div>
+                    ) : slice4Version === 'v41notes' ? (
+                      <div className="jps-table-row jps-table-budget-notes jps-row-total">
+                        <div className="jps-col-title">Total</div>
+                        <div className="jps-col-notes"></div>
+                        <div className="jps-col-impact">{fmtSigned(panelByCategory.reduce((s, g) => s + (g.revisedBudget - g.originalBudget), 0))}</div>
+                      </div>
+                    ) : slice4Version === 'v41' ? (
+                      <div className="jps-table-row jps-table-budget jps-row-total">
+                        <div className="jps-col-title">Total</div>
+                        <div className="jps-col-impact">{fmtSigned(panelByCategory.reduce((s, g) => s + (g.revisedBudget - g.originalBudget), 0))}</div>
                       </div>
                     ) : (
                       <div className="jps-table-row jps-table-budget jps-row-total">
