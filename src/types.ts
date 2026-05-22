@@ -23,6 +23,10 @@ export interface LineItem {
   // builder view shows it at its own cost code; the client view (when
   // grouped by cost code or estimate) can roll it under the target.
   reallocation?: { sourceAllowanceId: string; targetAllowanceId: string; targetName: string; targetCostCode: string };
+  // Breakdown of selections that were netted into this line (when the
+  // selections wizard combined same-cost-code rows). Present only on lines
+  // produced by the V2 wizard with grouping enabled.
+  rolledUp?: { name: string; amount: number }[];
 }
 
 export interface Payment {

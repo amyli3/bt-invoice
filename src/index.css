@@ -6080,3 +6080,88 @@ table { width: 100%; border-collapse: collapse; }
   .selv2-footer { flex-direction: column; align-items: stretch; }
   .selv2-footer-buttons { justify-content: flex-end; }
 }
+
+/* ══════════════ SELECTIONS PAGE MASS ACTION BAR ══════════════ */
+.sp-mass-action-wrap {
+  position: fixed; left: 0; right: 0; bottom: 24px; z-index: 50;
+  display: flex; justify-content: center; pointer-events: none;
+}
+.sp-mass-action-bar {
+  pointer-events: auto;
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 8px 8px 8px 16px;
+  background: #0e1a33; color: #fff;
+  border-radius: 10px;
+  box-shadow: 0 10px 28px rgba(0,0,0,0.25);
+  font-size: 13px;
+}
+.sp-mass-action-count { font-weight: 600; color: #fff; padding-right: 4px; }
+.sp-mass-action-icon-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px;
+  background: transparent; color: #fff; border: none; border-radius: 6px;
+  cursor: pointer; transition: background 0.12s;
+}
+.sp-mass-action-icon-btn:hover { background: rgba(255,255,255,0.08); }
+.sp-mass-action-trash { color: #ff6b6b; }
+.sp-mass-action-trash:hover { background: rgba(255,107,107,0.12); }
+.sp-mass-action-divider {
+  width: 1px; height: 22px; background: rgba(255,255,255,0.18); margin: 0 4px;
+}
+.sp-mass-action-text-btn {
+  background: transparent; color: #fff; border: none;
+  padding: 6px 12px; border-radius: 6px;
+  font-size: 13px; font-weight: 500; cursor: pointer; font-family: inherit;
+  display: inline-flex; align-items: center; gap: 6px;
+  transition: background 0.12s;
+}
+.sp-mass-action-text-btn:hover { background: rgba(255,255,255,0.08); }
+.sp-mass-action-more-wrap { position: relative; }
+.sp-mass-action-more-btn {
+  background: rgba(255,255,255,0.08);
+}
+.sp-mass-action-dropdown {
+  position: absolute; bottom: calc(100% + 8px); right: 0;
+  min-width: 220px;
+  background: #fff; color: var(--bt-midnight);
+  border-radius: 8px; box-shadow: 0 12px 28px rgba(0,0,0,0.18);
+  padding: 6px 0;
+  border: 1px solid var(--g200);
+}
+.sp-mass-action-dropdown-item {
+  display: block; width: 100%; text-align: left;
+  padding: 10px 16px; font-size: 14px;
+  background: none; border: none; cursor: pointer; font-family: inherit;
+  color: var(--bt-midnight);
+}
+.sp-mass-action-dropdown-item:hover { background: var(--g50); }
+
+/* ══════════════ LINE ITEM STACKED INDICATOR ══════════════ */
+/* Mirrors the TimeClock stack pattern — multiple rows of the same cost code
+   are netted to one invoice line, the stack visual signals there are more
+   items packed inside. Click toggles the inline breakdown rows. */
+.lr-stack {
+  display: inline-flex; align-items: center; gap: 8px;
+  background: none; border: none; cursor: pointer; padding: 4px 4px 4px 2px;
+  margin-top: 2px; border-radius: 4px;
+  color: var(--bt-blue);
+  font-family: inherit; font-size: 11px; font-weight: 700;
+  flex-shrink: 0;
+  transition: background 0.12s;
+}
+.lr-stack:hover { background: rgba(0,101,219,0.06); }
+.lr-stack-on { background: rgba(0,101,219,0.10); }
+.lr-stack-visual {
+  position: relative; display: inline-block; width: 16px; height: 16px;
+}
+.lr-stack-visual > span {
+  position: absolute; border: 1.5px solid var(--bt-blue); border-radius: 2px;
+  background: white;
+}
+.lr-stack-back  { width: 10px; height: 10px; right: 0;   top: 0;   opacity: 0.35; }
+.lr-stack-mid   { width: 10px; height: 10px; right: 2px; top: 2px; opacity: 0.65; }
+.lr-stack-front { width: 10px; height: 10px; right: 4px; top: 4px; background: var(--bt-blue); }
+.lr-stack-count {
+  min-width: 14px; text-align: center; line-height: 1;
+  font-variant-numeric: tabular-nums;
+}

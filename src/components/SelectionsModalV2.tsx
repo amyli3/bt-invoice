@@ -49,6 +49,10 @@ interface SelectionChild {
   selectionStatus?: string;
   price: number;
   newInvoiceAmt: number | null;
+  // Breakdown of rows that were netted into this one. Populated by the
+  // wizard when "Combine same-cost-code lines" is on so the invoice page
+  // can expand the netted line back into its components.
+  rolledUp?: { name: string; amount: number }[];
 }
 
 interface SelectionGroup {
@@ -89,6 +93,7 @@ export default function SelectionsModalV2({ open, onClose, onAdd, jobName, data,
   const [checked, setChecked] = useState<Record<string, boolean>>({});
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [includeDescs, setIncludeDescs] = useState(true);
+  const [groupByCode, setGroupByCode] = useState(true);
   const [search, setSearch] = useState('');
 
   // V2 model: per-row checkboxes. Two distinct flows depending on whether
@@ -118,21 +123,28 @@ export default function SelectionsModalV2({ open, onClose, onAdd, jobName, data,
     return c.newInvoiceAmt !== null;
   };
 
+  // Remaining allowance budget for a pre-invoiced group, after subtracting
+  // any selections that were already invoiced against it. When this hits 0
+  // the allowance is exhausted — new selections bill at full price with no
+  // adjustment line.
+  const remainingBudget = (g: SelectionGroup): number => {
+    if (!isPreInvoiced(g)) return g.allowanceBudget ?? 0;
+    const alreadyInvoiced = g.children
+      .filter(child => child.selection !== 'Allowance' && child.newInvoiceAmt === null)
+      .reduce((s, child) => s + child.price, 0);
+    return Math.max(0, g.previouslyInvoiced - alreadyInvoiced);
+  };
+
   const effectiveAmount = (g: SelectionGroup, c: SelectionChild): number => {
     if (c.selection !== 'Allowance') return c.price;
     const checkedSelTotal = g.children
       .filter(child => child.selection !== 'Allowance' && checked[child.id])
       .reduce((s, child) => s + child.price, 0);
     if (isPreInvoiced(g)) {
-      // Prior selections already invoiced against this allowance consumed
-      // budget without being part of *this* invoice. Subtract them out so
-      // the remaining allowance reflects what's actually left to cover new
-      // selections.
-      const alreadyInvoiced = g.children
-        .filter(child => child.selection !== 'Allowance' && child.newInvoiceAmt === null)
-        .reduce((s, child) => s + child.price, 0);
-      const remainingBudget = Math.max(0, g.previouslyInvoiced - alreadyInvoiced);
-      return checkedSelTotal - remainingBudget;
+      const remaining = remainingBudget(g);
+      // Allowance exhausted by prior invoiced selections — no adjustment.
+      if (remaining === 0) return 0;
+      return checkedSelTotal - remaining;
     }
     return Math.max(0, c.price - checkedSelTotal);
   };
@@ -240,38 +252,94 @@ export default function SelectionsModalV2({ open, onClose, onAdd, jobName, data,
     });
   };
 
-  // Outgoing payload differs per mode:
-  //   PRE-invoiced groups: emit ONLY the allowance row's net line (if checked
-  //     and non-zero). Selection rows drive the math but don't bill individually.
-  //   Not pre-invoiced: emit each checked row at its positive effective amount.
+  // Per ADO #275689 (SRI Phase 1): when allowance and selection share a cost
+  // code, present as a single netted line. When cost codes differ, render
+  // separately. Applies to both pre-invoiced (reversal + selections) and
+  // not-pre-invoiced (allowance remaining + selections) flows.
+  const netByCostCode = (rows: SelectionChild[], _groupName: string): SelectionChild[] => {
+    const byCode = new Map<string, SelectionChild[]>();
+    rows.forEach(r => {
+      const arr = byCode.get(r.costCode) ?? [];
+      arr.push(r);
+      byCode.set(r.costCode, arr);
+    });
+    return Array.from(byCode.values()).map(codeRows => {
+      if (codeRows.length === 1) return codeRows[0];
+      const total = codeRows.reduce((s, r) => s + (r.newInvoiceAmt ?? 0), 0);
+      const allowance = codeRows.find(r => r.selection === 'Allowance');
+      const selections = codeRows.filter(r => r.selection !== 'Allowance');
+      // Description shows what rolled into the netted line so builders can
+      // see the breakdown without needing an expand UI. Truncate >3 to keep
+      // the row readable; "Related item" pill on the invoice covers context.
+      const names = selections.map(s => s.lineItem);
+      let label: string;
+      if (names.length === 0) {
+        label = allowance?.lineItem ?? codeRows[0].lineItem;
+      } else if (names.length <= 3) {
+        label = names.join(', ');
+      } else {
+        label = `${names.slice(0, 2).join(', ')} +${names.length - 2} more`;
+      }
+      return {
+        ...codeRows[0],
+        lineItem: label,
+        newInvoiceAmt: total,
+        selection: selections[0]?.selection ?? 'Allowance',
+        // Per-row breakdown for the invoice's expand UI.
+        rolledUp: codeRows.map(r => ({ name: r.lineItem, amount: r.newInvoiceAmt ?? 0 })),
+      };
+    });
+  };
+
+  // Gate netting on the user's "Combine same-cost-code lines" toggle.
+  // When off, the wizard emits each row individually so the builder can see
+  // and edit the breakdown on the invoice instead of a collapsed line.
+  const maybeNet = (rows: SelectionChild[], groupName: string): SelectionChild[] =>
+    groupByCode ? netByCostCode(rows, groupName) : rows;
+
+  // Outgoing payload:
+  //   PRE-invoiced + budget remaining: emit allowance reversal (-remaining) at
+  //     allowance code + checked selections at full price, then net by cost code.
+  //     Same code → one net line. Different codes → separate lines (#275689).
+  //   PRE-invoiced + allowance exhausted: just emit checked selections at full
+  //     price (no adjustment needed; the user just bills the new selection).
+  //   Not pre-invoiced: emit checked rows at positive effective amounts, then
+  //     net by cost code so allowance + same-code selections collapse to one line.
   const outgoing: SelectionGroup[] = availableData
     .map((g): SelectionGroup | null => {
       if (isPreInvoiced(g)) {
-        // Pre-invoiced: any checked selection drives the net automatically.
-        // The allowance row itself is info-only (no checkbox in the UI).
+        const checkedSelections = g.children
+          .filter(c => c.selection !== 'Allowance' && checked[c.id] && c.newInvoiceAmt !== null);
+        if (checkedSelections.length === 0) return null;
+        const remaining = remainingBudget(g);
+
+        if (remaining === 0) {
+          // Allowance exhausted — bill new selections directly.
+          const rows = checkedSelections.map(c => ({ ...c, newInvoiceAmt: c.price }));
+          const netted = maybeNet(rows, g.name);
+          return { ...g, children: netted };
+        }
+
         const allowanceChild = g.children.find(c => c.selection === 'Allowance');
         if (!allowanceChild) return null;
-        const hasCheckedSelection = g.children.some(
-          c => c.selection !== 'Allowance' && checked[c.id],
-        );
-        if (!hasCheckedSelection) return null;
-        const net = effectiveAmount(g, allowanceChild);
-        if (net === 0) return null;
-        const label = net > 0 ? `${g.name} overage` : `${g.name} credit`;
-        return {
-          ...g,
-          children: [{
-            ...allowanceChild,
-            lineItem: label,
-            newInvoiceAmt: net,
-          }],
+        const allowanceReversal: SelectionChild = {
+          ...allowanceChild,
+          lineItem: `${g.name} reversal`,
+          newInvoiceAmt: -remaining,
         };
+        const selectionRows = checkedSelections.map(c => ({ ...c, newInvoiceAmt: c.price }));
+        const netted = maybeNet([allowanceReversal, ...selectionRows], g.name);
+        const finalRows = netted.filter(r => (r.newInvoiceAmt ?? 0) !== 0);
+        if (finalRows.length === 0) return null;
+        return { ...g, children: finalRows };
       }
+
       const filteredChildren: SelectionChild[] = g.children
         .filter(c => checked[c.id] && isBillable(g, c) && effectiveAmount(g, c) > 0)
         .map(c => ({ ...c, newInvoiceAmt: effectiveAmount(g, c) }));
       if (filteredChildren.length === 0) return null;
-      return { ...g, children: filteredChildren };
+      const netted = maybeNet(filteredChildren, g.name);
+      return { ...g, children: netted };
     })
     .filter((g): g is SelectionGroup => g !== null);
 
@@ -469,13 +537,19 @@ export default function SelectionsModalV2({ open, onClose, onAdd, jobName, data,
 
         <div className="est-modal-body selv2-body">
           <div className="selv2-desc">
-            Pick what to bill on this invoice: the allowance, the approved selections beneath it, or both. Allowances and selections can be billed independently.
+            Pick what to bill on this invoice. Invoicing approved selections gives the cleanest reconciliation — allowances and selections can be billed together or independently.
           </div>
 
-          <label className="selv2-inline-check" onClick={() => setIncludeDescs(v => !v)}>
-            <div className={"est-check" + (includeDescs ? ' on' : '')} />
-            Include line item descriptions &amp; notes
-          </label>
+          <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap' }}>
+            <label className="selv2-inline-check" onClick={() => setIncludeDescs(v => !v)}>
+              <div className={"est-check" + (includeDescs ? ' on' : '')} />
+              Include line item descriptions &amp; notes
+            </label>
+            <label className="selv2-inline-check" onClick={() => setGroupByCode(v => !v)}>
+              <div className={"est-check" + (groupByCode ? ' on' : '')} />
+              Combine same-cost-code lines on the invoice
+            </label>
+          </div>
 
           <div className="selv2-controls">
             <label className="selv2-inline-check" onClick={toggleAll}>

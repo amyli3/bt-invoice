@@ -56,15 +56,49 @@ function fmtCurrency(v: number) {
 
 function LineRow({ item, onChange, onRemove, vis, taxRate }: LineRowProps) {
   const [editingUnitCost, setEditingUnitCost] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const u = (f: string, v: string | number) => onChange({...item, [f]: v});
   const bc = item.unitCost * item.quantity;
   const cp = bc * (1 + item.markup / 100);
   const taxAmt = cp * (taxRate / 100);
+  const hasBreakdown = !!item.rolledUp && item.rolledUp.length > 1;
+  // Column span for the nested-breakdown row; mirrors the visible-column count.
+  const colSpan = 2 // description + related (always shown last)
+    + (vis.costType ? 1 : 0)
+    + (vis.unitCost ? 1 : 0)
+    + (vis.quantity ? 1 : 0)
+    + (vis.unit ? 1 : 0)
+    + (vis.builderCost ? 1 : 0)
+    + (vis.markup ? 1 : 0)
+    + 1 // client price column
+    + (vis.tax && taxRate > 0 ? 1 : 0)
+    + (vis.bill ? 1 : 0)
+    + 1; // remove button column
   return (
+    <>
     <tr>
       <td>
-        <div><textarea className="cell-input cell-input-multi" style={{fontWeight: 600}} rows={1} value={item.description} onChange={e => u('description', e.target.value)} /></div>
-        <div><input className="cell-input" style={{fontSize: 11, color: 'var(--g400)'}} value={item.costCode} onChange={e => u('costCode', e.target.value)} /></div>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+          {hasBreakdown && (
+            <button
+              type="button"
+              onClick={() => setExpanded(v => !v)}
+              aria-label={expanded ? 'Hide breakdown' : 'Show breakdown'}
+              className={'lr-stack' + (expanded ? ' lr-stack-on' : '')}
+            >
+              <span className="lr-stack-visual" aria-hidden="true">
+                <span className="lr-stack-back" />
+                <span className="lr-stack-mid" />
+                <span className="lr-stack-front" />
+              </span>
+              <span className="lr-stack-count">{item.rolledUp!.length}</span>
+            </button>
+          )}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div><textarea className="cell-input cell-input-multi" style={{fontWeight: 600}} rows={1} value={item.description} onChange={e => u('description', e.target.value)} /></div>
+            <div><input className="cell-input" style={{fontSize: 11, color: 'var(--g400)'}} value={item.costCode} onChange={e => u('costCode', e.target.value)} /></div>
+          </div>
+        </div>
       </td>
       {vis.costType && <td><select className="badge" style={{cursor: 'pointer', fontSize: 12, padding: '2px 6px'}} value={item.costType} onChange={e => u('costType', e.target.value)}>{COST_TYPES.map(t => <option key={t}>{t}</option>)}</select></td>}
       {vis.unitCost && <td style={{textAlign: 'right'}}>
@@ -94,6 +128,19 @@ function LineRow({ item, onChange, onRemove, vis, taxRate }: LineRowProps) {
       </td>
       <td style={{width: 32, textAlign: 'center'}}><button className="rr" onClick={onRemove}>&times;</button></td>
     </tr>
+    {hasBreakdown && expanded && item.rolledUp!.map((r, idx) => (
+      <tr key={`${item.id}-roll-${idx}`} style={{ background: 'var(--g50)' }}>
+        <td colSpan={colSpan} style={{ padding: '6px 12px 6px 36px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12, color: 'var(--g600)' }}>
+            <span>{r.name}</span>
+            <span style={{ fontWeight: 500, color: r.amount < 0 ? 'var(--red, #c53030)' : 'var(--g700)' }}>
+              {fmtCurrency(r.amount)}
+            </span>
+          </div>
+        </td>
+      </tr>
+    ))}
+    </>
   );
 }
 

@@ -315,6 +315,7 @@ interface SelectionsPageProps {
   onToggleAllowanceComplete?: (id: string) => void;
   onOpenInvoice?: () => void;
   onOpenReallocation?: () => void;
+  onInvoiceSelected?: (ids: string[], target: 'new' | 'existing') => void;
 }
 
 export default function SelectionsPage({
@@ -326,7 +327,9 @@ export default function SelectionsPage({
   onToggleAllowanceComplete,
   onOpenInvoice,
   onOpenReallocation,
+  onInvoiceSelected,
 }: SelectionsPageProps) {
+  const [moreActionsOpen, setMoreActionsOpen] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>('allowance');
   const [viewLayout, setViewLayout] = useState<ViewLayout>('list');
   const [audience, setAudience] = useState<AudienceView>('builder');
@@ -401,6 +404,14 @@ export default function SelectionsPage({
     const next: Record<string, boolean> = {};
     allIds.forEach(id => { next[id] = val; });
     setChecked(next);
+  };
+  const selectedIds = allIds.filter(id => checked[id]);
+  const selectedCount = selectedIds.length;
+  const clearSelected = () => {
+    const next: Record<string, boolean> = {};
+    allIds.forEach(id => { next[id] = false; });
+    setChecked(next);
+    setMoreActionsOpen(false);
   };
 
   const filteredData = useMemo(() => {
@@ -1065,6 +1076,76 @@ export default function SelectionsPage({
           </div>
         );
       })()}
+
+      {selectedCount > 0 && (
+        <div className="sp-mass-action-wrap">
+          <div className="sp-mass-action-bar">
+            <span className="sp-mass-action-count">{selectedCount} Selected</span>
+            <button
+              type="button"
+              className="sp-mass-action-icon-btn"
+              aria-label="Clear selection"
+              onClick={clearSelected}
+            >
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                <path d="M3 3L11 11M11 3L3 11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+              </svg>
+            </button>
+            <div className="sp-mass-action-divider" />
+            <button type="button" className="sp-mass-action-icon-btn" aria-label="Edit">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <path d="M11.5 2.5L13.5 4.5L5.5 12.5L2 13L2.5 9.5L10.5 1.5L11.5 2.5Z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+              </svg>
+            </button>
+            <button type="button" className="sp-mass-action-icon-btn" aria-label="Duplicate">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <rect x="4" y="4" width="9" height="9" rx="1.5" stroke="currentColor" strokeWidth="1.4" />
+                <path d="M3 11V4.5C3 3.67 3.67 3 4.5 3H11" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+              </svg>
+            </button>
+            <button type="button" className="sp-mass-action-icon-btn sp-mass-action-trash" aria-label="Delete">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <path d="M3 4.5H13M5.5 4.5V13C5.5 13.55 5.95 14 6.5 14H9.5C10.05 14 10.5 13.55 10.5 13V4.5M6.5 4.5V3C6.5 2.45 6.95 2 7.5 2H8.5C9.05 2 9.5 2.45 9.5 3V4.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+            <div className="sp-mass-action-divider" />
+            <button type="button" className="sp-mass-action-text-btn">Approve</button>
+            <div className="sp-mass-action-divider" />
+            <div className="sp-mass-action-more-wrap">
+              <button
+                type="button"
+                className="sp-mass-action-text-btn sp-mass-action-more-btn"
+                onClick={() => setMoreActionsOpen(v => !v)}
+              >
+                More actions
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{ transform: moreActionsOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.15s' }}>
+                  <path d="M2 6.5L5 3.5L8 6.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
+              {moreActionsOpen && (
+                <div className="sp-mass-action-dropdown">
+                  <button type="button" className="sp-mass-action-dropdown-item">Decline</button>
+                  <button type="button" className="sp-mass-action-dropdown-item">Reset</button>
+                  <button
+                    type="button"
+                    className="sp-mass-action-dropdown-item"
+                    onClick={() => { setMoreActionsOpen(false); onInvoiceSelected?.(selectedIds, 'existing'); }}
+                  >
+                    Add to Existing Invoice
+                  </button>
+                  <button
+                    type="button"
+                    className="sp-mass-action-dropdown-item"
+                    onClick={() => { setMoreActionsOpen(false); onInvoiceSelected?.(selectedIds, 'new'); }}
+                  >
+                    New Invoice
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
