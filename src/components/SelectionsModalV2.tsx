@@ -1,27 +1,51 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { fmt } from '../utils';
 
-/* ─── Icons ─── */
+/* ─── Scenario note tooltip ─── */
+function ScenarioTooltip({ note }: { note: string }) {
+  const iconRef = useRef<HTMLSpanElement>(null);
+  const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
+
+  const show = () => {
+    if (!iconRef.current) return;
+    const r = iconRef.current.getBoundingClientRect();
+    setPos({ left: r.left + r.width / 2, top: r.top - 8 });
+  };
+  const hide = () => setPos(null);
+
+  return (
+    <span className="sel-scenario-tip" onClick={e => e.stopPropagation()} onMouseEnter={show} onMouseLeave={hide}>
+      <span ref={iconRef} className="sel-scenario-tip-icon">i</span>
+      {pos && createPortal(
+        <span className="sel-scenario-tip-bubble sel-scenario-tip-bubble-portal" style={{ left: pos.left, top: pos.top }}>
+          {note}
+        </span>,
+        document.body,
+      )}
+    </span>
+  );
+}
+
 const AllowanceIcon = () => (
-  <svg width="14" height="14" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" style={{verticalAlign:'middle', marginRight:3}}>
-    <path fillRule="evenodd" clipRule="evenodd" d="M2.8241 4.00381C1.65395 4.53038 0.625 5.38671 0.625 6.5625V9.6875C0.625 10.8638 1.6533 11.7202 2.82364 12.2467C3.60869 12.5999 4.56725 12.8603 5.625 13.0023V13.4375C5.625 14.6138 6.6533 15.4702 7.82364 15.9967C9.05236 16.5495 10.7061 16.875 12.5 16.875C14.2939 16.875 15.9476 16.5495 17.1764 15.9967C18.3467 15.4702 19.375 14.6138 19.375 13.4375V10.3207L19.375 10.3125C19.375 9.27868 18.5714 8.4933 17.6181 7.97446C16.7577 7.50618 15.6318 7.168 14.375 6.99717V6.5625C14.375 5.38671 13.346 4.53038 12.1759 4.00381C10.9471 3.45084 9.29334 3.125 7.5 3.125C5.70666 3.125 4.05292 3.45084 2.8241 4.00381Z" fill="currentColor"/>
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0 }}>
+    <path fillRule="evenodd" clipRule="evenodd" d="M2.25928 3.20305C1.32316 3.6243 0.5 4.30937 0.5 5.25V7.75C0.5 8.69103 1.32264 9.37614 2.25891 9.79738C2.88695 10.0799 3.6538 10.2883 4.5 10.4019V10.75C4.5 11.691 5.32264 12.3761 6.25891 12.7974C7.24189 13.2396 8.56489 13.5 10 13.5C11.4351 13.5 12.7581 13.2396 13.7411 12.7974C14.6774 12.3761 15.5 11.691 15.5 10.75V8.25655L15.5 8.24998C15.5 7.42295 14.8571 6.79464 14.0945 6.37957C13.4062 6.00494 12.5055 5.7344 11.5 5.59774V5.25C11.5 4.30937 10.6768 3.6243 9.74072 3.20305C8.75766 2.76067 7.43467 2.5 6 2.5C4.56533 2.5 3.24234 2.76067 2.25928 3.20305ZM2.66965 4.11497C1.79613 4.50806 1.5 4.94799 1.5 5.25C1.5 5.55201 1.79613 5.99194 2.66965 6.38503C3.06609 6.56343 3.54313 6.71216 4.07865 6.81865C4.09098 6.8206 4.10317 6.823 4.11519 6.82583C4.68689 6.93692 5.32401 7 6 7C6.67599 7 7.31311 6.93692 7.88481 6.82583C7.89683 6.823 7.90902 6.8206 7.92135 6.81865C8.45687 6.71216 8.93391 6.56343 9.33035 6.38503C10.2039 5.99194 10.5 5.55201 10.5 5.25C10.5 4.94799 10.2039 4.50806 9.33035 4.11497C8.50376 3.74301 7.32675 3.5 6 3.5C4.67325 3.5 3.49624 3.74301 2.66965 4.11497ZM7.5 7.90171C7.02174 7.966 6.51815 8 6 8C5.48185 8 4.97826 7.966 4.5 7.90171V9.39193C4.9678 9.46159 5.472 9.5 6 9.5C6.528 9.5 7.0322 9.46159 7.5 9.39193V7.90171ZM8.5 9.18152V7.71464C8.95353 7.60388 9.37115 7.46326 9.74072 7.29695C10.0086 7.1764 10.2673 7.03424 10.5 6.87067V7.75C10.5 8.05272 10.2039 8.49261 9.33079 8.88543C9.08347 8.9967 8.80475 9.09642 8.5 9.18152ZM7.5 10.7151C7.21945 10.6471 6.95296 10.5679 6.70349 10.4789C6.47276 10.4928 6.23792 10.5 6 10.5C5.83167 10.5 5.66488 10.4964 5.5 10.4894V10.75C5.5 11.0527 5.79611 11.4926 6.66921 11.8854C6.91653 11.9967 7.19525 12.0964 7.5 12.1815V10.7151ZM8.5 12.3919V10.9015C8.97789 10.9657 9.48154 11 10 11C10.5182 11 11.0218 10.966 11.5 10.9018V12.3919C11.0322 12.4616 10.528 12.5 10 12.5C9.472 12.5 8.9678 12.4616 8.5 12.3919ZM3.5 7.71464C3.04647 7.60388 2.62885 7.46326 2.25928 7.29695C1.99139 7.1764 1.73275 7.03424 1.5 6.87067V7.75C1.5 8.05272 1.79611 8.49261 2.66921 8.88543C2.91653 8.9967 3.19525 9.09642 3.5 9.18152V7.71464ZM14.5 8.24743L14.5 8.25V8.25351C14.4977 8.55611 14.2005 8.99412 13.3308 9.38542C12.9356 9.56321 12.4603 9.7115 11.9266 9.81784C11.9108 9.82018 11.8952 9.82325 11.8798 9.82704C11.3095 9.93737 10.6741 9.99998 10 9.99998C9.76049 9.99998 9.52556 9.99199 9.29648 9.9767C9.45127 9.92085 9.59969 9.861 9.74109 9.79738C10.6774 9.37614 11.5 8.69103 11.5 7.75V6.60791C12.3571 6.73703 13.0865 6.96946 13.6165 7.2579C14.2813 7.61977 14.4986 7.98712 14.5 8.24743ZM12.5 10.715V12.1815C12.8048 12.0964 13.0835 11.9967 13.3308 11.8854C14.2039 11.4926 14.5 11.0527 14.5 10.75V9.87134C14.2674 10.0348 14.0089 10.1769 13.7411 10.2974C13.3714 10.4637 12.9537 10.6043 12.5 10.715Z" fill="currentColor"/>
   </svg>
 );
 
 const SelectionIcon = () => (
-  <svg width="14" height="14" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" style={{verticalAlign:'middle', marginRight:3}}>
-    <path fillRule="evenodd" clipRule="evenodd" d="M4.13836 2.69428C4.25278 2.04532 4.84871 1.60219 5.49396 1.66751L5.58642 1.68033L9.89496 2.44004C10.5439 2.55447 10.9871 3.1504 10.9217 3.79565L10.9089 3.88811L10.0428 8.79613L14.7265 7.09148C15.3444 6.86661 16.0244 7.15929 16.2917 7.74806L16.3287 7.83857L17.825 11.9497C17.9299 12.2379 17.9249 12.5537 17.8127 12.8372L17.8118 16.25C17.8118 16.909 17.3019 17.4489 16.6551 17.4966L16.5618 17.5H5.62434C5.44539 17.5 5.26986 17.4864 5.09333 17.4588C3.24107 17.1686 1.97441 15.4021 2.22748 13.5468L2.24872 13.4109L4.13836 2.69428Z" fill="currentColor"/>
+  <svg width="13" height="13" viewBox="0 0 13 13" fill="none" style={{ flexShrink: 0 }}>
+    <path fillRule="evenodd" clipRule="evenodd" d="M1.55443 0.826519C1.64598 0.307348 2.12272 -0.0471547 2.63892 0.00510098L2.71289 0.0153593L6.15972 0.623128C6.67889 0.714673 7.03339 1.19141 6.98113 1.70761L6.97088 1.78158L6.278 5.708L10.025 4.34428C10.5192 4.16438 11.0633 4.39852 11.2771 4.86954L11.3067 4.94195L12.5038 8.23088C12.5877 8.46141 12.5837 8.71404 12.4939 8.94088L12.4932 11.6711C12.4932 12.1983 12.0853 12.6302 11.5679 12.6684L11.4932 12.6711H2.74322C2.60006 12.6711 2.45964 12.6602 2.31842 12.6381C0.836606 12.406 -0.176726 10.9928 0.025735 9.50854L0.0427299 9.39982L1.55443 0.826519ZM11.493 9.663L5.975 11.671L11.4932 11.6711L11.493 9.663ZM1.02754 9.57347L2.53924 1.00017L5.98607 1.60794L4.46664 10.225L4.44771 10.3178C4.24197 11.2051 3.38338 11.7924 2.47301 11.6501C1.51423 11.4999 0.855115 10.5513 1.02754 9.57347ZM10.367 5.28397L6.0775 6.845L5.45145 10.3987C5.42454 10.5513 5.38551 10.6987 5.33552 10.8402L11.5641 8.5729L10.367 5.28397ZM3.49324 9.92112C3.49324 9.50691 3.15745 9.17112 2.74324 9.17112C2.32902 9.17112 1.99324 9.50691 1.99324 9.92112C1.99324 10.3353 2.32902 10.6711 2.74324 10.6711C3.15745 10.6711 3.49324 10.3353 3.49324 9.92112Z" fill="currentColor"/>
   </svg>
 );
 
-/* ─── Types ─── */
+/* ─── Types (matches V1 SelectionsModal data shape) ─── */
 interface SelectionChild {
   id: string;
   lineItem: string;
   costCode: string;
+  costType?: string;
   selection: string;
-  selectionLink?: boolean;
   selectionStatus?: string;
   price: number;
   newInvoiceAmt: number | null;
@@ -31,111 +55,21 @@ interface SelectionGroup {
   id: string;
   type: 'allowance' | 'selection';
   name: string;
+  scenarioNote?: string;
   revisedPrice: number;
   previouslyInvoiced: number;
   invoiceBalance: number;
+  allowanceBudget?: number;
+  overage?: number;
   status?: string;
+  isComplete?: boolean;
   children: SelectionChild[];
 }
 
-/* ─── Mock Data ─── */
-const SELECTIONS_DATA: SelectionGroup[] = [
-  // ── Allowances with selections (overages) ──
-  {
-    id: 'sg1', type: 'allowance', name: 'Cabinets',
-    revisedPrice: 34800, previouslyInvoiced: 24000, invoiceBalance: 10800,
-    children: [
-      { id: 'sg1a', lineItem: 'Cabinets', costCode: '12.20 Cabinets', selection: 'Allowance', price: 24000, newInvoiceAmt: -24000 },
-      { id: 'sg1b', lineItem: 'Custom cabinetry', costCode: '12.20 Cabinets', selection: 'Premium custom package', price: 20000, newInvoiceAmt: 20000 },
-      { id: 'sg1c', lineItem: 'Cabinet install', costCode: '12.15 Cabinet Install labor', selection: 'Premium custom package', price: 14800, newInvoiceAmt: 14800 },
-    ]
-  },
-  {
-    id: 'sg2', type: 'allowance', name: 'Light fixtures',
-    revisedPrice: 22000, previouslyInvoiced: 18000, invoiceBalance: 4000,
-    children: [
-      { id: 'sg2a', lineItem: 'Lighting allowance', costCode: '11 Lighting', selection: 'Allowance', price: 18000, newInvoiceAmt: -18000 },
-      { id: 'sg2b', lineItem: 'Lighting package', costCode: '11 Lighting', selection: 'Standard lighting', price: 12000, newInvoiceAmt: 12000 },
-      { id: 'sg2c', lineItem: 'Lighting install', costCode: '11.5 Lighting install', selection: 'Standard lighting', price: 6000, newInvoiceAmt: 6000 },
-      { id: 'sg2d', lineItem: 'Dimmer switches (6x)', costCode: '11.2 Electrical', selection: 'Standard lighting', price: 4000, newInvoiceAmt: 4000 },
-    ]
-  },
-  {
-    id: 'sg3', type: 'allowance', name: 'Kitchen tiles',
-    revisedPrice: 9800, previouslyInvoiced: 7200, invoiceBalance: 2600,
-    children: [
-      { id: 'sg3a', lineItem: 'Kitchen tiles', costCode: '15.20 - Tile Materials', selection: 'Allowance', price: 7200, newInvoiceAmt: -7200 },
-      { id: 'sg3b', lineItem: 'Backsplash tile', costCode: '15.20 - Tile Materials', selection: 'Basic Package', selectionStatus: 'Approved', price: 5400, newInvoiceAmt: 5400 },
-      { id: 'sg3c', lineItem: 'Tile grout & adhesive', costCode: '15.20 - Tile Materials', selection: 'Basic Package', price: 1800, newInvoiceAmt: 1800 },
-      { id: 'sg3d', lineItem: 'Tile installation labor', costCode: '15.10 - Tile Labor', selection: 'Basic Package', price: 2600, newInvoiceAmt: 2600 },
-    ]
-  },
-  {
-    id: 'sg6', type: 'allowance', name: 'Bathroom fixtures',
-    revisedPrice: 8500, previouslyInvoiced: 5000, invoiceBalance: 3500,
-    children: [
-      { id: 'sg6a', lineItem: 'Bathroom fixtures', costCode: '07.10 - Fixtures', selection: 'Allowance', price: 5000, newInvoiceAmt: -5000 },
-      { id: 'sg6b', lineItem: 'Vanity & sink combo', costCode: '07.10 - Fixtures', selection: 'Modern Deluxe package', selectionStatus: 'Approved', price: 3800, newInvoiceAmt: 3800 },
-      { id: 'sg6c', lineItem: 'Faucet set', costCode: '07.10 - Fixtures', selection: 'Modern Deluxe package', price: 1200, newInvoiceAmt: 1200 },
-      { id: 'sg6d', lineItem: 'Shower head & valve', costCode: '07.15 - Plumbing Fixtures', selection: 'Modern Deluxe package', price: 2200, newInvoiceAmt: 2200 },
-      { id: 'sg6e', lineItem: 'Towel bars & accessories', costCode: '07.10 - Fixtures', selection: 'Modern Deluxe package', price: 1300, newInvoiceAmt: 1300 },
-    ]
-  },
-  {
-    id: 'sg7', type: 'allowance', name: 'Flooring',
-    revisedPrice: 15200, previouslyInvoiced: 12000, invoiceBalance: 3200,
-    children: [
-      { id: 'sg7a', lineItem: 'Flooring allowance', costCode: '14.00 - Flooring', selection: 'Allowance', price: 12000, newInvoiceAmt: -12000 },
-      { id: 'sg7b', lineItem: 'Engineered hardwood', costCode: '14.00 - Flooring', selection: 'Premium Oak', selectionStatus: 'Approved', price: 9500, newInvoiceAmt: 9500 },
-      { id: 'sg7c', lineItem: 'Floor installation', costCode: '14.05 - Flooring Labor', selection: 'Premium Oak', price: 4200, newInvoiceAmt: 4200 },
-      { id: 'sg7d', lineItem: 'Underlayment', costCode: '14.00 - Flooring', selection: 'Premium Oak', price: 1500, newInvoiceAmt: 1500 },
-    ]
-  },
-  // ── Standalone selections (post-contract additions) ──
-  {
-    id: 'sg4', type: 'selection', name: 'GE Over the Range Microwave', status: 'Approved Selection',
-    revisedPrice: 1440, previouslyInvoiced: 0, invoiceBalance: 1440,
-    children: [
-      { id: 'sg4a', lineItem: 'Microwave', costCode: '16.00 Appliances', selection: 'GE Over the Range Microwave', price: 1440, newInvoiceAmt: 1440 },
-    ]
-  },
-  {
-    id: 'sg5', type: 'selection', name: 'Simzlife 45 Bottle Wine Fridge', status: 'Approved Selection',
-    revisedPrice: 360, previouslyInvoiced: 0, invoiceBalance: 360,
-    children: [
-      { id: 'sg5a', lineItem: 'Wine Fridge', costCode: '16.00 Appliances', selection: 'Simzlife 45 Bottle Wine Fridge', price: 360, newInvoiceAmt: 360 },
-    ]
-  },
-  {
-    id: 'sg8', type: 'selection', name: 'Outdoor ceiling fan', status: 'Approved Selection',
-    revisedPrice: 850, previouslyInvoiced: 0, invoiceBalance: 850,
-    children: [
-      { id: 'sg8a', lineItem: 'Ceiling fan', costCode: '11.3 - Fans', selection: 'Outdoor ceiling fan', price: 650, newInvoiceAmt: 650 },
-      { id: 'sg8b', lineItem: 'Fan installation', costCode: '11.3 - Fans', selection: 'Outdoor ceiling fan', price: 200, newInvoiceAmt: 200 },
-    ]
-  },
-  {
-    id: 'sg9', type: 'selection', name: 'Smart thermostat', status: 'Approved Selection',
-    revisedPrice: 480, previouslyInvoiced: 0, invoiceBalance: 480,
-    children: [
-      { id: 'sg9a', lineItem: 'Nest thermostat', costCode: '10.00 - HVAC', selection: 'Smart thermostat', price: 350, newInvoiceAmt: 350 },
-      { id: 'sg9b', lineItem: 'Thermostat install', costCode: '10.00 - HVAC', selection: 'Smart thermostat', price: 130, newInvoiceAmt: 130 },
-    ]
-  },
-  {
-    id: 'sg10', type: 'selection', name: 'Upgraded garage door opener', status: 'Approved Selection',
-    revisedPrice: 1200, previouslyInvoiced: 0, invoiceBalance: 1200,
-    children: [
-      { id: 'sg10a', lineItem: 'Belt-drive opener', costCode: '19.00 - Garage', selection: 'Upgraded garage door opener', price: 800, newInvoiceAmt: 800 },
-      { id: 'sg10b', lineItem: 'Opener installation', costCode: '19.00 - Garage', selection: 'Upgraded garage door opener', price: 400, newInvoiceAmt: 400 },
-    ]
-  },
-];
-
 function fmtCurrency(v: number) {
   const abs = Math.abs(v);
-  const formatted = '$' + fmt(abs);
-  return v < 0 ? '-' + formatted : formatted;
+  const s = '$' + fmt(abs);
+  return v < 0 ? '-' + s : s;
 }
 
 /* ─── Component ─── */
@@ -144,215 +78,372 @@ interface Props {
   onClose: () => void;
   onAdd: (items: SelectionGroup[]) => void;
   jobName: string;
+  data: SelectionGroup[];
   addedGroupIds?: string[];
 }
 
-export default function SelectionsModalV2({ open, onClose, onAdd, jobName, addedGroupIds = [] }: Props) {
+export default function SelectionsModalV2({ open, onClose, onAdd, jobName, data, addedGroupIds = [] }: Props) {
   const addedSet = new Set(addedGroupIds);
-  const availableData = SELECTIONS_DATA.filter(d => {
-    if (addedSet.has(d.id)) return false;
-    // Hide fully invoiced items (no remaining balance and no new amounts to invoice)
-    const childrenTotal = d.children.reduce((s, c) => s + (c.newInvoiceAmt ?? 0), 0);
-    if (d.invoiceBalance === 0 && childrenTotal === 0) return false;
+  const availableData = data.filter(d => !addedSet.has(d.id));
+
+  const [checked, setChecked] = useState<Record<string, boolean>>({});
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [includeDescs, setIncludeDescs] = useState(true);
+  const [search, setSearch] = useState('');
+
+  // V2 model: per-row checkboxes. Two distinct flows depending on whether
+  // the allowance was already invoiced.
+  //
+  // NOT pre-invoiced:
+  //   Selections bill at full approved price.
+  //   Allowance row = REMAINING budget (budget − checked selections), clamped ≥ 0.
+  //   Checking both never double-bills; an overage just zeroes the allowance.
+  //
+  // PRE-invoiced (g.previouslyInvoiced > 0):
+  //   The allowance budget was already billed. Selections don't bill individually
+  //   (would double-bill). The allowance row repurposes as a NET ADJUSTMENT:
+  //     net = checked selections − previously invoiced
+  //     net < 0 → credit owed to client
+  //     net > 0 → overage to invoice
+  //   Only the net line goes on the invoice for this group.
+  const isPreInvoiced = (g: SelectionGroup) => g.previouslyInvoiced > 0;
+
+  const isBillable = (g: SelectionGroup, c: SelectionChild) => {
+    if (c.selection === 'Allowance') {
+      // Marked complete + never pre-invoiced: allowance closes out on the
+      // budget side, only the selections are billable on this invoice.
+      if (g.isComplete && !isPreInvoiced(g)) return false;
+      return true;
+    }
+    return c.newInvoiceAmt !== null;
+  };
+
+  const effectiveAmount = (g: SelectionGroup, c: SelectionChild): number => {
+    if (c.selection !== 'Allowance') return c.price;
+    const checkedSelTotal = g.children
+      .filter(child => child.selection !== 'Allowance' && checked[child.id])
+      .reduce((s, child) => s + child.price, 0);
+    if (isPreInvoiced(g)) {
+      // Prior selections already invoiced against this allowance consumed
+      // budget without being part of *this* invoice. Subtract them out so
+      // the remaining allowance reflects what's actually left to cover new
+      // selections.
+      const alreadyInvoiced = g.children
+        .filter(child => child.selection !== 'Allowance' && child.newInvoiceAmt === null)
+        .reduce((s, child) => s + child.price, 0);
+      const remainingBudget = Math.max(0, g.previouslyInvoiced - alreadyInvoiced);
+      return checkedSelTotal - remainingBudget;
+    }
+    return Math.max(0, c.price - checkedSelTotal);
+  };
+
+  // Checkable now = billable AND has a non-zero effective amount.
+  // Pre-invoiced allowance rows are NEVER checkable directly — checking the
+  // selections drives the net automatically (avoiding the "I checked
+  // selections but the wizard says $0" footgun).
+  const isCheckable = (g: SelectionGroup, c: SelectionChild) => {
+    if (!isBillable(g, c)) return false;
+    if (c.selection === 'Allowance') {
+      if (isPreInvoiced(g)) return false;
+      return effectiveAmount(g, c) > 0;
+    }
     return true;
-  });
+  };
 
-  const allowanceGroups = availableData.filter(d => d.type === 'allowance');
-  const selectionGroups = availableData.filter(d => d.type === 'selection');
-
-  const [selected, setSelected] = useState<Record<string, boolean>>({});
-  const [expanded, setExpanded] = useState<Record<string, boolean>>(() => {
+  useEffect(() => {
+    if (!open) return;
     const e: Record<string, boolean> = {};
-    SELECTIONS_DATA.forEach(d => { e[d.id] = false; });
-    return e;
-  });
+    availableData.forEach(g => { e[g.id] = true; });
+    setChecked({});
+    setExpanded(e);
+    setSearch('');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   if (!open) return null;
 
-  const allIds = availableData.map(d => d.id);
-  const allSelected = allIds.length > 0 && allIds.every(id => selected[id]);
-  const someSelected = allIds.some(id => selected[id]);
-  const selectedCount = allIds.filter(id => selected[id]).length;
+  const filtered = search
+    ? availableData.filter(g => {
+        const q = search.toLowerCase();
+        if (g.name.toLowerCase().includes(q)) return true;
+        return g.children.some(c =>
+          c.lineItem.toLowerCase().includes(q) ||
+          c.costCode.toLowerCase().includes(q) ||
+          c.selection.toLowerCase().includes(q)
+        );
+      })
+    : availableData;
 
-  const toggleAll = () => {
-    const next: Record<string, boolean> = { ...selected };
-    const val = !allSelected;
-    allIds.forEach(id => { next[id] = val; });
-    setSelected(next);
+  const allowances = filtered.filter(g => g.type === 'allowance');
+  const standalone = filtered.filter(g => g.type === 'selection');
+
+  const toggleChild = (g: SelectionGroup, c: SelectionChild) => {
+    // Allow unchecking even when not checkable now (e.g. user previously
+    // checked the allowance, then checked selections that covered it — they
+    // should still be able to clear the stale check).
+    if (!isBillable(g, c)) return;
+    if (!checked[c.id] && !isCheckable(g, c)) return;
+    setChecked(s => ({ ...s, [c.id]: !s[c.id] }));
   };
-  const toggleItem = (id: string) => setSelected(s => ({ ...s, [id]: !s[id] }));
   const toggleExpand = (id: string) => setExpanded(e => ({ ...e, [id]: !e[id] }));
 
-  const invoiceSubtotal = availableData
-    .filter(d => selected[d.id])
-    .reduce((sum, d) => {
-      if (d.children && d.children.length > 0) {
-        return sum + d.children.reduce((childSum, c) => childSum + (c.newInvoiceAmt ?? 0), 0);
-      }
-      return sum + d.invoiceBalance;
-    }, 0);
+  // Tri-state per group — considers only currently-checkable children.
+  const groupState = (g: SelectionGroup): 'all' | 'none' | 'partial' => {
+    const checkable = g.children.filter(c => isCheckable(g, c) || checked[c.id]);
+    if (checkable.length === 0) return 'none';
+    const onCount = checkable.filter(c => checked[c.id]).length;
+    if (onCount === 0) return 'none';
+    if (onCount === checkable.length) return 'all';
+    return 'partial';
+  };
 
-  // Summary stats
-  const totalAllowanceBudget = allowanceGroups.reduce((s, d) => {
-    const allowanceChild = d.children.find(c => c.selection === 'Allowance');
-    return s + (allowanceChild ? allowanceChild.price : 0);
-  }, 0);
-  const totalSelectionCost = allowanceGroups.reduce((s, d) => {
-    return s + d.children.filter(c => c.selection !== 'Allowance').reduce((cs, c) => cs + c.price, 0);
-  }, 0);
-  const totalOverage = totalSelectionCost - totalAllowanceBudget;
-  const totalStandaloneValue = selectionGroups.reduce((s, d) => s + d.revisedPrice, 0);
+  const toggleGroup = (g: SelectionGroup) => {
+    const state = groupState(g);
+    const next = state !== 'all';
+    setChecked(s => {
+      const c = { ...s };
+      g.children.forEach(child => {
+        if (isCheckable(g, child) || c[child.id]) c[child.id] = next;
+      });
+      return c;
+    });
+  };
+
+  // Global select all — uses billable rows; allowance rows will self-clamp
+  // to 0 when their selections are also selected.
+  const allBillableIds = filtered.flatMap(g => g.children.filter(c => isBillable(g, c)).map(c => c.id));
+  const globalState: 'all' | 'none' | 'partial' = (() => {
+    if (allBillableIds.length === 0) return 'none';
+    const onCount = allBillableIds.filter(id => checked[id]).length;
+    if (onCount === 0) return 'none';
+    if (onCount === allBillableIds.length) return 'all';
+    return 'partial';
+  })();
+
+  const toggleAll = () => {
+    const next = globalState !== 'all';
+    setChecked(s => {
+      const c = { ...s };
+      allBillableIds.forEach(id => { c[id] = next; });
+      return c;
+    });
+  };
+
+  // Expand/collapse all
+  const allExpanded = filtered.length > 0 && filtered.every(g => expanded[g.id]);
+  const toggleExpandAll = () => {
+    const next = !allExpanded;
+    setExpanded(e => {
+      const v = { ...e };
+      filtered.forEach(g => { v[g.id] = next; });
+      return v;
+    });
+  };
+
+  // Outgoing payload differs per mode:
+  //   PRE-invoiced groups: emit ONLY the allowance row's net line (if checked
+  //     and non-zero). Selection rows drive the math but don't bill individually.
+  //   Not pre-invoiced: emit each checked row at its positive effective amount.
+  const outgoing: SelectionGroup[] = availableData
+    .map((g): SelectionGroup | null => {
+      if (isPreInvoiced(g)) {
+        // Pre-invoiced: any checked selection drives the net automatically.
+        // The allowance row itself is info-only (no checkbox in the UI).
+        const allowanceChild = g.children.find(c => c.selection === 'Allowance');
+        if (!allowanceChild) return null;
+        const hasCheckedSelection = g.children.some(
+          c => c.selection !== 'Allowance' && checked[c.id],
+        );
+        if (!hasCheckedSelection) return null;
+        const net = effectiveAmount(g, allowanceChild);
+        if (net === 0) return null;
+        const label = net > 0 ? `${g.name} overage` : `${g.name} credit`;
+        return {
+          ...g,
+          children: [{
+            ...allowanceChild,
+            lineItem: label,
+            newInvoiceAmt: net,
+          }],
+        };
+      }
+      const filteredChildren: SelectionChild[] = g.children
+        .filter(c => checked[c.id] && isBillable(g, c) && effectiveAmount(g, c) > 0)
+        .map(c => ({ ...c, newInvoiceAmt: effectiveAmount(g, c) }));
+      if (filteredChildren.length === 0) return null;
+      return { ...g, children: filteredChildren };
+    })
+    .filter((g): g is SelectionGroup => g !== null);
+
+  const selectedCount = outgoing.reduce((s, g) => s + g.children.length, 0);
 
   const handleCreate = () => {
-    const items = availableData.filter(d => selected[d.id]);
-    onAdd(items);
+    if (outgoing.length > 0) onAdd(outgoing);
     onClose();
   };
 
-  const renderGroupCard = (item: SelectionGroup) => {
-    const isExpanded = expanded[item.id];
-    const isSelected = selected[item.id];
-    const childrenTotal = item.children.reduce((s, c) => s + (c.newInvoiceAmt ?? 0), 0);
+  const chevron = (isOpen: boolean) => (
+    <span className={"est-group-chevron" + (isOpen ? " open" : "")}>&#9654;</span>
+  );
 
-    // For allowances, calculate overage bar data
-    const allowanceChild = item.children.find(c => c.selection === 'Allowance');
-    const allowanceAmt = allowanceChild ? allowanceChild.price : 0;
-    const selectionAmt = item.children.filter(c => c.selection !== 'Allowance').reduce((s, c) => s + c.price, 0);
+  const renderGroup = (g: SelectionGroup) => {
+    const isExpanded = !!expanded[g.id];
+    const state = groupState(g);
+    const billable = g.children.filter(c => isBillable(g, c));
+    // Group's billable subtotal mirrors what the outgoing payload will produce
+    // for this group — net for pre-invoiced groups, sum of effective amounts otherwise.
+    const groupOutgoing = outgoing.find(o => o.id === g.id);
+    const groupSubtotal = groupOutgoing
+      ? groupOutgoing.children.reduce((s, c) => s + (c.newInvoiceAmt ?? 0), 0)
+      : 0;
+    const noneBillable = billable.length === 0;
+    const preInv = isPreInvoiced(g);
 
     return (
-      <div
-        key={item.id}
-        style={{
-          border: `1.5px solid ${isSelected ? 'var(--bt-blue)' : 'var(--g200)'}`,
-          borderRadius: 8,
-          marginBottom: 10,
-          background: isSelected ? '#f0f7ff' : 'white',
-          transition: 'all 0.15s ease',
-        }}
-      >
-        {/* Card header */}
-        <div
-          style={{
-            padding: '12px 14px',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'flex-start',
-            gap: 10,
-          }}
-          onClick={() => toggleItem(item.id)}
-        >
-          <div
-            className={"est-check" + (isSelected ? " on" : "")}
-            style={{ marginTop: 2, flexShrink: 0 }}
-          />
-          <div style={{ flex: 1, minWidth: 0 }}>
-            {/* Title + inline math */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span style={{ color: item.type === 'allowance' ? 'var(--bt-blue)' : 'var(--green)', display: 'inline-flex', alignItems: 'center', flexShrink: 0 }}>
-                {item.type === 'allowance' ? <AllowanceIcon /> : <SelectionIcon />}
-              </span>
-              <span style={{ fontWeight: 600, fontSize: 14, color: 'var(--bt-midnight)' }}>{item.name}</span>
-            </div>
-            {/* Condensed math row */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4, fontSize: 12, color: 'var(--g500)', flexWrap: 'wrap' }}>
-              {item.type === 'allowance' && allowanceAmt > 0 && (
-                <>
-                  <span>Allowance <strong style={{ color: 'var(--g600)' }}>${fmt(allowanceAmt)}</strong></span>
-                  <span style={{ color: 'var(--g300)' }}>→</span>
-                  <span>Selections <strong style={{ color: 'var(--g700)' }}>${fmt(selectionAmt)}</strong></span>
-                  {item.previouslyInvoiced > 0 && (
-                    <>
-                      <span style={{ color: 'var(--g300)' }}>·</span>
-                      <span>{fmtCurrency(item.previouslyInvoiced)} invoiced</span>
-                    </>
-                  )}
-                  <span style={{ marginLeft: 'auto', fontWeight: 700, color: childrenTotal > 0 ? '#c2410c' : childrenTotal < 0 ? 'var(--green)' : 'var(--g400)' }}>
-                    {childrenTotal > 0 ? '+' : ''}{fmtCurrency(childrenTotal)} overage
-                  </span>
-                </>
-              )}
-              {item.type === 'selection' && (
-                <>
-                  <span>Post-contract</span>
-                  {item.previouslyInvoiced > 0 && (
-                    <>
-                      <span style={{ color: 'var(--g300)' }}>·</span>
-                      <span>{fmtCurrency(item.previouslyInvoiced)} invoiced</span>
-                    </>
-                  )}
-                  <span style={{ marginLeft: 'auto', fontWeight: 700, color: 'var(--g700)' }}>
-                    {fmtCurrency(childrenTotal)}
-                  </span>
-                </>
-              )}
+      <div key={g.id} className="selv2-group">
+        <div className="selv2-group-header">
+          <div className="selv2-group-left">
+            <div
+              className={"est-check" + (state === 'all' ? ' on' : state === 'partial' ? ' partial' : '') + (noneBillable ? ' disabled' : '')}
+              onClick={() => !noneBillable && toggleGroup(g)}
+            />
+            <button type="button" className="selv2-chev-btn" onClick={() => toggleExpand(g.id)}>
+              {chevron(isExpanded)}
+            </button>
+            <span className="selv2-group-icon">
+              {g.type === 'allowance' ? <AllowanceIcon /> : <SelectionIcon />}
+            </span>
+            <span className="selv2-group-name">{g.name}</span>
+            {g.isComplete && <span className="selv2-pill selv2-pill-complete">Marked complete</span>}
+            {g.scenarioNote && <ScenarioTooltip note={g.scenarioNote} />}
+          </div>
+          <div className="selv2-group-meta">
+            {g.type === 'allowance' && (
+              <>
+                <div className="selv2-meta-item">
+                  <div className="selv2-meta-label">Budget</div>
+                  <div className="selv2-meta-value">${fmt(g.allowanceBudget ?? 0)}</div>
+                </div>
+                <div className="selv2-meta-item">
+                  <div className="selv2-meta-label">Previously invoiced</div>
+                  <div className="selv2-meta-value" style={{ color: g.previouslyInvoiced > 0 ? 'var(--bt-midnight)' : 'var(--g500)' }}>
+                    ${fmt(g.previouslyInvoiced)}
+                  </div>
+                </div>
+              </>
+            )}
+            <div className="selv2-meta-item">
+              <div className="selv2-meta-label">Invoice amount</div>
+              <div
+                className="selv2-meta-value selv2-meta-value-total"
+                style={{ color: groupSubtotal < 0 ? 'var(--red, #c53030)' : undefined }}
+              >
+                {fmtCurrency(groupSubtotal)}
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Expand toggle */}
-        <div
-          style={{
-            padding: '0 14px 8px',
-            display: 'flex',
-            alignItems: 'center',
-          }}
-        >
-          <button
-            onClick={(e) => { e.stopPropagation(); toggleExpand(item.id); }}
-            style={{
-              background: 'none', border: 'none', cursor: 'pointer',
-              fontSize: 12, color: 'var(--bt-blue)', fontWeight: 500,
-              padding: '2px 0', display: 'flex', alignItems: 'center', gap: 4,
-            }}
-          >
-            <span style={{
-              display: 'inline-block', transition: 'transform 0.15s',
-              transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)',
-              fontSize: 10,
-            }}>&#9654;</span>
-            {isExpanded ? 'Hide' : 'Show'} {item.children.length} line item{item.children.length !== 1 ? 's' : ''}
-          </button>
-        </div>
-
-        {/* Expanded line items */}
         {isExpanded && (
-          <div style={{ borderTop: '1px solid var(--g150, #eee)', padding: '0 14px 12px' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, marginTop: 8 }}>
+          <div className="selv2-children">
+            <table className="selv2-table">
+              <colgroup>
+                <col style={{ width: 40 }} />
+                <col />
+                <col style={{ width: 150 }} />
+                <col style={{ width: 110 }} />
+                <col style={{ width: 130 }} />
+              </colgroup>
               <thead>
-                <tr style={{ color: 'var(--g400)', fontWeight: 500, fontSize: 11 }}>
-                  <th style={{ textAlign: 'left', padding: '4px 8px', fontWeight: 500 }}>Line item</th>
-                  <th style={{ textAlign: 'left', padding: '4px 8px', fontWeight: 500 }}>Cost code</th>
-                  <th style={{ textAlign: 'left', padding: '4px 8px', fontWeight: 500 }}>Selection</th>
-                  <th style={{ textAlign: 'right', padding: '4px 8px', fontWeight: 500 }}>Price</th>
-                  <th style={{ textAlign: 'right', padding: '4px 8px', fontWeight: 500 }}>New invoice amt</th>
+                <tr>
+                  <th></th>
+                  <th>Line item</th>
+                  <th>Cost code</th>
+                  <th>Cost type</th>
+                  <th style={{ textAlign: 'right' }}>Amount</th>
                 </tr>
               </thead>
               <tbody>
-                {item.children.map(child => {
-                  const isCredit = child.newInvoiceAmt !== null && child.newInvoiceAmt < 0;
-                  const isNull = child.newInvoiceAmt === null;
+                {g.children.map(c => {
+                  const isAllowanceRow = c.selection === 'Allowance';
+                  const billableRow = isBillable(g, c);
+                  const isOn = !!checked[c.id];
+                  const amt = effectiveAmount(g, c);
+                  // Pre-invoiced allowance row uses net (credit/overage) framing.
+                  const preInvAllowance = isAllowanceRow && preInv;
+                  const covered = isAllowanceRow && !preInv && amt === 0;
+                  const reduced = isAllowanceRow && !preInv && amt > 0 && amt < c.price;
+                  const noNet = preInvAllowance && amt === 0;
+                  const closedOut = isAllowanceRow && g.isComplete && !preInv;
+                  const dim = !billableRow || covered || noNet;
+                  const checkboxTitle = closedOut
+                    ? 'Allowance marked complete — unspent budget closes out on the budget side'
+                    : !billableRow
+                      ? 'Already invoiced — not billable on this invoice'
+                      : covered
+                        ? 'Fully covered by selected selections'
+                        : noNet
+                          ? 'No adjustment — selections match the previously invoiced allowance'
+                          : undefined;
                   return (
-                    <tr key={child.id} style={{ opacity: isNull ? 0.5 : 1 }}>
-                      <td style={{ padding: '6px 8px', fontWeight: 500 }}>{child.lineItem}</td>
-                      <td style={{ padding: '6px 8px', color: 'var(--g500)' }}>{child.costCode}</td>
-                      <td style={{ padding: '6px 8px' }}>
-                        {child.selection === 'Allowance' ? (
-                          <span style={{ color: 'var(--g500)', fontStyle: 'italic' }}>Original allowance</span>
-                        ) : (
-                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                            <span style={{ color: 'var(--g700)' }}>{child.selection}</span>
-                            {child.selectionStatus && (
-                              <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--green)', background: 'var(--green-bg)', padding: '1px 6px', borderRadius: 3 }}>{child.selectionStatus}</span>
-                            )}
-                          </span>
+                    <tr key={c.id} className={dim ? 'selv2-row-disabled' : ''}>
+                      <td>
+                        {preInvAllowance ? null : (
+                          <div
+                            className={"est-check" + (isOn ? ' on' : '') + (dim && !isOn ? ' disabled' : '')}
+                            onClick={() => toggleChild(g, c)}
+                            title={checkboxTitle}
+                          />
                         )}
                       </td>
-                      <td style={{ padding: '6px 8px', textAlign: 'right' }}>${fmt(child.price)}</td>
-                      <td style={{
-                        padding: '6px 8px', textAlign: 'right', fontWeight: 600,
-                        color: isNull ? 'var(--g400)' : isCredit ? '#dc2626' : 'var(--g700)',
-                      }}>
-                        {isNull ? '--' : fmtCurrency(child.newInvoiceAmt!)}
+                      <td>
+                        <div className="selv2-cell-name">
+                          <span className="selv2-row-icon">
+                            {isAllowanceRow ? <AllowanceIcon /> : <SelectionIcon />}
+                          </span>
+                          <span>
+                            {preInvAllowance ? `${c.lineItem} adjustment` : c.lineItem}
+                          </span>
+                          {preInvAllowance && amt === 0 && (
+                            <span className="selv2-pill selv2-pill-muted">No adjustment</span>
+                          )}
+                          {closedOut && (
+                            <span className="selv2-pill selv2-pill-muted">Closed out on budget</span>
+                          )}
+                          {!billableRow && !closedOut && (
+                            <span className="selv2-pill selv2-pill-muted">Invoiced</span>
+                          )}
+                          {covered && (
+                            <span className="selv2-pill selv2-pill-muted">Covered by selections</span>
+                          )}
+                          {reduced && (
+                            <span className="selv2-pill selv2-pill-muted">Remaining budget</span>
+                          )}
+                          {c.selectionStatus && billableRow && !isAllowanceRow && (
+                            <span className="selv2-pill selv2-pill-approved">{c.selectionStatus}</span>
+                          )}
+                        </div>
+                        {preInvAllowance && (
+                          <div style={{ fontSize: 11, color: 'var(--g500)', marginTop: 2 }}>
+                            ${fmt(g.previouslyInvoiced)} previously invoiced
+                          </div>
+                        )}
+                      </td>
+                      <td className="selv2-cell-mono">{c.costCode}</td>
+                      <td className="selv2-cell-type">{c.costType || (isAllowanceRow ? 'Allowance' : 'Selection')}</td>
+                      <td
+                        style={{
+                          textAlign: 'right',
+                          fontWeight: 500,
+                          color: preInvAllowance && amt < 0 ? 'var(--red, #c53030)' : undefined,
+                        }}
+                      >
+                        {preInvAllowance ? fmtCurrency(amt) : `$${fmt(amt)}`}
+                        {reduced && (
+                          <div style={{ fontSize: 10, fontWeight: 400, color: 'var(--g400)', textDecoration: 'line-through' }}>
+                            ${fmt(c.price)}
+                          </div>
+                        )}
                       </td>
                     </tr>
                   );
@@ -366,129 +457,77 @@ export default function SelectionsModalV2({ open, onClose, onAdd, jobName, added
   };
 
   return createPortal(
-    <div className="modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="est-modal" onClick={e => e.stopPropagation()}>
-        {/* Header */}
+    <div className="modal-backdrop" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="est-modal selv2-modal" onClick={e => e.stopPropagation()}>
         <div className="est-modal-hdr">
           <div>
             <div className="est-modal-hdr-sub">{jobName}</div>
-            <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--bt-midnight)', margin: 0 }}>Invoice for selection changes</h2>
-            <p style={{ fontSize: 13, color: 'var(--g500)', margin: '4px 0 0', lineHeight: 1.4 }}>
-              Review how selection choices changed the job price, then choose what to invoice.
-            </p>
+            <h2 className="selv2-title">Add line items to invoice</h2>
           </div>
           <button className="est-modal-close" onClick={onClose}>&times;</button>
         </div>
 
-        {/* Summary strip */}
-        <div style={{
-          display: 'flex', gap: 0, padding: '0 24px 0',
-          borderBottom: '1px solid var(--g200)',
-        }}>
-          {allowanceGroups.length > 0 && (
-            <div style={{ flex: 1, padding: '12px 16px 12px 0', borderRight: selectionGroups.length > 0 ? '1px solid var(--g200)' : 'none' }}>
-              <div style={{ fontSize: 11, color: 'var(--g400)', fontWeight: 500 }}>Original allowances</div>
-              <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--g600)', marginTop: 2 }}>${fmt(totalAllowanceBudget)}</div>
-            </div>
-          )}
-          {allowanceGroups.length > 0 && (
-            <div style={{ flex: 1, padding: '12px 16px', borderRight: selectionGroups.length > 0 ? '1px solid var(--g200)' : 'none' }}>
-              <div style={{ fontSize: 11, color: 'var(--g400)', fontWeight: 500 }}>Actual selection cost</div>
-              <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--g700)', marginTop: 2 }}>${fmt(totalSelectionCost)}</div>
-            </div>
-          )}
-          {allowanceGroups.length > 0 && (
-            <div style={{ flex: 1, padding: '12px 16px', borderRight: selectionGroups.length > 0 ? '1px solid var(--g200)' : 'none' }}>
-              <div style={{ fontSize: 11, color: 'var(--g400)', fontWeight: 500 }}>Net overage</div>
-              <div style={{ fontSize: 16, fontWeight: 700, color: totalOverage > 0 ? '#c2410c' : totalOverage < 0 ? 'var(--green)' : 'var(--g500)', marginTop: 2 }}>
-                {totalOverage > 0 ? '+' : ''}{fmtCurrency(totalOverage)}
-              </div>
-            </div>
-          )}
-          {selectionGroups.length > 0 && (
-            <div style={{ flex: 1, padding: allowanceGroups.length > 0 ? '12px 0 12px 16px' : '12px 16px 12px 0' }}>
-              <div style={{ fontSize: 11, color: 'var(--g400)', fontWeight: 500 }}>Post-contract additions</div>
-              <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--g700)', marginTop: 2 }}>${fmt(totalStandaloneValue)}</div>
-              <div style={{ fontSize: 10, color: 'var(--g400)', marginTop: 1 }}>{selectionGroups.length} option{selectionGroups.length !== 1 ? 's' : ''} added</div>
-            </div>
-          )}
-        </div>
+        <div className="est-modal-body selv2-body">
+          <div className="selv2-desc">
+            Pick what to bill on this invoice: the allowance, the approved selections beneath it, or both. Allowances and selections can be billed independently.
+          </div>
 
-        {/* Body */}
-        <div className="est-modal-body">
-          {/* Select all */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-            <label className="est-include-check" style={{ marginBottom: 0, cursor: 'pointer' }} onClick={toggleAll}>
-              <div className={"est-check" + (allSelected ? " on" : someSelected ? " partial" : "")} />
-              Select all ({availableData.length})
+          <label className="selv2-inline-check" onClick={() => setIncludeDescs(v => !v)}>
+            <div className={"est-check" + (includeDescs ? ' on' : '')} />
+            Include line item descriptions &amp; notes
+          </label>
+
+          <div className="selv2-controls">
+            <label className="selv2-inline-check" onClick={toggleAll}>
+              <div className={"est-check" + (globalState === 'all' ? ' on' : globalState === 'partial' ? ' partial' : '')} />
+              <span className="selv2-controls-label">Select all</span>
+              <span className="selv2-controls-count">·  {selectedCount} selected</span>
             </label>
-            {selectedCount > 0 && (
-              <span style={{ fontSize: 12, color: 'var(--g500)' }}>{selectedCount} selected</span>
+            <button type="button" className="selv2-link-btn" onClick={toggleExpandAll}>
+              {allExpanded ? 'Collapse all' : 'Expand all'}
+            </button>
+            <div className="selv2-search">
+              <svg width="14" height="14" viewBox="0 0 20 20" fill="none">
+                <circle cx="9" cy="9" r="6" stroke="currentColor" strokeWidth="1.5" />
+                <path d="M13 13L17 17" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+              </svg>
+              <input
+                placeholder="Search line item"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="selv2-sections">
+            {allowances.length > 0 && (
+              <>
+                <div className="selv2-section-label">Allowances</div>
+                {allowances.map(renderGroup)}
+              </>
+            )}
+            {standalone.length > 0 && (
+              <>
+                <div className="selv2-section-label" style={{ marginTop: 12 }}>Standalone selections</div>
+                {standalone.map(renderGroup)}
+              </>
+            )}
+            {filtered.length === 0 && (
+              <div className="selv2-empty">No matching selections.</div>
             )}
           </div>
-
-          {/* Allowance overages section */}
-          {allowanceGroups.length > 0 && (
-            <div style={{ marginBottom: 20 }}>
-              <div style={{
-                fontSize: 11, fontWeight: 600, color: 'var(--g400)', textTransform: 'uppercase',
-                letterSpacing: '0.5px', marginBottom: 4,
-              }}>
-                Allowance overages
-              </div>
-              <p style={{ fontSize: 12, color: 'var(--g400)', margin: '0 0 10px', lineHeight: 1.4 }}>
-                Selection choices exceeded the original allowance. The allowance amount previously invoiced will be credited, and the actual selection cost invoiced instead.
-              </p>
-              {allowanceGroups.map(renderGroupCard)}
-            </div>
-          )}
-
-          {/* Standalone selections section */}
-          {selectionGroups.length > 0 && (
-            <div>
-              <div style={{
-                fontSize: 11, fontWeight: 600, color: 'var(--g400)', textTransform: 'uppercase',
-                letterSpacing: '0.5px', marginBottom: 4,
-              }}>
-                Post-contract selections
-              </div>
-              <p style={{ fontSize: 12, color: 'var(--g400)', margin: '0 0 10px', lineHeight: 1.4 }}>
-                Options added or changed after the contract was signed. These are new costs not covered by an allowance.
-              </p>
-              {selectionGroups.map(renderGroupCard)}
-            </div>
-          )}
-
-          {availableData.length === 0 && (
-            <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--g400)' }}>
-              <div style={{ fontSize: 14, fontWeight: 500 }}>All selections have been added to the invoice</div>
-              <div style={{ fontSize: 12, marginTop: 4 }}>Remove line items from the invoice to make them available here again.</div>
-            </div>
-          )}
         </div>
 
-        {/* Footer */}
-        <div className="est-modal-footer" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
-          <div>
-            <div style={{ fontSize: 12, color: 'var(--g400)' }}>Invoice subtotal</div>
-            <strong style={{ fontSize: 22, color: invoiceSubtotal !== 0 ? 'var(--bt-midnight)' : 'var(--g400)' }}>
-              {fmtCurrency(invoiceSubtotal)}
-            </strong>
-          </div>
-          <div style={{ display: 'flex', gap: 8 }}>
+        <div className="selv2-footer">
+          <div className="selv2-footer-buttons">
             <button className="btn btn-s" onClick={onClose}>Cancel</button>
-            <button
-              className="btn btn-p"
-              onClick={handleCreate}
-              disabled={selectedCount === 0}
-              style={{ opacity: selectedCount === 0 ? 0.5 : 1 }}
-            >
-              Add to invoice ({selectedCount})
+            <button className="btn btn-p" onClick={handleCreate} disabled={selectedCount === 0}>
+              Add line items to invoice
             </button>
           </div>
         </div>
       </div>
     </div>,
-    document.body
+    document.body,
   );
 }
