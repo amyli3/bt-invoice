@@ -162,6 +162,19 @@ export default function SelectionsModalV2({ open, onClose, onAdd, jobName, data,
     return true;
   };
 
+  // Allowance is "credit owed" when it's marked complete, was pre-invoiced,
+  // and the previously-invoiced amount exceeds the approved selections that
+  // are still billable. Surfaces in a dedicated section at the top of the
+  // wizard so the builder doesn't have to hunt for unsettled overpayments.
+  const creditAmount = (g: SelectionGroup): number => {
+    if (!g.isComplete || !isPreInvoiced(g)) return 0;
+    const approvedTotal = g.children
+      .filter(c => c.selection !== 'Allowance')
+      .reduce((s, c) => s + c.price, 0);
+    return Math.max(0, g.previouslyInvoiced - approvedTotal);
+  };
+  const creditKey = (g: SelectionGroup) => `${g.id}-credit`;
+
   useEffect(() => {
     if (!open) return;
     const e: Record<string, boolean> = {};
@@ -186,7 +199,9 @@ export default function SelectionsModalV2({ open, onClose, onAdd, jobName, data,
       })
     : availableData;
 
-  const allowances = filtered.filter(g => g.type === 'allowance');
+  const creditsOwed = filtered.filter(g => g.type === 'allowance' && creditAmount(g) > 0);
+  const creditIds = new Set(creditsOwed.map(g => g.id));
+  const allowances = filtered.filter(g => g.type === 'allowance' && !creditIds.has(g.id));
   const standalone = filtered.filter(g => g.type === 'selection');
 
   const toggleChild = (g: SelectionGroup, c: SelectionChild) => {
@@ -307,6 +322,22 @@ export default function SelectionsModalV2({ open, onClose, onAdd, jobName, data,
   //     net by cost code so allowance + same-code selections collapse to one line.
   const outgoing: SelectionGroup[] = availableData
     .map((g): SelectionGroup | null => {
+      // "Credit owed" path: one-click credit line driven by the dedicated
+      // section's checkbox, independent of any selection checkboxes.
+      if (creditAmount(g) > 0) {
+        if (!checked[creditKey(g)]) return null;
+        const allowanceChild = g.children.find(c => c.selection === 'Allowance');
+        if (!allowanceChild) return null;
+        const credit = creditAmount(g);
+        return {
+          ...g,
+          children: [{
+            ...allowanceChild,
+            lineItem: `${g.name} credit`,
+            newInvoiceAmt: -credit,
+          }],
+        };
+      }
       if (isPreInvoiced(g)) {
         const checkedSelections = g.children
           .filter(c => c.selection !== 'Allowance' && checked[c.id] && c.newInvoiceAmt !== null);
@@ -404,7 +435,7 @@ export default function SelectionsModalV2({ open, onClose, onAdd, jobName, data,
               <div className="selv2-meta-label">Invoice amount</div>
               <div
                 className="selv2-meta-value selv2-meta-value-total"
-                style={{ color: groupSubtotal < 0 ? 'var(--red, #c53030)' : undefined }}
+                style={undefined}
               >
                 {fmtCurrency(groupSubtotal)}
               </div>
@@ -472,9 +503,6 @@ export default function SelectionsModalV2({ open, onClose, onAdd, jobName, data,
                           <span>
                             {preInvAllowance ? `${c.lineItem} adjustment` : c.lineItem}
                           </span>
-                          {preInvAllowance && amt === 0 && (
-                            <span className="selv2-pill selv2-pill-muted">No adjustment</span>
-                          )}
                           {closedOut && (
                             <span className="selv2-pill selv2-pill-muted">Closed out on budget</span>
                           )}
@@ -503,7 +531,7 @@ export default function SelectionsModalV2({ open, onClose, onAdd, jobName, data,
                         style={{
                           textAlign: 'right',
                           fontWeight: 500,
-                          color: preInvAllowance && amt < 0 ? 'var(--red, #c53030)' : undefined,
+                          color: undefined,
                         }}
                       >
                         {preInvAllowance ? fmtCurrency(amt) : `$${fmt(amt)}`}
@@ -584,6 +612,47 @@ export default function SelectionsModalV2({ open, onClose, onAdd, jobName, data,
               <>
                 <div className="selv2-section-label" style={{ marginTop: 12 }}>Standalone selections</div>
                 {standalone.map(renderGroup)}
+              </>
+            )}
+            {creditsOwed.length > 0 && (
+              <>
+                <div className="selv2-section-label" style={{ marginTop: 16 }}>Credits owed</div>
+                <div className="selv2-credits-help">
+                  These allowances were marked complete with previously invoiced amounts greater than the actual selections. Apply the credit to this invoice.
+                </div>
+                {creditsOwed.map(g => {
+                  const credit = creditAmount(g);
+                  const approved = g.children
+                    .filter(c => c.selection !== 'Allowance')
+                    .reduce((s, c) => s + c.price, 0);
+                  const isOn = !!checked[creditKey(g)];
+                  return (
+                    <div key={creditKey(g)} className={'selv2-credit-row' + (isOn ? ' selv2-credit-row-on' : '')}>
+                      <div className="selv2-credit-left">
+                        <div
+                          className={"est-check" + (isOn ? ' on' : '')}
+                          onClick={() => setChecked(s => ({ ...s, [creditKey(g)]: !s[creditKey(g)] }))}
+                        />
+                        <span className="selv2-credit-icon"><AllowanceIcon /></span>
+                        <span className="selv2-credit-name">{g.name}</span>
+                      </div>
+                      <div className="selv2-group-meta">
+                        <div className="selv2-meta-item">
+                          <div className="selv2-meta-label">Previously invoiced</div>
+                          <div className="selv2-meta-value">${fmt(g.previouslyInvoiced)}</div>
+                        </div>
+                        <div className="selv2-meta-item">
+                          <div className="selv2-meta-label">Actual cost</div>
+                          <div className="selv2-meta-value">${fmt(approved)}</div>
+                        </div>
+                        <div className="selv2-meta-item">
+                          <div className="selv2-meta-label">Amount</div>
+                          <div className="selv2-meta-value">-${fmt(credit)}</div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </>
             )}
             {filtered.length === 0 && (

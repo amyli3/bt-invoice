@@ -133,7 +133,7 @@ function LineRow({ item, onChange, onRemove, vis, taxRate }: LineRowProps) {
         <td colSpan={colSpan} style={{ padding: '6px 12px 6px 36px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12, color: 'var(--g600)' }}>
             <span>{r.name}</span>
-            <span style={{ fontWeight: 500, color: r.amount < 0 ? 'var(--red, #c53030)' : 'var(--g700)' }}>
+            <span style={{ fontWeight: 500, color: 'var(--g700)' }}>
               {fmtCurrency(r.amount)}
             </span>
           </div>
