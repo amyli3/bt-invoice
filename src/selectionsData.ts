@@ -91,6 +91,52 @@ export const INVOICE_SELECTION_SCENARIOS: InvoiceSelectionScenario[] = [
       { id: 'ms-18', name: 'Cabinet handles (new)', costCode: '9041', costType: 'Material', originalPrice: 5000, approvedPrice: 5000, status: 'approved' },
     ],
   },
+  {
+    id: 'ma-10',
+    name: 'Tile Allowance',
+    costCode: '7020 - Tile',
+    budgetAmount: 3000,
+    previouslyInvoiced: 0,
+    scenarioNote: 'Not pre-invoiced. Selections at different cost codes ran over budget — each code stays on its own invoice line.',
+    selections: [
+      { id: 'ms-22', name: 'Porcelain floor tile', costCode: '7020', costType: 'Material', originalPrice: 1800, approvedPrice: 2000, status: 'approved' },
+      { id: 'ms-23', name: 'Marble accent border', costCode: '7025 - Decorative Tile', costType: 'Material', originalPrice: 1200, approvedPrice: 1500, status: 'approved' },
+    ],
+  },
+  {
+    id: 'ma-11',
+    name: 'HVAC Allowance',
+    costCode: '5010 - HVAC',
+    budgetAmount: 6000,
+    previouslyInvoiced: 0,
+    scenarioNote: 'Not pre-invoiced. Selection came in under at a different cost code — remaining $2,000 stays in the allowance bucket.',
+    selections: [
+      { id: 'ms-24', name: 'Heat pump unit', costCode: '5015 - HVAC Equipment', costType: 'Equipment', originalPrice: 4200, approvedPrice: 4000, status: 'approved' },
+    ],
+  },
+  {
+    id: 'ma-12',
+    name: 'Electrical Allowance',
+    costCode: '6020 - Electrical',
+    budgetAmount: 3000,
+    previouslyInvoiced: 3000,
+    scenarioNote: 'Pre-invoiced. Selections split across cost codes — 6020 reversal nets against the same-code selection; 6025 selection invoices on its own.',
+    selections: [
+      { id: 'ms-25', name: 'Smart panel upgrade', costCode: '6025 - Smart Home', costType: 'Equipment', originalPrice: 2200, approvedPrice: 2500, status: 'approved' },
+      { id: 'ms-26', name: 'Premium recessed lighting', costCode: '6020', costType: 'Material', originalPrice: 1500, approvedPrice: 1800, status: 'approved' },
+    ],
+  },
+  {
+    id: 'ma-13',
+    name: 'Trim & Millwork Allowance',
+    costCode: '8030 - Trim',
+    budgetAmount: 5000,
+    previouslyInvoiced: 5000,
+    scenarioNote: 'Pre-invoiced, not closed out. Selection at a different cost code — reversal and selection stay on separate invoice lines, netting to a credit.',
+    selections: [
+      { id: 'ms-27', name: 'Premium baseboards', costCode: '8035 - Specialty Millwork', costType: 'Material', originalPrice: 2000, approvedPrice: 2200, status: 'approved' },
+    ],
+  },
 ];
 
 export type StandaloneSelection = {

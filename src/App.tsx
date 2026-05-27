@@ -7,6 +7,7 @@ import PageHeader from './components/PageHeader';
 import InvoiceInfo from './components/InvoiceInfo';
 import OwnerPrice from './components/OwnerPrice';
 import LineItems from './components/LineItems';
+import LineItemsV2 from './components/LineItemsV2';
 import Notes from './components/Notes';
 import ClientPreview from './components/ClientPreview';
 import EmailPreview from './components/EmailPreview';
@@ -74,6 +75,7 @@ export default function App() {
   const [optionOpenedFrom, setOptionOpenedFrom] = useState<PageType>('job-price-summary');
   const [prefilledAllowance, setPrefilledAllowance] = useState<string | null>(null);
   const [activeView, setActiveView] = useState<'builder' | 'preview'>('builder');
+  const [previewHidden, setPreviewHidden] = useState(true);
   const [previewTab, setPreviewTab] = useState<'client' | 'email'>('client');
 
   const [vis, setVis] = useState<ColumnVisibility>({
@@ -567,13 +569,23 @@ export default function App() {
           </div>
 
           <div className="split">
-            <div className="builder" style={isNarrow && activeView !== 'builder' ? {display: 'none'} : {}}>
+            <div
+              className={"builder" + (previewHidden && activePage === 'invoice-2' && !isNarrow ? ' builder-full' : '')}
+              style={isNarrow && activeView !== 'builder' ? {display: 'none'} : {}}
+            >
               <InvoiceInfo invoice={invoice} onChange={setInvoice} />
               <OwnerPrice invoice={invoice} onChange={setInvoice} />
-              {invoice.mode === 'lineItems' && <LineItems invoice={invoice} onChange={setInvoice} vis={vis} onVisChange={setVis} onOpenEstimate={() => setEstModalOpen(true)} onOpenSelections={() => activePage === 'invoice-2' ? setSelV2ModalOpen(true) : setSelModalOpen(true)} />}
+              {invoice.mode === 'lineItems' && (activePage === 'invoice-2'
+                ? <LineItemsV2 invoice={invoice} onChange={setInvoice} vis={vis} onVisChange={setVis} onOpenEstimate={() => setEstModalOpen(true)} onOpenSelections={() => setSelV2ModalOpen(true)} />
+                : <LineItems invoice={invoice} onChange={setInvoice} vis={vis} onVisChange={setVis} onOpenEstimate={() => setEstModalOpen(true)} onOpenSelections={() => setSelModalOpen(true)} />)}
               <Notes invoice={invoice} onChange={setInvoice} />
             </div>
-            <div className="preview" style={{...(isNarrow && activeView !== 'preview' ? {display: 'none'} : {}), padding: 0, display: isNarrow && activeView !== 'preview' ? 'none' : 'flex', flexDirection: 'column'}}>
+            <div className="preview" style={{
+              ...(isNarrow && activeView !== 'preview' ? {display: 'none'} : {}),
+              padding: 0,
+              display: (isNarrow && activeView !== 'preview') || (previewHidden && activePage === 'invoice-2' && !isNarrow) ? 'none' : 'flex',
+              flexDirection: 'column',
+            }}>
               <div className="preview-tabs">
                 <div className="preview-tabs-left">
                   <button className={"preview-tab" + (previewTab === 'client' ? ' on' : '')} onClick={() => setPreviewTab('client')}>Client preview</button>
@@ -603,6 +615,17 @@ export default function App() {
 
           <div className="bbar">
             <button className="btn btn-s" onClick={() => setInvoice(defaultInvoice)}>Cancel</button>
+            {activePage === 'invoice-2' && !isNarrow && (
+              <button
+                type="button"
+                className="btn btn-s"
+                onClick={() => setPreviewHidden(h => !h)}
+                title={previewHidden ? 'Show client preview' : 'Hide client preview'}
+                aria-pressed={!previewHidden}
+              >
+                Client preview
+              </button>
+            )}
             <button className="btn btn-s">Save</button>
             <button className="btn btn-p">Send</button>
           </div>

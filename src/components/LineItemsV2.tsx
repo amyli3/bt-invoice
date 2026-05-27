@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Invoice, LineItem, ColumnVisibility } from '../types';
 import { COST_TYPES, getNextId } from '../mockData';
 import { fmt, parseTaxRate } from '../utils';
+import { BdsText } from '../bds';
 import ColumnToggle from './ColumnToggle';
 
 function AddFromDropdown({ onOpenEstimate, onOpenSelections }: { onOpenEstimate?: () => void; onOpenSelections?: () => void }) {
@@ -54,16 +55,81 @@ function fmtCurrency(v: number) {
   return v < 0 ? '-' + formatted : formatted;
 }
 
+function StackBadge({ items }: { items: { name: string; amount: number; isAllowance?: boolean }[] }) {
+  const [open, setOpen] = useState(false);
+  const [coords, setCoords] = useState<{ top: number; left: number } | null>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const ddRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (btnRef.current?.contains(t)) return;
+      if (ddRef.current?.contains(t)) return;
+      setOpen(false);
+    };
+    const reposition = () => {
+      if (!btnRef.current) return;
+      const r = btnRef.current.getBoundingClientRect();
+      setCoords({ top: r.bottom + 4, left: r.left });
+    };
+    reposition();
+    document.addEventListener('mousedown', handler);
+    window.addEventListener('scroll', reposition, true);
+    window.addEventListener('resize', reposition);
+    return () => {
+      document.removeEventListener('mousedown', handler);
+      window.removeEventListener('scroll', reposition, true);
+      window.removeEventListener('resize', reposition);
+    };
+  }, [open]);
+  return (
+    <div className="liv2-stack">
+      <button
+        ref={btnRef}
+        type="button"
+        className={'liv2-stack-btn' + (open ? ' open' : '')}
+        onClick={() => setOpen(o => !o)}
+        title={`${items.length} stacked items`}
+      >
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M2 4l6-3 6 3-6 3-6-3z"/>
+          <path d="M2 8l6 3 6-3"/>
+          <path d="M2 12l6 3 6-3"/>
+        </svg>
+        <span>{items.length}</span>
+      </button>
+      {open && coords && (
+        <div ref={ddRef} className="liv2-stack-dropdown" style={{ position: 'fixed', top: coords.top, left: coords.left }}>
+          <BdsText as="div" size="heavy-sm" className="liv2-stack-dropdown-hdr">Stacked items</BdsText>
+          <ul>
+            {items.map((it, i) => (
+              <li key={i}>
+                <BdsText as="span" size="normal-sm" className="liv2-stack-name">{it.name}</BdsText>
+                <BdsText as="span" size="normal-sm" className="liv2-stack-amt">{fmtCurrency(it.amount)}</BdsText>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function LineRow({ item, onChange, onRemove, vis, taxRate }: LineRowProps) {
   const [editingUnitCost, setEditingUnitCost] = useState(false);
   const u = (f: string, v: string | number) => onChange({...item, [f]: v});
   const bc = item.unitCost * item.quantity;
   const cp = bc * (1 + item.markup / 100);
   const taxAmt = cp * (taxRate / 100);
+  const hasStack = !!item.rolledUp && item.rolledUp.length > 1;
   return (
     <tr>
       <td>
-        <div><textarea className="cell-input cell-input-multi" style={{fontWeight: 600}} rows={1} value={item.description} onChange={e => u('description', e.target.value)} /></div>
+        <div style={{display: 'flex', alignItems: 'flex-start', gap: 6}}>
+          <textarea className="cell-input cell-input-multi" style={{fontWeight: 600, flex: 1}} rows={1} value={item.description} onChange={e => u('description', e.target.value)} />
+          {hasStack && <StackBadge items={item.rolledUp!} />}
+        </div>
         <div><input className="cell-input" style={{fontSize: 11, color: 'var(--g400)'}} value={item.costCode} onChange={e => u('costCode', e.target.value)} /></div>
       </td>
       {vis.costType && <td><select className="badge" style={{cursor: 'pointer', fontSize: 12, padding: '2px 6px'}} value={item.costType} onChange={e => u('costType', e.target.value)}>{COST_TYPES.map(t => <option key={t}>{t}</option>)}</select></td>}
@@ -130,7 +196,7 @@ export default function LineItems({ invoice, onChange, vis, onVisChange, onOpenE
         <ColumnToggle columns={vis} onChange={onVisChange} />
         <AddFromDropdown onOpenEstimate={onOpenEstimate} onOpenSelections={onOpenSelections} />
       </div>
-      <div className="lt-scroll">
+      <div className="lt-scroll liv2-lt-scroll">
         <table className="lt">
           <thead><tr>
             <th>Items</th>

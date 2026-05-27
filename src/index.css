@@ -655,7 +655,7 @@ table { width: 100%; border-collapse: collapse; }
 
 /* ══════════════ ESTIMATE MODAL ══════════════ */
 .modal-backdrop {
-  position: fixed; inset: 0; z-index: 100;
+  position: fixed; inset: 0; z-index: 300;
   background: rgba(0,26,67,0.45); backdrop-filter: blur(2px);
   display: flex; align-items: center; justify-content: center;
   animation: fadeIn 0.15s ease;
@@ -1857,7 +1857,7 @@ table { width: 100%; border-collapse: collapse; }
   .jps-cat-name { font-size: 14px; }
   .jps-cat-impact { font-size: 12px; }
 
-  /* Tables: horizontal scroll */
+  /* Tables: horizontal scroll for allowance tables inside cat-body */
   .jps-cat-body { overflow-x: auto; -webkit-overflow-scrolling: touch; }
   .jps-cat-body .jps-table { min-width: 580px; }
   .jps-table-header > div { padding: 8px 10px; font-size: 11px; }
@@ -1884,6 +1884,33 @@ table { width: 100%; border-collapse: collapse; }
   .jps-impact-chip { font-size: 11px; padding: 1px 6px; }
   .jps-badge-pending { font-size: 9px; padding: 1px 6px; }
   .jps-cat-pending-badge { font-size: 10px; padding: 1px 6px; }
+
+  /* ── Standalone section tables: column fixes ── */
+
+  /* Dates, amounts, impacts never wrap mid-value */
+  .jps-col-date { white-space: nowrap; }
+  .jps-col-impact { white-space: nowrap; }
+  .jps-col-amount { white-space: nowrap; }
+  .jps-col-price-revised { white-space: nowrap; }
+
+  /* Selections table: 5 cols → 3 cols (drop Date + Initial price) */
+  .jps-table-sel-standalone { grid-template-columns: 2fr 1fr 1fr; }
+  .jps-table-sel-standalone .jps-col-date,
+  .jps-table-sel-standalone .jps-col-price-orig { display: none; }
+
+  /* Payments table: 4 cols → 3 cols (drop Payment type) */
+  .jps-table-payments { grid-template-columns: 2fr 1.1fr 1.1fr; }
+  .jps-table-payments .jps-col-method { display: none; }
+
+  /* Change orders: wider date column so dates don't clip */
+  .jps-table-co { grid-template-columns: 2fr 1.2fr 1fr; }
+
+  /* ── Page header: compact single row on mobile ── */
+  /* Hide breadcrumb to free the row for the action buttons */
+  .jps-page .pg-hdr-sub { display: none; }
+  /* Keep title + buttons on one line; left side shrinks to available space */
+  .jps-page .pg-hdr-content { flex-wrap: nowrap; align-items: center; }
+  .jps-page .pg-hdr-right { flex-shrink: 0; flex-wrap: nowrap; }
 }
 
 /* ── Mobile-friendly additions for hero, panes, slice tabs, flow header, pending pill ── */
@@ -5961,6 +5988,41 @@ table { width: 100%; border-collapse: collapse; }
   .jcb-header-right { flex-wrap: wrap; }
 }
 
+/* ══════════════ LINE ITEMS V2 — stacked rolled-up items (invoice-2) ══════════════ */
+
+/* When the preview is hidden on invoice-2, the builder column claims full width. */
+.builder.builder-full { width: 100%; border-right: none; }
+
+
+.liv2-stack { position: relative; display: inline-block; flex-shrink: 0; }
+.liv2-stack-btn {
+  display: inline-flex; align-items: center; gap: 4px;
+  height: 22px; padding: 0 7px;
+  background: var(--g50); color: var(--g600);
+  border: 1px solid var(--g200); border-radius: 11px;
+  font-size: 11px; font-weight: 600; line-height: 1; cursor: pointer;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+.liv2-stack-btn:hover { background: var(--g100); color: var(--bt-midnight); border-color: var(--g300); }
+.liv2-stack-btn.open { background: #e8f1fc; color: var(--bt-blue); border-color: var(--bt-blue); }
+.liv2-stack-dropdown {
+  z-index: 200;
+  min-width: 240px; max-width: 360px; max-height: 280px; overflow-y: auto;
+  background: #fff; border: 1px solid var(--g200); border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08); padding: 6px 0;
+}
+.liv2-stack-dropdown-hdr {
+  color: var(--g500); padding: 4px 12px 6px;
+}
+.liv2-stack-dropdown ul { list-style: none; margin: 0; padding: 0; }
+.liv2-stack-dropdown li {
+  display: flex; justify-content: space-between; gap: 12px;
+  padding: 6px 12px; font-size: 12px; color: var(--g700);
+}
+.liv2-stack-dropdown li:hover { background: var(--g50); }
+.liv2-stack-name { flex: 1; min-width: 0; word-break: break-word; }
+.liv2-stack-amt { color: var(--g500); white-space: nowrap; font-variant-numeric: tabular-nums; }
+
 /* ══════════════ SELECTIONS WIZARD V2 (invoice-2) ══════════════ */
 .selv2-modal { max-width: 1080px; width: 96vw; }
 .selv2-title { font-size: 20px; font-weight: 700; color: var(--bt-midnight); margin: 0; }
@@ -6008,7 +6070,7 @@ table { width: 100%; border-collapse: collapse; }
 }
 .selv2-group-header {
   display: flex; align-items: center; justify-content: space-between;
-  padding: 12px 14px; gap: 12px; background: var(--g50);
+  padding: 12px 14px; gap: 12px; background: white;
   border-bottom: 1px solid var(--g200);
 }
 .selv2-group-left { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
@@ -6029,7 +6091,7 @@ table { width: 100%; border-collapse: collapse; }
 .selv2-table thead th {
   text-align: left; padding: 10px 14px;
   font-size: 12px; font-weight: 600; color: var(--g500);
-  background: white; border-bottom: 1px solid var(--g200);
+  background: var(--g50); border-bottom: 1px solid var(--g200);
 }
 .selv2-table tbody tr { border-bottom: 1px solid var(--g100); }
 .selv2-table tbody tr:last-child { border-bottom: none; }
@@ -6041,8 +6103,7 @@ table { width: 100%; border-collapse: collapse; }
 .selv2-cell-mono { color: var(--g600); }
 .selv2-cell-type { color: var(--g600); }
 
-.selv2-row-disabled td { color: var(--g400); }
-.selv2-row-disabled .selv2-cell-mono { color: var(--g400); }
+.selv2-row-disabled { opacity: 0.55; }
 
 .selv2-pill {
   display: inline-flex; align-items: center; font-size: 10px; font-weight: 600;
@@ -6063,13 +6124,14 @@ table { width: 100%; border-collapse: collapse; }
 
 .selv2-footer {
   padding: 14px 24px; border-top: 1px solid var(--g200);
-  display: flex; align-items: center; justify-content: flex-end; gap: 12px;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
   flex-shrink: 0; background: white;
 }
-.selv2-footer-summary { font-size: 13px; color: var(--g600); }
-.selv2-footer-summary strong { color: var(--bt-midnight); }
-.selv2-footer-divider { margin: 0 8px; color: var(--g300); }
-.selv2-footer-total { color: var(--bt-midnight); font-size: 15px; font-weight: 700; }
+.selv2-footer-summary {
+  display: flex; align-items: baseline; gap: 8px;
+}
+.selv2-footer-summary-label { font-size: 13px; color: var(--g600); }
+.selv2-footer-summary-amount { font-size: 16px; font-weight: 700; color: var(--bt-midnight); }
 .selv2-footer-buttons { display: flex; gap: 8px; }
 
 @media (max-width: 768px) {
@@ -6079,6 +6141,39 @@ table { width: 100%; border-collapse: collapse; }
   .selv2-search { margin-left: 0; width: 100%; }
   .selv2-footer { flex-direction: column; align-items: stretch; }
   .selv2-footer-buttons { justify-content: flex-end; }
+}
+
+/* ── V2 Wizard: mobile (matches base est-modal full-screen breakpoint) ── */
+@media (max-width: 700px) {
+  /* Full-screen modal — overrides the base .selv2-modal { width: 96vw } */
+  .selv2-modal { width: 100vw; max-width: 100vw; border-radius: 0; }
+
+  /* Header: give the title div flex so the × button never gets pushed off-screen */
+  .selv2-modal .est-modal-hdr { gap: 8px; }
+  .selv2-modal .est-modal-hdr > div:first-child { flex: 1; min-width: 0; }
+  .selv2-title { font-size: 16px; }
+
+  /* Child tables: drop Cost code (col 3) + Cost type (col 4).
+     Remaining visible: checkbox | Line item | Amount */
+  .selv2-children .selv2-table thead th:nth-child(3),
+  .selv2-children .selv2-table thead th:nth-child(4),
+  .selv2-children .selv2-table tbody td:nth-child(3),
+  .selv2-children .selv2-table tbody td:nth-child(4) { display: none; }
+
+  /* Credits grid: drop Previously invoiced (col 3) + Actual cost (col 4).
+     Remaining visible: checkbox | Allowance | Credit amount */
+  .selv2-credits-grid .selv2-table thead th:nth-child(3),
+  .selv2-credits-grid .selv2-table thead th:nth-child(4),
+  .selv2-credits-grid .selv2-table tbody td:nth-child(3),
+  .selv2-credits-grid .selv2-table tbody td:nth-child(4) { display: none; }
+
+  /* Compact group meta — tighter label/value text */
+  .selv2-group-meta { gap: 10px; }
+  .selv2-meta-label { font-size: 10px; }
+  .selv2-meta-value { font-size: 12px; }
+
+  /* Inline option checkboxes */
+  .selv2-inline-check { font-size: 12px; }
 }
 
 /* ══════════════ SELECTIONS PAGE MASS ACTION BAR ══════════════ */
@@ -6166,7 +6261,56 @@ table { width: 100%; border-collapse: collapse; }
   font-variant-numeric: tabular-nums;
 }
 
+/* ── Stack: parent row open state ── */
+.lr-stack-parent-open td {
+  background: #f2f7ff;
+  border-bottom: none !important;
+}
+
+/* ── Stack: expanded sub-rows ── */
+.lr-stack-row td {
+  padding: 7px 14px;
+  background: #f2f7ff;
+  border-bottom: 1px solid #dce8fb;
+}
+.lr-stack-row-last td {
+  border-bottom: 1px solid var(--g200); /* restore normal table row separator */
+}
+/* Left accent line via inset box-shadow — works on td where border-left on tr doesn't */
+/* Sticky left so the content stays visible regardless of horizontal table scroll */
+.lr-stack-cell-desc {
+  position: sticky; left: 0; z-index: 1;
+  box-shadow: inset 3px 0 0 rgba(0, 101, 219, 0.35);
+  padding-left: 42px !important;
+  background: #f2f7ff;
+}
+.lr-stack-sub-item {
+  display: flex; align-items: center; gap: 8px;
+  width: calc(100vw - 60px); max-width: 100%;
+}
+.lr-stack-sub-tag {
+  display: inline-flex; align-items: center;
+  font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 4px;
+  white-space: nowrap; flex-shrink: 0;
+}
+.lr-stack-sub-tag-allowance { background: #e8f1fc; color: var(--bt-blue); }
+.lr-stack-sub-tag-selection { background: var(--green-bg); color: var(--green); }
+.lr-stack-sub-name {
+  font-size: 12px; color: var(--g600); line-height: 1.4; flex: 1; min-width: 0;
+}
+.lr-stack-sub-amt {
+  font-size: 12px; font-weight: 600; color: var(--g700);
+  white-space: nowrap; margin-left: auto; padding-left: 16px;
+}
+
 /* Credits owed section — surfaces over-invoiced allowances that need a credit */
+.selv2-credits-grid {
+  border: 1px solid var(--g200); border-radius: 8px; overflow: hidden; background: white;
+}
+.selv2-credits-grid .selv2-cell-name { flex-wrap: nowrap; }
+.selv2-credits-row-on { background: #f0f5ff; }
+.selv2-credits-row-on:hover { background: #e8f0fe !important; }
+
 .selv2-credits-help {
   font-size: 12px; color: var(--g500); line-height: 1.5;
   padding: 0 0 8px;

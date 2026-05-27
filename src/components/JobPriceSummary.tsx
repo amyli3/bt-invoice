@@ -414,8 +414,8 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
         <div className="jps-table-header jps-table-sel-standalone">
           <div className="jps-col-title">Title</div>
           <div className="jps-col-date">Date</div>
-          <div className="jps-col-price-orig">Original price</div>
-          <div className="jps-col-price-revised">Revised price</div>
+          <div className="jps-col-price-orig">Initial price</div>
+          <div className="jps-col-price-revised">Approved price</div>
           <div className="jps-col-impact">Contract impact</div>
         </div>
         {orderedRows.map((item, i) => (
@@ -552,7 +552,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
               Omaha, NE 68114
             </div>
             <div className="jps-print-summary-values">
-              <div><span>Revised price:</span><strong>{fmt(revisedClientPrice + (activeSlice === 'slice4' || activeSlice === 'slice5' ? billVarianceTotal : 0))}</strong></div>
+              <div><span>Approved price:</span><strong>{fmt(revisedClientPrice + (activeSlice === 'slice4' || activeSlice === 'slice5' ? billVarianceTotal : 0))}</strong></div>
               <div><span>Amount paid:</span><strong>{fmt(paymentsReceived)}</strong></div>
               <div><span>Remaining to pay:</span><strong>{fmt(remainingBalance + (activeSlice === 'slice4' || activeSlice === 'slice5' ? billVarianceTotal : 0))}</strong></div>
             </div>
@@ -674,8 +674,8 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                     <tr>
                       <th>Title</th>
                       <th className="jps-print-th-date">Date</th>
-                      <th className="jps-print-th-right">Original price</th>
-                      <th className="jps-print-th-right">Revised price</th>
+                      <th className="jps-print-th-right">Initial price</th>
+                      <th className="jps-print-th-right">Approved price</th>
                       <th className="jps-print-th-right">Contract impact</th>
                     </tr>
                   </thead>
@@ -856,8 +856,8 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
             return (
           <div className="jps-print-totals">
             <div className="jps-print-totals-group">
-              <div className="jps-print-totals-line jps-print-totals-heading"><span>Revised price total</span><strong>{fmt(revisedPricePrint)}</strong></div>
-              <div className="jps-print-totals-line jps-print-totals-nested"><span>Original price total</span><span>{fmt(originalContractPrice)}</span></div>
+              <div className="jps-print-totals-line jps-print-totals-heading"><span>Approved price total</span><strong>{fmt(revisedPricePrint)}</strong></div>
+              <div className="jps-print-totals-line jps-print-totals-nested"><span>Initial price total</span><span>{fmt(originalContractPrice)}</span></div>
               <div className="jps-print-totals-line jps-print-totals-nested"><span>Approved changes</span><span>{fmt(approvedChangesPrint)}</span></div>
               <div className="jps-print-totals-line jps-print-totals-nested-2"><span>Selection and allowance changes</span><span>{fmt(approvedSelectionsTotal)}</span></div>
               <div className="jps-print-totals-line jps-print-totals-nested-2"><span>Change orders</span><span>{fmt(changeOrdersTotal)}</span></div>
@@ -1034,7 +1034,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                               <span className="jps-flow-part"><span>Spent</span><strong>{fmt(withTax(approvedUsed))}</strong></span>
                               <span className="jps-flow-sep">·</span>
                               <span className={over ? 'jps-flow-over' : 'jps-flow-remaining'}>
-                                {over ? <><span>Overage</span><strong>{fmtSigned(withTax(approvedUsed - group.budget))}</strong></> : <><span>Remaining</span><strong>{fmt(withTax(remaining))}</strong></>}
+                                {over ? <><span>Remaining</span><strong>{fmtSigned(withTax(approvedUsed - group.budget))}</strong></> : <><span>Remaining</span><strong>{fmt(withTax(remaining))}</strong></>}
                               </span>
                             </span>
                           );
@@ -1109,7 +1109,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                   <div className="jps-table">
                     <div className="jps-table-header jps-table-co">
                       <div className="jps-col-title">Title</div>
-                      <div className="jps-col-date">Date</div>
+                      <div className="jps-col-date">Approved date</div>
                       <div className="jps-col-impact">Contract impact</div>
                     </div>
                     {coApproved.map((co, i) => (
@@ -1285,7 +1285,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                               <span className="jps-flow-part"><span>Spent</span><strong>{fmt(approvedUsed)}</strong></span>
                               <span className="jps-flow-sep">·</span>
                               <span className={over ? 'jps-flow-over' : 'jps-flow-remaining'}>
-                                {over ? <><span>Overage</span><strong>{fmtSigned(approvedUsed - group.budget)}</strong></> : <><span>Remaining</span><strong>{fmt(remaining)}</strong></>}
+                                {over ? <><span>Remaining</span><strong>{fmtSigned(approvedUsed - group.budget)}</strong></> : <><span>Remaining</span><strong>{fmt(remaining)}</strong></>}
                               </span>
                             </span>
                           );
@@ -1412,7 +1412,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                   <div className="jps-table">
                     <div className="jps-table-header jps-table-co">
                       <div className="jps-col-title">Title</div>
-                      <div className="jps-col-date">Date</div>
+                      <div className="jps-col-date">Approved date</div>
                       <div className="jps-col-impact">Contract impact</div>
                     </div>
                     {coApproved.map((co, i) => (
@@ -1429,7 +1429,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                                   Includes {fmt(co.includesAllowance.budget)} {co.includesAllowance.name} allowance
                                   {summary && (
                                     isOver
-                                      ? <span style={{ color: 'var(--bt-midnight)', fontWeight: 600 }}> · +{fmt(Math.abs(remaining))} overage</span>
+                                      ? <span style={{ color: 'var(--bt-midnight)', fontWeight: 600 }}> · +{fmt(Math.abs(remaining))} remaining</span>
                                       : <span style={{ color: 'var(--g500)', fontWeight: 500 }}> · {fmt(remaining)} remaining</span>
                                   )}
                                 </span>
@@ -1624,7 +1624,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                           <span className="jps-flow-part"><span>Spent</span><strong>{fmt(approvedUsed)}</strong></span>
                           <span className="jps-flow-sep">·</span>
                           <span className={over ? 'jps-flow-over' : 'jps-flow-remaining'}>
-                            {over ? <><span>Overage</span><strong>{fmtSigned(approvedUsed - group.budget)}</strong></> : <><span>Remaining</span><strong>{fmt(remaining)}</strong></>}
+                            {over ? <><span>Remaining</span><strong>{fmtSigned(approvedUsed - group.budget)}</strong></> : <><span>Remaining</span><strong>{fmt(remaining)}</strong></>}
                           </span>
                         </span>
                       );
@@ -1753,7 +1753,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                 <div className="jps-table">
                   <div className="jps-table-header jps-table-co">
                     <div className="jps-col-title">Title</div>
-                    <div className="jps-col-date">Date</div>
+                    <div className="jps-col-date">Approved date</div>
                     <div className="jps-col-impact">Contract impact</div>
                   </div>
 
@@ -1889,7 +1889,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                       </div>
                       <div className="jps-breakdown-line jps-breakdown-nested">
                         <span>Bills</span>
-                        <span className={billVarianceTotal >= 0 ? 'jps-impact-up' : 'jps-impact-down'}>{fmtSigned(billVarianceTotal)}</span>
+                        <span className={billVarianceTotal >= 0 ? 'jps-impact-up' : 'jps-impact-down'}>{fmt(billVarianceTotal)}</span>
                       </div>
                     </>
                   )}
@@ -1944,7 +1944,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                   </div>
                   <div className="jps-breakdown-line jps-breakdown-nested">
                     <button type="button" className="jps-s4-scroll-link" onClick={() => document.getElementById('jps-sec-budget-difference')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>Budget difference</button>
-                    <span className={panelVarianceTotal >= 0 ? 'jps-impact-up' : 'jps-impact-down'}>{fmtSigned(panelVarianceTotal)}</span>
+                    <span className={panelVarianceTotal >= 0 ? 'jps-impact-up' : 'jps-impact-down'}>{fmt(panelVarianceTotal)}</span>
                   </div>
                   <div className="jps-breakdown-line"><span>Tax</span><span>{fmt(totalTax)}</span></div>
                 </div>
@@ -1984,7 +1984,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                   {cv !== 0 && (
                     <div className="jps-breakdown-line jps-breakdown-nested">
                       <button type="button" className="jps-s4-link-label" onClick={() => setSlice4DrillOpen(true)}>{trajLabel}</button>
-                      <span className={isOver ? 'jps-impact-up' : 'jps-impact-down'}>{fmtSigned(cv)}</span>
+                      <span className={isOver ? 'jps-impact-up' : 'jps-impact-down'}>{fmt(cv)}</span>
                     </div>
                   )}
                   <div className="jps-breakdown-line"><span>Tax</span><span>{fmt(totalTax)}</span></div>
@@ -2016,7 +2016,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                   </div>
                   <div className="jps-breakdown-line jps-breakdown-nested">
                     <span>Bills</span>
-                    <span className={billVarianceTotal >= 0 ? 'jps-impact-up' : 'jps-impact-down'}>{fmtSigned(billVarianceTotal)}</span>
+                    <span className={billVarianceTotal >= 0 ? 'jps-impact-up' : 'jps-impact-down'}>{fmt(billVarianceTotal)}</span>
                   </div>
                   <div className="jps-breakdown-line"><span>Tax</span><span>{fmt(totalTax)}</span></div>
                 </div>
@@ -2118,7 +2118,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                                 <span className="jps-flow-part"><span>Spent</span><strong>{fmt(withTax(approvedUsed))}</strong></span>
                                 <span className="jps-flow-sep">·</span>
                                 <span className={over ? 'jps-flow-over' : 'jps-flow-remaining'}>
-                                  {over ? <><span>Overage</span><strong>{fmtSigned(withTax(approvedUsed - group.budget))}</strong></> : <><span>Remaining</span><strong>{fmt(withTax(remaining))}</strong></>}
+                                  {over ? <><span>Remaining</span><strong>{fmtSigned(withTax(approvedUsed - group.budget))}</strong></> : <><span>Remaining</span><strong>{fmt(withTax(remaining))}</strong></>}
                                 </span>
                               </span>
                             );
@@ -2189,7 +2189,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                     <div className="jps-table">
                       <div className="jps-table-header jps-table-co">
                         <div className="jps-col-title">Title</div>
-                        <div className="jps-col-date">Date</div>
+                        <div className="jps-col-date">Approved date</div>
                         <div className="jps-col-impact">Contract impact</div>
                       </div>
                       {coApproved.map((co, i) => (

@@ -281,27 +281,18 @@ export default function SelectionsModalV2({ open, onClose, onAdd, jobName, data,
     return Array.from(byCode.values()).map(codeRows => {
       if (codeRows.length === 1) return codeRows[0];
       const total = codeRows.reduce((s, r) => s + (r.newInvoiceAmt ?? 0), 0);
-      const allowance = codeRows.find(r => r.selection === 'Allowance');
       const selections = codeRows.filter(r => r.selection !== 'Allowance');
-      // Description shows what rolled into the netted line so builders can
-      // see the breakdown without needing an expand UI. Truncate >3 to keep
-      // the row readable; "Related item" pill on the invoice covers context.
-      const names = selections.map(s => s.lineItem);
-      let label: string;
-      if (names.length === 0) {
-        label = allowance?.lineItem ?? codeRows[0].lineItem;
-      } else if (names.length <= 3) {
-        label = names.join(', ');
-      } else {
-        label = `${names.slice(0, 2).join(', ')} +${names.length - 2} more`;
-      }
+      // When multiple selections share a cost code, surface the cost code as
+      // the line title — the individual selection names live in the stack
+      // dropdown on the invoice. Keeps the row scannable when N is large.
+      const label = codeRows[0].costCode;
       return {
         ...codeRows[0],
         lineItem: label,
         newInvoiceAmt: total,
         selection: selections[0]?.selection ?? 'Allowance',
         // Per-row breakdown for the invoice's expand UI.
-        rolledUp: codeRows.map(r => ({ name: r.lineItem, amount: r.newInvoiceAmt ?? 0 })),
+        rolledUp: codeRows.map(r => ({ name: r.lineItem, amount: r.newInvoiceAmt ?? 0, isAllowance: r.selection === 'Allowance' })),
       };
     });
   };
@@ -375,6 +366,10 @@ export default function SelectionsModalV2({ open, onClose, onAdd, jobName, data,
     .filter((g): g is SelectionGroup => g !== null);
 
   const selectedCount = outgoing.reduce((s, g) => s + g.children.length, 0);
+  const invoiceSubtotal = outgoing.reduce(
+    (s, g) => s + g.children.reduce((cs, c) => cs + (c.newInvoiceAmt ?? 0), 0),
+    0,
+  );
 
   const handleCreate = () => {
     if (outgoing.length > 0) onAdd(outgoing);
@@ -468,22 +463,23 @@ export default function SelectionsModalV2({ open, onClose, onAdd, jobName, data,
                   const billableRow = isBillable(g, c);
                   const isOn = !!checked[c.id];
                   const amt = effectiveAmount(g, c);
-                  // Pre-invoiced allowance row uses net (credit/overage) framing.
                   const preInvAllowance = isAllowanceRow && preInv;
                   const covered = isAllowanceRow && !preInv && amt === 0;
                   const reduced = isAllowanceRow && !preInv && amt > 0 && amt < c.price;
-                  const noNet = preInvAllowance && amt === 0;
+                  // Pre-invoiced allowance row always displays $0 — the allowance was
+                  // already billed, so it contributes nothing more to this invoice. The
+                  // net (overage or credit) rolls up to the group's Invoice amount via
+                  // the outgoing payload.
+                  const rowAmt = preInvAllowance ? 0 : amt;
                   const closedOut = isAllowanceRow && g.isComplete && !preInv;
-                  const dim = !billableRow || covered || noNet;
+                  const dim = !billableRow || covered || preInvAllowance;
                   const checkboxTitle = closedOut
                     ? 'Allowance marked complete — unspent budget closes out on the budget side'
                     : !billableRow
                       ? 'Already invoiced — not billable on this invoice'
                       : covered
                         ? 'Fully covered by selected selections'
-                        : noNet
-                          ? 'No adjustment — selections match the previously invoiced allowance'
-                          : undefined;
+                        : undefined;
                   return (
                     <tr key={c.id} className={dim ? 'selv2-row-disabled' : ''}>
                       <td>
@@ -500,9 +496,7 @@ export default function SelectionsModalV2({ open, onClose, onAdd, jobName, data,
                           <span className="selv2-row-icon">
                             {isAllowanceRow ? <AllowanceIcon /> : <SelectionIcon />}
                           </span>
-                          <span>
-                            {preInvAllowance ? `${c.lineItem} adjustment` : c.lineItem}
-                          </span>
+                          <span>{c.lineItem}</span>
                           {closedOut && (
                             <span className="selv2-pill selv2-pill-muted">Closed out on budget</span>
                           )}
@@ -534,7 +528,7 @@ export default function SelectionsModalV2({ open, onClose, onAdd, jobName, data,
                           color: undefined,
                         }}
                       >
-                        {preInvAllowance ? fmtCurrency(amt) : `$${fmt(amt)}`}
+                        ${fmt(rowAmt)}
                         {reduced && (
                           <div style={{ fontSize: 10, fontWeight: 400, color: 'var(--g400)', textDecoration: 'line-through' }}>
                             ${fmt(c.price)}
@@ -558,24 +552,24 @@ export default function SelectionsModalV2({ open, onClose, onAdd, jobName, data,
         <div className="est-modal-hdr">
           <div>
             <div className="est-modal-hdr-sub">{jobName}</div>
-            <h2 className="selv2-title">Add line items to invoice</h2>
+            <h2 className="selv2-title">Add selections and allowances to invoice</h2>
           </div>
           <button className="est-modal-close" onClick={onClose}>&times;</button>
         </div>
 
         <div className="est-modal-body selv2-body">
           <div className="selv2-desc">
-            Pick what to bill on this invoice. Invoicing approved selections gives the cleanest reconciliation — allowances and selections can be billed together or independently.
+            Choose approved selections and allowances to invoice.
           </div>
 
           <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap' }}>
             <label className="selv2-inline-check" onClick={() => setIncludeDescs(v => !v)}>
               <div className={"est-check" + (includeDescs ? ' on' : '')} />
-              Include line item descriptions &amp; notes
+              Include descriptions
             </label>
             <label className="selv2-inline-check" onClick={() => setGroupByCode(v => !v)}>
               <div className={"est-check" + (groupByCode ? ' on' : '')} />
-              Combine same-cost-code lines on the invoice
+              Group by cost code
             </label>
           </div>
 
@@ -583,9 +577,9 @@ export default function SelectionsModalV2({ open, onClose, onAdd, jobName, data,
             <label className="selv2-inline-check" onClick={toggleAll}>
               <div className={"est-check" + (globalState === 'all' ? ' on' : globalState === 'partial' ? ' partial' : '')} />
               <span className="selv2-controls-label">Select all</span>
-              <span className="selv2-controls-count">·  {selectedCount} selected</span>
             </label>
-            <button type="button" className="selv2-link-btn" onClick={toggleExpandAll}>
+            <button type="button" className="est-expand-btn" onClick={toggleExpandAll}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M7 20l5-5 5 5" /><path d="M7 4l5 5 5-5" /></svg>
               {allExpanded ? 'Collapse all' : 'Expand all'}
             </button>
             <div className="selv2-search">
@@ -620,39 +614,57 @@ export default function SelectionsModalV2({ open, onClose, onAdd, jobName, data,
                 <div className="selv2-credits-help">
                   These allowances were marked complete with previously invoiced amounts greater than the actual selections. Apply the credit to this invoice.
                 </div>
-                {creditsOwed.map(g => {
-                  const credit = creditAmount(g);
-                  const approved = g.children
-                    .filter(c => c.selection !== 'Allowance')
-                    .reduce((s, c) => s + c.price, 0);
-                  const isOn = !!checked[creditKey(g)];
-                  return (
-                    <div key={creditKey(g)} className={'selv2-credit-row' + (isOn ? ' selv2-credit-row-on' : '')}>
-                      <div className="selv2-credit-left">
-                        <div
-                          className={"est-check" + (isOn ? ' on' : '')}
-                          onClick={() => setChecked(s => ({ ...s, [creditKey(g)]: !s[creditKey(g)] }))}
-                        />
-                        <span className="selv2-credit-icon"><AllowanceIcon /></span>
-                        <span className="selv2-credit-name">{g.name}</span>
-                      </div>
-                      <div className="selv2-group-meta">
-                        <div className="selv2-meta-item">
-                          <div className="selv2-meta-label">Previously invoiced</div>
-                          <div className="selv2-meta-value">${fmt(g.previouslyInvoiced)}</div>
-                        </div>
-                        <div className="selv2-meta-item">
-                          <div className="selv2-meta-label">Actual cost</div>
-                          <div className="selv2-meta-value">${fmt(approved)}</div>
-                        </div>
-                        <div className="selv2-meta-item">
-                          <div className="selv2-meta-label">Amount</div>
-                          <div className="selv2-meta-value">-${fmt(credit)}</div>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
+                <div className="selv2-credits-grid">
+                  <table className="selv2-table">
+                    <colgroup>
+                      <col style={{ width: 40 }} />
+                      <col />
+                      <col style={{ width: 130 }} />
+                      <col style={{ width: 110 }} />
+                      <col style={{ width: 120 }} />
+                    </colgroup>
+                    <thead>
+                      <tr>
+                        <th></th>
+                        <th>Allowance</th>
+                        <th style={{ textAlign: 'right' }}>Previously invoiced</th>
+                        <th style={{ textAlign: 'right' }}>Actual cost</th>
+                        <th style={{ textAlign: 'right' }}>Credit amount</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {creditsOwed.map(g => {
+                        const credit = creditAmount(g);
+                        const approved = g.children
+                          .filter(c => c.selection !== 'Allowance')
+                          .reduce((s, c) => s + c.price, 0);
+                        const isOn = !!checked[creditKey(g)];
+                        return (
+                          <tr key={creditKey(g)} className={isOn ? 'selv2-credits-row-on' : ''}>
+                            <td>
+                              <div
+                                className={"est-check" + (isOn ? ' on' : '')}
+                                onClick={() => setChecked(s => ({ ...s, [creditKey(g)]: !s[creditKey(g)] }))}
+                              />
+                            </td>
+                            <td>
+                              <div className="selv2-cell-name">
+                                <span className="selv2-row-icon"><AllowanceIcon /></span>
+                                <span style={{ fontWeight: 600, color: 'var(--bt-midnight)' }}>{g.name}</span>
+                                <ScenarioTooltip note={`Previously invoiced: $${fmt(g.previouslyInvoiced)} · Approved selections: $${fmt(approved)} · Credit: $${fmt(credit)}`} />
+                              </div>
+                            </td>
+                            <td style={{ textAlign: 'right' }}>${fmt(g.previouslyInvoiced)}</td>
+                            <td style={{ textAlign: 'right' }}>${fmt(approved)}</td>
+                            <td style={{ textAlign: 'right', fontWeight: 600, color: 'var(--red, #c53030)' }}>
+                              -{fmtCurrency(credit)}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               </>
             )}
             {filtered.length === 0 && (
@@ -662,10 +674,14 @@ export default function SelectionsModalV2({ open, onClose, onAdd, jobName, data,
         </div>
 
         <div className="selv2-footer">
+          <div className="selv2-footer-summary">
+            <span className="selv2-footer-summary-label">Subtotal added to invoice</span>
+            <span className="selv2-footer-summary-amount">{fmtCurrency(invoiceSubtotal)}</span>
+          </div>
           <div className="selv2-footer-buttons">
             <button className="btn btn-s" onClick={onClose}>Cancel</button>
             <button className="btn btn-p" onClick={handleCreate} disabled={selectedCount === 0}>
-              Add line items to invoice
+              Add line items
             </button>
           </div>
         </div>
