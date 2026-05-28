@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import ReactDOM from 'react-dom';
 import SelectionsModal from './SelectionsModal';
+import SelectionsModalV2 from './SelectionsModalV2';
 import { BdsButton, BdsTextArea } from '../bds';
 
 const fmt = (n: number) =>
@@ -1112,6 +1113,7 @@ export default function AIAPayApp({ onNavigate, approvedCOIds, addedCostIds: ext
   // "Add from" modal state
   const [showAddFromModal, setShowAddFromModal] = useState(false);
   const [showSelectionsModal, setShowSelectionsModal] = useState(false);
+  const [showSelectionsV2Modal, setShowSelectionsV2Modal] = useState(false);
   const [showCostModal, setShowCostModal] = useState(false);
   const [showCOModal, setShowCOModal] = useState(false);
   const [addFromDropdownOpen, setAddFromDropdownOpen] = useState(false);
@@ -1562,6 +1564,103 @@ export default function AIAPayApp({ onNavigate, approvedCOIds, addedCostIds: ext
 
   const toggleGroup = (id: string) => setExpanded(prev => ({ ...prev, [id]: !prev[id] }));
 
+  // Shared data shape for the V1 (SelectionsModal) and V2 (SelectionsModalV2)
+  // wizards — both consume the same SelectionGroup[] derived from MODAL_ALLOWANCES.
+  const selectionsWizardData = MODAL_ALLOWANCES.map(ma => {
+    const selectionsTotal = ma.selections.reduce((s, sel) => s + sel.approvedPrice, 0);
+    const billableSelectionsTotal = ma.selections.reduce((s, sel) => s + (sel.status === 'invoiced' ? 0 : sel.approvedPrice), 0);
+    const invoicedSelectionsTotal = ma.selections.reduce((s, sel) => s + (sel.status === 'invoiced' ? sel.approvedPrice : 0), 0);
+    const notPreviouslyInvoiced = ma.previouslyInvoiced === 0;
+    const anyInvoicedSelection = ma.selections.some(s => s.status === 'invoiced');
+    const allowanceCodePrefix = ma.costCode.split(' ')[0];
+    const allMismatched = ma.selections.every(sel => sel.costCode !== allowanceCodePrefix);
+    const canMarkComplete = ma.id === 'ma-6';
+    const markedComplete = completedAllowanceIds.has(ma.id);
+    const gatedPending = canMarkComplete && !markedComplete;
+
+    let allowanceNewInvoiceAmt: number | null;
+    let invoiceBalance: number;
+    let creditOnAllowanceRow = false;
+    if (anyInvoicedSelection) {
+      allowanceNewInvoiceAmt = null;
+      invoiceBalance = billableSelectionsTotal;
+    } else if (notPreviouslyInvoiced) {
+      allowanceNewInvoiceAmt = null;
+      invoiceBalance = billableSelectionsTotal;
+    } else if (gatedPending) {
+      allowanceNewInvoiceAmt = null;
+      invoiceBalance = 0;
+    } else if (allMismatched) {
+      allowanceNewInvoiceAmt = -ma.budgetAmount;
+      invoiceBalance = billableSelectionsTotal - ma.budgetAmount;
+    } else if (canMarkComplete && markedComplete) {
+      allowanceNewInvoiceAmt = selectionsTotal - ma.budgetAmount;
+      invoiceBalance = selectionsTotal - ma.budgetAmount;
+      creditOnAllowanceRow = true;
+    } else {
+      const matchedReversal = Math.min(selectionsTotal, ma.budgetAmount);
+      allowanceNewInvoiceAmt = -matchedReversal;
+      invoiceBalance = selectionsTotal - matchedReversal;
+    }
+    const previouslyInvoicedDisplay = anyInvoicedSelection ? invoicedSelectionsTotal : ma.previouslyInvoiced;
+    return {
+      id: ma.id,
+      type: 'allowance' as const,
+      name: ma.name,
+      scenarioNote: ma.scenarioNote,
+      canMarkComplete,
+      isComplete: markedComplete,
+      revisedPrice: selectionsTotal,
+      previouslyInvoiced: previouslyInvoicedDisplay,
+      invoiceBalance,
+      allowanceBudget: ma.budgetAmount,
+      overage: selectionsTotal - ma.budgetAmount,
+      children: [
+        {
+          id: `${ma.id}-rev`,
+          lineItem: ma.name,
+          costCode: ma.costCode,
+          selection: 'Allowance',
+          price: ma.budgetAmount,
+          newInvoiceAmt: allowanceNewInvoiceAmt,
+        },
+        ...ma.selections.map(sel => ({
+          id: sel.id,
+          lineItem: sel.name,
+          costCode: `${sel.costCode} - ${sel.costType}`,
+          selection: sel.name,
+          price: sel.approvedPrice,
+          newInvoiceAmt: sel.status === 'invoiced'
+            ? null
+            : gatedPending
+              ? null
+              : creditOnAllowanceRow
+                ? 0
+                : sel.approvedPrice,
+        })),
+      ],
+    };
+  }).filter(row => {
+    const allowanceRev = row.children[0]?.newInvoiceAmt;
+    return row.invoiceBalance !== 0 || allowanceRev !== null || row.canMarkComplete;
+  });
+
+  const handleSelectionsWizardAdd = (items: any[]) => {
+    const newIds: string[] = [];
+    items.forEach((group: any) => {
+      if (group.children && group.children.length > 0) {
+        group.children.forEach((child: any) => {
+          if (child.selection !== 'Allowance' && child.id) {
+            newIds.push(child.id);
+          }
+        });
+      }
+    });
+    if (newIds.length > 0) {
+      setAddedSelectionIds(prev => [...prev, ...newIds.filter(id => !prev.includes(id))]);
+    }
+  };
+
   return (
     <div className="aia-page" style={{ fontFamily: "'Inter', sans-serif" }}>
 
@@ -1744,6 +1843,9 @@ export default function AIAPayApp({ onNavigate, approvedCOIds, addedCostIds: ext
                   <div className="add-from-dropdown">
                     <button className="add-from-option" onClick={() => { setAddFromDropdownOpen(false); setShowSelectionsModal(true); }}>
                       <span style={{ fontWeight: 500 }}>Selections</span>
+                    </button>
+                    <button className="add-from-option" onClick={() => { setAddFromDropdownOpen(false); setShowSelectionsV2Modal(true); }}>
+                      <span style={{ fontWeight: 500 }}>Selections 2</span>
                     </button>
                     <button className="add-from-option" onClick={() => { setAddFromDropdownOpen(false); setShowCostModal(true); }}>
                       <span style={{ fontWeight: 500 }}>Costs</span>
@@ -2506,116 +2608,24 @@ export default function AIAPayApp({ onNavigate, approvedCOIds, addedCostIds: ext
         />
       )}
 
-      {/* Selections Modal (shared component with progress invoice data) */}
+      {/* Selections Modal (V1) — shared with progress invoice data */}
       <SelectionsModal
         open={showSelectionsModal}
         onClose={() => setShowSelectionsModal(false)}
         onMarkComplete={toggleAllowanceComplete}
         showNegativeBalances
-        data={MODAL_ALLOWANCES.map(ma => {
-          const selectionsTotal = ma.selections.reduce((s, sel) => s + sel.approvedPrice, 0);
-          const billableSelectionsTotal = ma.selections.reduce((s, sel) => s + (sel.status === 'invoiced' ? 0 : sel.approvedPrice), 0);
-          const invoicedSelectionsTotal = ma.selections.reduce((s, sel) => s + (sel.status === 'invoiced' ? sel.approvedPrice : 0), 0);
-          const notPreviouslyInvoiced = ma.previouslyInvoiced === 0;
-          const anyInvoicedSelection = ma.selections.some(s => s.status === 'invoiced');
-          const allowanceCodePrefix = ma.costCode.split(' ')[0];
-          const allMismatched = ma.selections.every(sel => sel.costCode !== allowanceCodePrefix);
-          // Only Cabinet Hardware (ma-6) needs the explicit mark-complete gate.
-          // Overage cases (Lighting) flow automatically; matched-code cases use existing math.
-          const canMarkComplete = ma.id === 'ma-6';
-          const markedComplete = completedAllowanceIds.has(ma.id);
-          // Under-budget mismatched allowance that requires mark-complete: don't bill until completed
-          const gatedPending = canMarkComplete && !markedComplete;
+        data={selectionsWizardData}
+        onAdd={handleSelectionsWizardAdd}
+        jobName="Johnson Residence — Full Remodel"
+        addedGroupIds={addedSelectionIds}
+      />
 
-          let allowanceNewInvoiceAmt: number | null;
-          let invoiceBalance: number;
-          // creditOnAllowanceRow: matched-codes credit lives on the allowance row itself,
-          // so selection children should show $0 to avoid double-counting in the modal sum.
-          let creditOnAllowanceRow = false;
-          if (anyInvoicedSelection) {
-            allowanceNewInvoiceAmt = null;
-            invoiceBalance = billableSelectionsTotal;
-          } else if (notPreviouslyInvoiced) {
-            allowanceNewInvoiceAmt = null;
-            invoiceBalance = billableSelectionsTotal;
-          } else if (gatedPending) {
-            // Awaiting mark-complete — no billing impact yet
-            allowanceNewInvoiceAmt = null;
-            invoiceBalance = 0;
-          } else if (allMismatched) {
-            // Mismatched cost codes: reverse full allowance, re-bill at real codes
-            allowanceNewInvoiceAmt = -ma.budgetAmount;
-            invoiceBalance = billableSelectionsTotal - ma.budgetAmount;
-          } else if (canMarkComplete && markedComplete) {
-            // Matched cost codes + marked complete: credit/charge lives on the allowance
-            // row directly. No reclassification needed.
-            allowanceNewInvoiceAmt = selectionsTotal - ma.budgetAmount;
-            invoiceBalance = selectionsTotal - ma.budgetAmount;
-            creditOnAllowanceRow = true;
-          } else {
-            const matchedReversal = Math.min(selectionsTotal, ma.budgetAmount);
-            allowanceNewInvoiceAmt = -matchedReversal;
-            invoiceBalance = selectionsTotal - matchedReversal;
-          }
-          const previouslyInvoicedDisplay = anyInvoicedSelection ? invoicedSelectionsTotal : ma.previouslyInvoiced;
-          return {
-            id: ma.id,
-            type: 'allowance' as const,
-            name: ma.name,
-            scenarioNote: ma.scenarioNote,
-            canMarkComplete,
-            isComplete: markedComplete,
-            revisedPrice: selectionsTotal,
-            previouslyInvoiced: previouslyInvoicedDisplay,
-            invoiceBalance,
-            allowanceBudget: ma.budgetAmount,
-            overage: selectionsTotal - ma.budgetAmount,
-            children: [
-              {
-                id: `${ma.id}-rev`,
-                lineItem: ma.name,
-                costCode: ma.costCode,
-                selection: 'Allowance',
-                price: ma.budgetAmount,
-                newInvoiceAmt: allowanceNewInvoiceAmt,
-              },
-              ...ma.selections.map(sel => ({
-                id: sel.id,
-                lineItem: sel.name,
-                costCode: `${sel.costCode} - ${sel.costType}`,
-                selection: sel.name,
-                price: sel.approvedPrice,
-                newInvoiceAmt: sel.status === 'invoiced'
-                  ? null
-                  : gatedPending
-                    ? null
-                    : creditOnAllowanceRow
-                      ? 0
-                      : sel.approvedPrice,
-              })),
-            ],
-          };
-        }).filter(row => {
-          const allowanceRev = row.children[0]?.newInvoiceAmt;
-          // Keep mark-complete-eligible rows visible even before they're marked,
-          // otherwise the user never sees the button to flip the state.
-          return row.invoiceBalance !== 0 || allowanceRev !== null || row.canMarkComplete;
-        })}
-        onAdd={(items) => {
-          const newIds: string[] = [];
-          items.forEach((group: any) => {
-            if (group.children && group.children.length > 0) {
-              group.children.forEach((child: any) => {
-                if (child.selection !== 'Allowance' && child.id) {
-                  newIds.push(child.id);
-                }
-              });
-            }
-          });
-          if (newIds.length > 0) {
-            setAddedSelectionIds(prev => [...prev, ...newIds.filter(id => !prev.includes(id))]);
-          }
-        }}
+      {/* Selections Modal V2 — same data, new wizard from invoice-2 */}
+      <SelectionsModalV2
+        open={showSelectionsV2Modal}
+        onClose={() => setShowSelectionsV2Modal(false)}
+        data={selectionsWizardData}
+        onAdd={handleSelectionsWizardAdd}
         jobName="Johnson Residence — Full Remodel"
         addedGroupIds={addedSelectionIds}
       />

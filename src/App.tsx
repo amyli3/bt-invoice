@@ -161,50 +161,82 @@ export default function App() {
   };
 
   const handleAddFromSelections = (items: any[]) => {
-    const newItems: any[] = [];
-    items.forEach((group: any) => {
-      if (group.children && group.children.length > 0) {
-        group.children.forEach((child: any) => {
-          // Skip any row whose new-invoice amount is null — informational rows
-          // not billable on this invoice (e.g., already-invoiced selections,
-          // unbilled allowance placeholders).
-          if (child.newInvoiceAmt === null) return;
-          const isAllowanceLine = child.selection === 'Allowance';
-          newItems.push({
+    setInvoice(inv => {
+      let lineItems = [...inv.lineItems];
+      items.forEach((group: any) => {
+        // If the wizard says an existing allowance line needs adjusting (because
+        // this round's new selections changed the math), update it in place
+        // instead of stacking another line.
+        if (group.allowanceUpdate !== undefined && group.allowanceChildId) {
+          const idx = lineItems.findIndex(li =>
+            li.relatedItem?.childIds?.includes(group.allowanceChildId),
+          );
+          if (idx !== -1) {
+            const li = lineItems[idx];
+            const isPureAllowanceLine =
+              li.relatedItem?.type === 'allowance' &&
+              li.relatedItem?.childIds?.length === 1;
+            // When the allowance nets to $0 and the line isn't rolled up with
+            // other content, drop it entirely instead of leaving a noise row.
+            if (group.allowanceUpdate === 0 && isPureAllowanceLine) {
+              lineItems = [...lineItems.slice(0, idx), ...lineItems.slice(idx + 1)];
+            } else {
+              const updated: any = { ...li, unitCost: group.allowanceUpdate };
+              if (group.allowanceUpdateChildIds) {
+                updated.relatedItem = { ...li.relatedItem, childIds: group.allowanceUpdateChildIds };
+              }
+              if (group.allowanceUpdateRolledUp) {
+                updated.rolledUp = group.allowanceUpdateRolledUp;
+              }
+              lineItems[idx] = updated;
+            }
+          }
+        }
+        if (group.children && group.children.length > 0) {
+          group.children.forEach((child: any) => {
+            // Skip any row whose new-invoice amount is null — informational rows
+            // not billable on this invoice (e.g., already-invoiced selections,
+            // unbilled allowance placeholders).
+            if (child.newInvoiceAmt === null) return;
+            const isAllowanceLine = child.selection === 'Allowance';
+            const childIds: string[] = child.sourceChildIds ?? [child.id];
+            lineItems.push({
+              id: getNextId(),
+              description: child.lineItem,
+              costCode: child.costCode,
+              costType: isAllowanceLine ? 'Allowance' : 'Selection',
+              unitCost: child.newInvoiceAmt,
+              quantity: 1,
+              unit: '--',
+              markup: 0,
+              relatedItem: {
+                type: isAllowanceLine ? 'allowance' as const : 'selection' as const,
+                name: isAllowanceLine ? group.name : child.selection,
+                groupId: group.id,
+                childIds,
+              },
+              // Preserve the wizard's breakdown so the invoice can expand the line.
+              ...(child.rolledUp ? { rolledUp: child.rolledUp } : {}),
+            });
+          });
+        } else if (group.allowanceUpdate === undefined) {
+          // Fallback only when there's no allowanceUpdate — otherwise this round
+          // is a pure in-place line adjustment, not a new line addition.
+          lineItems.push({
             id: getNextId(),
-            description: child.lineItem,
-            costCode: child.costCode,
-            costType: isAllowanceLine ? 'Allowance' : 'Selection',
-            unitCost: child.newInvoiceAmt,
+            description: group.name,
+            costCode: '',
+            costType: group.type === 'allowance' ? 'Allowance' : 'Selection',
+            unitCost: group.invoiceBalance,
             quantity: 1,
             unit: '--',
             markup: 0,
-            relatedItem: {
-              type: isAllowanceLine ? 'allowance' as const : 'selection' as const,
-              name: isAllowanceLine ? group.name : child.selection,
-              groupId: group.id,
-            },
-            // Preserve the wizard's breakdown so the invoice can expand the line.
-            ...(child.rolledUp ? { rolledUp: child.rolledUp } : {}),
+            relatedItem: { type: group.type, name: group.name, groupId: group.id },
           });
-        });
-      } else {
-        newItems.push({
-          id: getNextId(),
-          description: group.name,
-          costCode: '',
-          costType: group.type === 'allowance' ? 'Allowance' : 'Selection',
-          unitCost: group.invoiceBalance,
-          quantity: 1,
-          unit: '--',
-          markup: 0,
-          relatedItem: { type: group.type, name: group.name, groupId: group.id },
-        });
-      }
+        }
+      });
+      return { ...inv, lineItems };
     });
-    if (newItems.length > 0) {
-      setInvoice(inv => ({ ...inv, lineItems: [...inv.lineItems, ...newItems] }));
-    }
   };
   const currentJob = JOBS.find(j => j.id === selectedJob);
 
@@ -654,7 +686,7 @@ export default function App() {
         onClose={() => setSelV2ModalOpen(false)}
         onAdd={handleAddFromSelections}
         jobName={currentJob?.name || 'Job name'}
-        addedGroupIds={invoice.lineItems.filter(li => li.relatedItem?.groupId).map(li => li.relatedItem!.groupId)}
+        addedChildIds={invoice.lineItems.flatMap(li => li.relatedItem?.childIds ?? [])}
         data={selectionsModalData}
       />
     </div>

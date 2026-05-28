@@ -17,7 +17,7 @@ export interface LineItem {
   quantity: number;
   unit: string;
   markup: number;
-  relatedItem?: { type: 'allowance' | 'selection'; name: string; groupId: string };
+  relatedItem?: { type: 'allowance' | 'selection'; name: string; groupId: string; childIds?: string[] };
   // Underage reallocation metadata. When present, this line is the source
   // (negative) side of a reallocation from one allowance to another. The
   // builder view shows it at its own cost code; the client view (when

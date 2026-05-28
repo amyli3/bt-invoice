@@ -56,6 +56,7 @@ function fmtCurrency(v: number) {
 
 function LineRow({ item, onChange, onRemove, vis, taxRate }: LineRowProps) {
   const [editingUnitCost, setEditingUnitCost] = useState(false);
+  const [relatedExpanded, setRelatedExpanded] = useState(false);
   const u = (f: string, v: string | number) => onChange({...item, [f]: v});
   const bc = item.unitCost * item.quantity;
   const cp = bc * (1 + item.markup / 100);
@@ -80,17 +81,54 @@ function LineRow({ item, onChange, onRemove, vis, taxRate }: LineRowProps) {
       <td style={{textAlign: 'right', fontWeight: 600, fontSize: 13}}>{fmtCurrency(cp)}</td>
       {vis.tax && taxRate > 0 && <td style={{textAlign: 'right', fontSize: 12, color: 'var(--g500)'}}>{fmtCurrency(taxAmt)}</td>}
       {vis.bill && <td></td>}
-      <td style={{whiteSpace: 'nowrap'}}>
-        {item.relatedItem && (
-          <span style={{
-            display: 'inline-flex', alignItems: 'center', gap: 4,
+      <td>
+        {(() => {
+          const pillStyle = (isAllowance: boolean) => ({
+            display: 'inline-flex' as const, alignItems: 'center' as const, gap: 4,
             fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 4,
-            background: item.relatedItem.type === 'allowance' ? '#e8f1fc' : 'var(--green-bg)',
-            color: item.relatedItem.type === 'allowance' ? 'var(--bt-blue)' : 'var(--green)',
-          }}>
-            {item.relatedItem.type === 'allowance' ? 'Allowance' : 'Selection'}: {item.relatedItem.name}
-          </span>
-        )}
+            background: isAllowance ? '#e8f1fc' : 'var(--green-bg)',
+            color: isAllowance ? 'var(--bt-blue)' : 'var(--green)',
+          });
+          const toggleStyle = {
+            fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 4,
+            background: 'transparent', border: '1px solid var(--g300)',
+            color: 'var(--g500)', cursor: 'pointer' as const,
+          };
+          const rolled = item.rolledUp;
+          if (rolled && rolled.length > 1) {
+            // Preserve wizard order — allowance comes first when included (outgoing
+            // payload prepends the reversal), selections follow in their original order.
+            const visible = relatedExpanded ? rolled : rolled.slice(0, 1);
+            const remaining = rolled.length - visible.length;
+            return (
+              <div style={{display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center'}}>
+                {visible.map((r, idx) => (
+                  <span key={idx} style={pillStyle(!!r.isAllowance)}>
+                    {r.isAllowance ? 'Allowance' : 'Selection'}: {r.name}
+                  </span>
+                ))}
+                {remaining > 0 && (
+                  <button type="button" onClick={() => setRelatedExpanded(true)} style={toggleStyle}>
+                    +{remaining} more
+                  </button>
+                )}
+                {relatedExpanded && (
+                  <button type="button" onClick={() => setRelatedExpanded(false)} style={toggleStyle}>
+                    Show less
+                  </button>
+                )}
+              </div>
+            );
+          }
+          if (item.relatedItem) {
+            return (
+              <span style={pillStyle(item.relatedItem.type === 'allowance')}>
+                {item.relatedItem.type === 'allowance' ? 'Allowance' : 'Selection'}: {item.relatedItem.name}
+              </span>
+            );
+          }
+          return null;
+        })()}
       </td>
       <td style={{width: 32, textAlign: 'center'}}><button className="rr" onClick={onRemove}>&times;</button></td>
     </tr>

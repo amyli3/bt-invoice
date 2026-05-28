@@ -53,6 +53,10 @@ interface SelectionChild {
   // wizard when "Combine same-cost-code lines" is on so the invoice page
   // can expand the netted line back into its components.
   rolledUp?: { name: string; amount: number }[];
+  // Source child ids that contributed to this outgoing row. Used by the
+  // host to track which children are already on the invoice so the wizard
+  // can hide them on re-open even when only some children of a group were added.
+  sourceChildIds?: string[];
 }
 
 interface SelectionGroup {
@@ -68,6 +72,15 @@ interface SelectionGroup {
   status?: string;
   isComplete?: boolean;
   children: SelectionChild[];
+  // Tells the host to update an existing allowance line on the invoice
+  // (rather than add a new one). Set when the allowance was billed in a
+  // prior wizard round and this round's new selections changed the math.
+  allowanceUpdate?: number;
+  allowanceChildId?: string;
+  // When provided, the host also rewrites the line's childIds + rolledUp
+  // so future rounds correctly see the absorbed selections as already added.
+  allowanceUpdateChildIds?: string[];
+  allowanceUpdateRolledUp?: { name: string; amount: number; isAllowance?: boolean }[];
 }
 
 function fmtCurrency(v: number) {
@@ -83,18 +96,24 @@ interface Props {
   onAdd: (items: SelectionGroup[]) => void;
   jobName: string;
   data: SelectionGroup[];
-  addedGroupIds?: string[];
+  addedChildIds?: string[];
 }
 
-export default function SelectionsModalV2({ open, onClose, onAdd, jobName, data, addedGroupIds = [] }: Props) {
-  const addedSet = new Set(addedGroupIds);
-  const availableData = data.filter(d => !addedSet.has(d.id));
+export default function SelectionsModalV2({ open, onClose, onAdd, jobName, data, addedChildIds = [] }: Props) {
+  const addedChildSet = new Set(addedChildIds);
+  const isAlreadyAdded = (c: SelectionChild) => addedChildSet.has(c.id);
+  // Keep already-added children visible so the user sees what's billed here,
+  // but drop a group entirely when every billable child has been added (nothing
+  // actionable left). The allowance math below treats already-added selections
+  // as if they're checked so the budget decreases correctly.
+  const availableData = data.filter(g =>
+    g.children.some(c => !isAlreadyAdded(c) && (c.newInvoiceAmt !== null || c.selection === 'Allowance')),
+  );
 
   const [checked, setChecked] = useState<Record<string, boolean>>({});
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [includeDescs, setIncludeDescs] = useState(true);
   const [groupByCode, setGroupByCode] = useState(true);
-  const [search, setSearch] = useState('');
 
   // V2 model: per-row checkboxes. Two distinct flows depending on whether
   // the allowance was already invoiced.
@@ -114,6 +133,8 @@ export default function SelectionsModalV2({ open, onClose, onAdd, jobName, data,
   const isPreInvoiced = (g: SelectionGroup) => g.previouslyInvoiced > 0;
 
   const isBillable = (g: SelectionGroup, c: SelectionChild) => {
+    // Already added to this invoice via a prior wizard run — not re-billable here.
+    if (isAlreadyAdded(c)) return false;
     if (c.selection === 'Allowance') {
       // Marked complete + never pre-invoiced: allowance closes out on the
       // budget side, only the selections are billable on this invoice.
@@ -137,8 +158,11 @@ export default function SelectionsModalV2({ open, onClose, onAdd, jobName, data,
 
   const effectiveAmount = (g: SelectionGroup, c: SelectionChild): number => {
     if (c.selection !== 'Allowance') return c.price;
+    // Selections already on this invoice consume budget the same as newly
+    // checked ones — otherwise the allowance row would ignore prior wizard
+    // adds and overstate the remaining balance.
     const checkedSelTotal = g.children
-      .filter(child => child.selection !== 'Allowance' && checked[child.id])
+      .filter(child => child.selection !== 'Allowance' && (checked[child.id] || isAlreadyAdded(child)))
       .reduce((s, child) => s + child.price, 0);
     if (isPreInvoiced(g)) {
       const remaining = remainingBudget(g);
@@ -181,28 +205,15 @@ export default function SelectionsModalV2({ open, onClose, onAdd, jobName, data,
     availableData.forEach(g => { e[g.id] = true; });
     setChecked({});
     setExpanded(e);
-    setSearch('');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   if (!open) return null;
 
-  const filtered = search
-    ? availableData.filter(g => {
-        const q = search.toLowerCase();
-        if (g.name.toLowerCase().includes(q)) return true;
-        return g.children.some(c =>
-          c.lineItem.toLowerCase().includes(q) ||
-          c.costCode.toLowerCase().includes(q) ||
-          c.selection.toLowerCase().includes(q)
-        );
-      })
-    : availableData;
-
-  const creditsOwed = filtered.filter(g => g.type === 'allowance' && creditAmount(g) > 0);
+  const creditsOwed = availableData.filter(g => g.type === 'allowance' && creditAmount(g) > 0);
   const creditIds = new Set(creditsOwed.map(g => g.id));
-  const allowances = filtered.filter(g => g.type === 'allowance' && !creditIds.has(g.id));
-  const standalone = filtered.filter(g => g.type === 'selection');
+  const allowances = availableData.filter(g => g.type === 'allowance' && !creditIds.has(g.id));
+  const standalone = availableData.filter(g => g.type === 'selection');
 
   const toggleChild = (g: SelectionGroup, c: SelectionChild) => {
     // Allow unchecking even when not checkable now (e.g. user previously
@@ -238,7 +249,7 @@ export default function SelectionsModalV2({ open, onClose, onAdd, jobName, data,
 
   // Global select all — uses billable rows; allowance rows will self-clamp
   // to 0 when their selections are also selected.
-  const allBillableIds = filtered.flatMap(g => g.children.filter(c => isBillable(g, c)).map(c => c.id));
+  const allBillableIds = availableData.flatMap(g => g.children.filter(c => isBillable(g, c)).map(c => c.id));
   const globalState: 'all' | 'none' | 'partial' = (() => {
     if (allBillableIds.length === 0) return 'none';
     const onCount = allBillableIds.filter(id => checked[id]).length;
@@ -257,12 +268,12 @@ export default function SelectionsModalV2({ open, onClose, onAdd, jobName, data,
   };
 
   // Expand/collapse all
-  const allExpanded = filtered.length > 0 && filtered.every(g => expanded[g.id]);
+  const allExpanded = availableData.length > 0 && availableData.every(g => expanded[g.id]);
   const toggleExpandAll = () => {
     const next = !allExpanded;
     setExpanded(e => {
       const v = { ...e };
-      filtered.forEach(g => { v[g.id] = next; });
+      availableData.forEach(g => { v[g.id] = next; });
       return v;
     });
   };
@@ -279,13 +290,18 @@ export default function SelectionsModalV2({ open, onClose, onAdd, jobName, data,
       byCode.set(r.costCode, arr);
     });
     return Array.from(byCode.values()).map(codeRows => {
-      if (codeRows.length === 1) return codeRows[0];
+      if (codeRows.length === 1) return { ...codeRows[0], sourceChildIds: [codeRows[0].id] };
       const total = codeRows.reduce((s, r) => s + (r.newInvoiceAmt ?? 0), 0);
+      const allowance = codeRows.find(r => r.selection === 'Allowance');
       const selections = codeRows.filter(r => r.selection !== 'Allowance');
-      // When multiple selections share a cost code, surface the cost code as
-      // the line title — the individual selection names live in the stack
-      // dropdown on the invoice. Keeps the row scannable when N is large.
-      const label = codeRows[0].costCode;
+      // Per Kendall (2026-05-28 sync): when rows share a cost code, label the
+      // collapsed line with just the cost code's name ("Plumbing") — not the
+      // full "4010 - Plumbing" string and not the joined selection names.
+      // Cost code strings come in as "4010 - Plumbing" from the allowance child;
+      // parse the name off the first " - ".
+      const ccSource = allowance?.costCode ?? codeRows[0].costCode;
+      const dashIdx = ccSource.indexOf(' - ');
+      const label = dashIdx >= 0 ? ccSource.slice(dashIdx + 3).trim() : ccSource;
       return {
         ...codeRows[0],
         lineItem: label,
@@ -293,6 +309,7 @@ export default function SelectionsModalV2({ open, onClose, onAdd, jobName, data,
         selection: selections[0]?.selection ?? 'Allowance',
         // Per-row breakdown for the invoice's expand UI.
         rolledUp: codeRows.map(r => ({ name: r.lineItem, amount: r.newInvoiceAmt ?? 0, isAllowance: r.selection === 'Allowance' })),
+        sourceChildIds: codeRows.map(r => r.id),
       };
     });
   };
@@ -344,6 +361,43 @@ export default function SelectionsModalV2({ open, onClose, onAdd, jobName, data,
 
         const allowanceChild = g.children.find(c => c.selection === 'Allowance');
         if (!allowanceChild) return null;
+
+        // If the reversal is already on this invoice from a prior round,
+        // we'd double-reverse if we emitted another. Instead, update the
+        // existing netted line to include this round's new selections.
+        if (isAlreadyAdded(allowanceChild)) {
+          // Same-code sels: absorbed into the netted line via allowanceUpdate.
+          // Diff-code sels: emit as new lines (no reversal, the prior reversal is already in place).
+          const allowanceCode = allowanceChild.costCode;
+          const sameCodeNew = checkedSelections.filter(c => c.costCode === allowanceCode);
+          const diffCodeNew = checkedSelections.filter(c => c.costCode !== allowanceCode);
+
+          let updateFields: Partial<SelectionGroup> = {};
+          if (groupByCode && sameCodeNew.length > 0) {
+            // Recompute the netted line: reversal + ALL same-code sels (prior added + new this round).
+            const allSameCodeSels = g.children.filter(c =>
+              c.selection !== 'Allowance' &&
+              c.newInvoiceAmt !== null &&
+              c.costCode === allowanceCode &&
+              (checked[c.id] || isAlreadyAdded(c)),
+            );
+            const newTotal = -remaining + allSameCodeSels.reduce((s, c) => s + c.price, 0);
+            updateFields = {
+              allowanceUpdate: newTotal,
+              allowanceChildId: allowanceChild.id,
+              allowanceUpdateChildIds: [allowanceChild.id, ...allSameCodeSels.map(c => c.id)],
+              allowanceUpdateRolledUp: [
+                { name: `${g.name} reversal`, amount: -remaining, isAllowance: true },
+                ...allSameCodeSels.map(c => ({ name: c.lineItem, amount: c.price })),
+              ],
+            };
+          }
+
+          const diffRows = diffCodeNew.map(c => ({ ...c, newInvoiceAmt: c.price }));
+          if (diffRows.length === 0 && Object.keys(updateFields).length === 0) return null;
+          return { ...g, children: diffRows, ...updateFields };
+        }
+
         const allowanceReversal: SelectionChild = {
           ...allowanceChild,
           lineItem: `${g.name} reversal`,
@@ -361,11 +415,25 @@ export default function SelectionsModalV2({ open, onClose, onAdd, jobName, data,
         .map(c => ({ ...c, newInvoiceAmt: effectiveAmount(g, c) }));
       if (filteredChildren.length === 0) return null;
       const netted = maybeNet(filteredChildren, g.name);
-      return { ...g, children: netted };
+      const result: SelectionGroup = { ...g, children: netted };
+      // If the allowance line was billed in a prior round, this round's new
+      // selections have changed the math — the existing line needs to be
+      // updated so we don't over-bill (selections + stale allowance amount).
+      const allowanceChild = g.children.find(c => c.selection === 'Allowance');
+      if (allowanceChild && isAlreadyAdded(allowanceChild)) {
+        result.allowanceUpdate = effectiveAmount(g, allowanceChild);
+        result.allowanceChildId = allowanceChild.id;
+      }
+      return result;
     })
     .filter((g): g is SelectionGroup => g !== null);
 
-  const selectedCount = outgoing.reduce((s, g) => s + g.children.length, 0);
+  // Count allowanceUpdate as a "virtual selection" so the Add button stays
+  // enabled when the only change this round is an in-place line adjustment.
+  const selectedCount = outgoing.reduce(
+    (s, g) => s + g.children.length + (g.allowanceUpdate !== undefined ? 1 : 0),
+    0,
+  );
   const invoiceSubtotal = outgoing.reduce(
     (s, g) => s + g.children.reduce((cs, c) => cs + (c.newInvoiceAmt ?? 0), 0),
     0,
@@ -460,6 +528,7 @@ export default function SelectionsModalV2({ open, onClose, onAdd, jobName, data,
               <tbody>
                 {g.children.map(c => {
                   const isAllowanceRow = c.selection === 'Allowance';
+                  const onThisInvoice = isAlreadyAdded(c);
                   const billableRow = isBillable(g, c);
                   const isOn = !!checked[c.id];
                   const amt = effectiveAmount(g, c);
@@ -473,13 +542,15 @@ export default function SelectionsModalV2({ open, onClose, onAdd, jobName, data,
                   const rowAmt = preInvAllowance ? 0 : amt;
                   const closedOut = isAllowanceRow && g.isComplete && !preInv;
                   const dim = !billableRow || covered || preInvAllowance;
-                  const checkboxTitle = closedOut
-                    ? 'Allowance marked complete — unspent budget closes out on the budget side'
-                    : !billableRow
-                      ? 'Already invoiced — not billable on this invoice'
-                      : covered
-                        ? 'Fully covered by selected selections'
-                        : undefined;
+                  const checkboxTitle = onThisInvoice
+                    ? 'Already on this invoice'
+                    : closedOut
+                      ? 'Allowance marked complete — unspent budget closes out on the budget side'
+                      : !billableRow
+                        ? 'Already invoiced — not billable on this invoice'
+                        : covered
+                          ? 'Fully covered by selected selections'
+                          : undefined;
                   return (
                     <tr key={c.id} className={dim ? 'selv2-row-disabled' : ''}>
                       <td>
@@ -500,14 +571,8 @@ export default function SelectionsModalV2({ open, onClose, onAdd, jobName, data,
                           {closedOut && (
                             <span className="selv2-pill selv2-pill-muted">Closed out on budget</span>
                           )}
-                          {!billableRow && !closedOut && (
+                          {!billableRow && !closedOut && !onThisInvoice && (
                             <span className="selv2-pill selv2-pill-muted">Invoiced</span>
-                          )}
-                          {covered && (
-                            <span className="selv2-pill selv2-pill-muted">Covered by selections</span>
-                          )}
-                          {reduced && (
-                            <span className="selv2-pill selv2-pill-muted">Remaining budget</span>
                           )}
                           {c.selectionStatus && billableRow && !isAllowanceRow && (
                             <span className="selv2-pill selv2-pill-approved">{c.selectionStatus}</span>
@@ -551,7 +616,6 @@ export default function SelectionsModalV2({ open, onClose, onAdd, jobName, data,
       <div className="est-modal selv2-modal" onClick={e => e.stopPropagation()}>
         <div className="est-modal-hdr">
           <div>
-            <div className="est-modal-hdr-sub">{jobName}</div>
             <h2 className="selv2-title">Add selections and allowances to invoice</h2>
           </div>
           <button className="est-modal-close" onClick={onClose}>&times;</button>
@@ -562,37 +626,24 @@ export default function SelectionsModalV2({ open, onClose, onAdd, jobName, data,
             Choose approved selections and allowances to invoice.
           </div>
 
-          <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap' }}>
-            <label className="selv2-inline-check" onClick={() => setIncludeDescs(v => !v)}>
-              <div className={"est-check" + (includeDescs ? ' on' : '')} />
-              Include descriptions
-            </label>
-            <label className="selv2-inline-check" onClick={() => setGroupByCode(v => !v)}>
-              <div className={"est-check" + (groupByCode ? ' on' : '')} />
-              Group by cost code
-            </label>
-          </div>
-
           <div className="selv2-controls">
-            <label className="selv2-inline-check" onClick={toggleAll}>
+            <label className="selv2-inline-check selv2-controls-primary" onClick={toggleAll}>
               <div className={"est-check" + (globalState === 'all' ? ' on' : globalState === 'partial' ? ' partial' : '')} />
               <span className="selv2-controls-label">Select all</span>
             </label>
+            <label className="selv2-inline-check selv2-controls-opt" onClick={() => setIncludeDescs(v => !v)}>
+              <div className={"est-check" + (includeDescs ? ' on' : '')} />
+              Include descriptions
+            </label>
+            <label className="selv2-inline-check selv2-controls-opt" onClick={() => setGroupByCode(v => !v)}>
+              <div className={"est-check" + (groupByCode ? ' on' : '')} />
+              Group by cost code
+            </label>
+            <div className="selv2-controls-spacer" />
             <button type="button" className="est-expand-btn" onClick={toggleExpandAll}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M7 20l5-5 5 5" /><path d="M7 4l5 5 5-5" /></svg>
               {allExpanded ? 'Collapse all' : 'Expand all'}
             </button>
-            <div className="selv2-search">
-              <svg width="14" height="14" viewBox="0 0 20 20" fill="none">
-                <circle cx="9" cy="9" r="6" stroke="currentColor" strokeWidth="1.5" />
-                <path d="M13 13L17 17" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-              </svg>
-              <input
-                placeholder="Search line item"
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-              />
-            </div>
           </div>
 
           <div className="selv2-sections">
@@ -667,8 +718,8 @@ export default function SelectionsModalV2({ open, onClose, onAdd, jobName, data,
                 </div>
               </>
             )}
-            {filtered.length === 0 && (
-              <div className="selv2-empty">No matching selections.</div>
+            {availableData.length === 0 && (
+              <div className="selv2-empty">No selections to add.</div>
             )}
           </div>
         </div>

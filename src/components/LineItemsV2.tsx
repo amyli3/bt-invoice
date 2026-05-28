@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Invoice, LineItem, ColumnVisibility } from '../types';
 import { COST_TYPES, getNextId } from '../mockData';
 import { fmt, parseTaxRate } from '../utils';
@@ -99,7 +100,7 @@ function StackBadge({ items }: { items: { name: string; amount: number; isAllowa
         </svg>
         <span>{items.length}</span>
       </button>
-      {open && coords && (
+      {open && coords && createPortal(
         <div ref={ddRef} className="liv2-stack-dropdown" style={{ position: 'fixed', top: coords.top, left: coords.left }}>
           <BdsText as="div" size="heavy-sm" className="liv2-stack-dropdown-hdr">Stacked items</BdsText>
           <ul>
@@ -110,7 +111,8 @@ function StackBadge({ items }: { items: { name: string; amount: number; isAllowa
               </li>
             ))}
           </ul>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );
@@ -147,7 +149,7 @@ function LineRow({ item, onChange, onRemove, vis, taxRate }: LineRowProps) {
       {vis.tax && taxRate > 0 && <td style={{textAlign: 'right', fontSize: 12, color: 'var(--g500)'}}>{fmtCurrency(taxAmt)}</td>}
       {vis.bill && <td></td>}
       <td style={{whiteSpace: 'nowrap'}}>
-        {item.relatedItem && (
+        {item.relatedItem && !hasStack && (
           <span style={{
             display: 'inline-flex', alignItems: 'center', gap: 4,
             fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 4,
