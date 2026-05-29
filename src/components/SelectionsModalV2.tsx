@@ -94,12 +94,11 @@ interface Props {
   open: boolean;
   onClose: () => void;
   onAdd: (items: SelectionGroup[]) => void;
-  jobName: string;
   data: SelectionGroup[];
   addedChildIds?: string[];
 }
 
-export default function SelectionsModalV2({ open, onClose, onAdd, jobName, data, addedChildIds = [] }: Props) {
+export default function SelectionsModalV2({ open, onClose, onAdd, data, addedChildIds = [] }: Props) {
   const addedChildSet = new Set(addedChildIds);
   const isAlreadyAdded = (c: SelectionChild) => addedChildSet.has(c.id);
   // Keep already-added children visible so the user sees what's billed here,

@@ -2626,8 +2626,7 @@ export default function AIAPayApp({ onNavigate, approvedCOIds, addedCostIds: ext
         onClose={() => setShowSelectionsV2Modal(false)}
         data={selectionsWizardData}
         onAdd={handleSelectionsWizardAdd}
-        jobName="Johnson Residence — Full Remodel"
-        addedGroupIds={addedSelectionIds}
+        addedChildIds={addedSelectionIds}
       />
 
       {/* ─── Switch View Confirmation Dialog ─────────────────────────── */}

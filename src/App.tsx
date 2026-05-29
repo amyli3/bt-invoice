@@ -685,7 +685,6 @@ export default function App() {
         open={selV2ModalOpen}
         onClose={() => setSelV2ModalOpen(false)}
         onAdd={handleAddFromSelections}
-        jobName={currentJob?.name || 'Job name'}
         addedChildIds={invoice.lineItems.flatMap(li => li.relatedItem?.childIds ?? [])}
         data={selectionsModalData}
       />
