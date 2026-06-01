@@ -58,8 +58,8 @@ const allSelections: SelectionItem[] = [
   { name: 'Valencia Edge 6 ft. Laminate Countertop', category: 'Kitchen', date: 'Oct 30, 2024', price: 500, impact: 0, allowanceName: 'Kitchen allowance', allowanceBudget: 5000, allowanceUsed: 4700, status: 'approved', approvedBy: 'Jenna Johnson', location: 'Kitchen' },
   { name: 'Custom Hand-Finished Shaker Cabinet Package with Soft-Close Dovetail Drawers and Brushed Nickel Hardware', category: 'Kitchen', date: 'Oct 25, 2024', price: 0, impact: 0, allowanceName: 'Kitchen allowance', allowanceBudget: 5000, allowanceUsed: 4700, status: 'approved', approvedBy: 'Jenna Johnson', location: 'Kitchen' }, // Long selection title to illustrate wrapping
   { name: 'Brass pendant lighting over island', category: 'Kitchen', date: 'Oct 22, 2024', price: 650, impact: 0, allowanceName: 'Kitchen allowance', allowanceBudget: 5000, allowanceUsed: 0, status: 'declined', location: 'Kitchen' },
-  { name: 'Granite Backsplash Upgrade', category: 'Kitchen', date: '', price: 2100, impact: 1800, allowanceName: 'Kitchen allowance', allowanceBudget: 5000, allowanceUsed: 6800, status: 'pending', location: 'Kitchen' },
-  { name: 'Under-cabinet LED lighting', category: 'Kitchen', date: '', price: 450, impact: 450, allowanceName: 'Kitchen allowance', allowanceBudget: 5000, allowanceUsed: 7250, status: 'pending', location: 'Kitchen' },
+  { name: 'Granite Backsplash Upgrade', category: 'Kitchen', date: 'Nov 2, 2024', price: 2100, impact: 1800, allowanceName: 'Kitchen allowance', allowanceBudget: 5000, allowanceUsed: 6800, status: 'approved', approvedBy: 'Jenna Johnson', location: 'Kitchen' },
+  { name: 'Under-cabinet LED lighting', category: 'Kitchen', date: 'Nov 4, 2024', price: 450, impact: 450, allowanceName: 'Kitchen allowance', allowanceBudget: 5000, allowanceUsed: 7250, status: 'approved', approvedBy: 'Jenna Johnson', location: 'Kitchen' },
   { name: 'Pot filler faucet', category: 'Kitchen', date: '', price: 380, impact: 380, allowanceName: 'Kitchen allowance', allowanceBudget: 5000, allowanceUsed: 7630, status: 'pending', location: 'Kitchen' },
 
   // Bathroom
@@ -81,6 +81,16 @@ const allSelections: SelectionItem[] = [
   { name: 'Stair landing pendant', category: 'Interior', date: 'Nov 20, 2024', price: 380, impact: 380, allowanceName: 'Lighting allowance', allowanceBudget: 2000, allowanceUsed: 3300, status: 'approved', approvedBy: 'Jenna Johnson', location: 'Stairs' },
   { name: 'Hallway wall sconces (pair)', category: 'Interior', date: '', price: 300, impact: 300, allowanceName: 'Lighting allowance', allowanceBudget: 2000, allowanceUsed: 3600, status: 'pending', location: 'Hallway' },
   { name: 'Master bath vanity lighting', category: 'Interior', date: '', price: 280, impact: 280, allowanceName: 'Lighting allowance', allowanceBudget: 2000, allowanceUsed: 3880, status: 'pending', location: 'Master Bath' },
+
+  // Flooring allowance — approved selections come in under budget ($5,500 of $8,000) to demo the "under-budget, in progress" case.
+  { name: 'Engineered white oak flooring — main level', category: 'Interior', date: 'Nov 12, 2024', price: 3800, impact: 0, allowanceName: 'Flooring allowance', allowanceBudget: 8000, allowanceUsed: 3800, status: 'approved', approvedBy: 'Jenna Johnson', location: 'Whole house' },
+  { name: 'Porcelain tile — bathrooms', category: 'Interior', date: 'Nov 14, 2024', price: 1200, impact: 0, allowanceName: 'Flooring allowance', allowanceBudget: 8000, allowanceUsed: 5000, status: 'approved', approvedBy: 'Mark Johnson', location: 'Master Bath' },
+  { name: 'Stair tread carpet runner', category: 'Interior', date: 'Nov 18, 2024', price: 500, impact: 0, allowanceName: 'Flooring allowance', allowanceBudget: 8000, allowanceUsed: 5500, status: 'approved', approvedBy: 'Jenna Johnson', location: 'Stairs' },
+
+  // Landscaping allowance — approved selections hit the budget exactly ($4,500 of $4,500) to demo the "on the money, $0 difference" case.
+  { name: 'Front yard sod and irrigation', category: 'Exterior', date: 'Nov 22, 2024', price: 2500, impact: 0, allowanceName: 'Landscaping allowance', allowanceBudget: 4500, allowanceUsed: 2500, status: 'approved', approvedBy: 'Jenna Johnson', location: 'Exterior' },
+  { name: 'Foundation plantings — shrubs and perennials', category: 'Exterior', date: 'Nov 24, 2024', price: 1400, impact: 0, allowanceName: 'Landscaping allowance', allowanceBudget: 4500, allowanceUsed: 3900, status: 'approved', approvedBy: 'Mark Johnson', location: 'Exterior' },
+  { name: 'Walkway pavers', category: 'Exterior', date: 'Nov 26, 2024', price: 600, impact: 0, allowanceName: 'Landscaping allowance', allowanceBudget: 4500, allowanceUsed: 4500, status: 'approved', approvedBy: 'Jenna Johnson', location: 'Exterior' },
 
   // Standalone selections — pre-contract (included in original price)
   { name: 'Shower Floor Tile — Marble Upgrade', category: 'Exterior', date: 'Oct 2, 2024', price: 480, impact: 0, status: 'approved', timing: 'pre-contract', location: 'Master Bath' },
@@ -125,11 +135,8 @@ const withTax = (n: number) => n * (1 + TAX_RATE);
 const changeOrdersTotal = changeOrders
   .filter(c => c.status === 'approved')
   .reduce((sum, c) => sum + c.price, 0);
-const approvedSelectionsTotal = allSelections
-  .filter(s => s.status === 'approved')
-  .reduce((sum, s) => sum + s.impact, 0);
-const totalTax = approvedSelectionsTotal * TAX_RATE;
-const revisedClientPrice = originalContractPrice + changeOrdersTotal + approvedSelectionsTotal + totalTax;
+// approvedSelectionsTotal + dependent totals are computed below, after the
+// allowances data is declared (we need `complete` flags to filter).
 
 const pendingSelectionsAmt = allSelections
   .filter(s => s.status === 'pending')
@@ -140,11 +147,11 @@ const pendingChangeOrders = changeOrders
 const forecastedAdditional = pendingSelectionsAmt + pendingChangeOrders;
 
 // Allowances as first-class entities — exist whether or not selections have been made yet
-const allowances: { name: string; budget: number; fromCO?: string; location: string }[] = [
+const allowances: { name: string; budget: number; fromCO?: string; location: string; complete?: boolean }[] = [
   { name: 'Kitchen allowance', budget: 5000, location: 'Kitchen' },
-  { name: 'Bathroom allowance', budget: 1000, location: 'Master Bath' },
-  { name: 'Porch fixtures', budget: 3000, fromCO: 'Add screened porch', location: 'Exterior' },
-  { name: 'Lighting allowance', budget: 2000, location: 'Whole house' },
+  { name: 'Bathroom allowance', budget: 1000, location: 'Master Bath', complete: true }, // under-budget, marked complete → shows negative Contract impact
+  { name: 'Porch fixtures', budget: 3000, fromCO: 'Add screened porch', location: 'Exterior', complete: true },
+  { name: 'Lighting allowance', budget: 2000, location: 'Whole house', complete: true }, // over-budget approved ($3,300 / $2,000) → +$1,300 Contract impact when complete
   { name: 'Flooring allowance', budget: 8000, location: 'Whole house' }, // No selections yet
   { name: 'Landscaping allowance', budget: 4500, location: 'Exterior' }, // No selections yet
   { name: 'Appliance allowance', budget: 6000, location: 'Kitchen' }, // No selections yet
@@ -154,8 +161,59 @@ const allowanceNames = allowances.map(a => a.name);
 const allowanceGroups = allowances.map(a => {
   const items = allSelections.filter(s => s.allowanceName === a.name);
   const maxUsed = items.length ? Math.max(0, ...items.map(i => i.allowanceUsed || 0)) : 0;
-  return { name: a.name, budget: a.budget, used: maxUsed, items, fromCO: a.fromCO, location: a.location };
+  return { name: a.name, budget: a.budget, used: maxUsed, items, fromCO: a.fromCO, location: a.location, complete: !!a.complete };
 });
+
+// In-progress first, then marked complete. Used by every JPS slice's allowance
+// list so the two groups render under separate sub-section headers.
+const sortedAllowanceGroups = [
+  ...allowanceGroups.filter(g => !g.complete),
+  ...allowanceGroups.filter(g => g.complete),
+];
+
+// Subtotals for the In progress / Completed sub-sections. Both use the same
+// shape (budget / approved) and a third value that differs by state:
+//   - In progress → Remaining (budget − approved). Negative when the section
+//     is collectively over-budget; positive when collectively under.
+//   - Completed → Contract impact (approved − budget, $0 if nothing approved).
+function approvedFor(group: typeof allowanceGroups[number]) {
+  return group.items.filter(i => i.status === 'approved').reduce((s, i) => s + i.price, 0);
+}
+const inProgressAllowanceTotals = allowanceGroups.filter(g => !g.complete).reduce(
+  (acc, g) => {
+    const approved = approvedFor(g);
+    acc.budget += g.budget;
+    acc.approved += approved;
+    // Difference = approved − budget. Positive when over-budget, negative when
+    // under. Matches the per-row formula so the subtotal sign matches its rows.
+    acc.difference += g.budget - approved;
+    return acc;
+  },
+  { budget: 0, approved: 0, difference: 0 },
+);
+const completedAllowanceTotals = allowanceGroups.filter(g => g.complete).reduce(
+  (acc, g) => {
+    const approved = approvedFor(g);
+    acc.budget += g.budget;
+    acc.approved += approved;
+    acc.contractImpact += approved === 0 ? 0 : approved - g.budget;
+    return acc;
+  },
+  { budget: 0, approved: 0, contractImpact: 0 },
+);
+
+// Approved changes from selections:
+//   - Standalone approved selections (no allowance) always contribute their impact.
+//   - Allowance-bound selections only contribute via their parent allowance, and
+//     only once it's marked complete — the per-allowance contract impact rolls in
+//     (approvedUsed - budget). In-progress allowances don't impact this total;
+//     their running variance lives in the per-row "Remaining" instead.
+const standaloneApprovedSelectionsImpact = allSelections
+  .filter(s => s.status === 'approved' && !s.allowanceName)
+  .reduce((sum, s) => sum + s.impact, 0);
+const approvedSelectionsTotal = completedAllowanceTotals.contractImpact + standaloneApprovedSelectionsImpact;
+const totalTax = approvedSelectionsTotal * TAX_RATE;
+const revisedClientPrice = originalContractPrice + changeOrdersTotal + approvedSelectionsTotal + totalTax;
 
 // Bills grouped by cost code — open book / cost-plus contracts realize price adjustments
 // through actuals (bills) vs. budgeted line items. Each cost code has a budget; bills accrue
@@ -953,8 +1011,6 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
             tabs={[
               { key: 'slice1', label: 'Slice 1' },
               { key: 'slice5', label: 'Openbook' },
-              { key: 'slice2', label: 'Slice 2' },
-              { key: 'slice3', label: 'Slice 3' },
             ]}
           />
         </div>
@@ -1026,12 +1082,17 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
               />
               </div>
 
-              {allowanceGroups.map(group => {
+              {sortedAllowanceGroups.map((group, gi, arr) => {
                 const approvedItems = group.items.filter(i => i.status === 'approved');
                 const isOpen = expandedGroups[group.name];
                 const hasItems = approvedItems.length > 0;
+                const showInProgressHeader = !group.complete && gi === 0;
+                const showCompletedHeader = group.complete && (gi === 0 || !arr[gi - 1].complete);
                 return (
-                  <div key={group.name} className="jps-cat-group">
+                  <Fragment key={group.name}>
+                  {showInProgressHeader && <div className="jps-allowance-divider">In progress</div>}
+                  {showCompletedHeader && <div className="jps-allowance-divider">Completed</div>}
+                  <div className="jps-cat-group">
                     <button
                       className={`jps-cat-header ${isOpen ? 'jps-cat-header-open' : ''} ${hasItems ? '' : 'jps-cat-header-static'}`}
                       onClick={hasItems ? () => toggleGroup(group.name) : undefined}
@@ -1044,15 +1105,17 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                       <div className="jps-cat-header-right">
                         {(() => {
                           const approvedUsed = approvedItems.reduce((s, i) => s + i.price, 0);
-                          const remaining = group.budget - approvedUsed;
                           const over = approvedUsed > group.budget;
                           return (
                             <span className="jps-allowance-flow">
                               <span className="jps-flow-part"><span>Allowance</span><strong>{fmt(withTax(group.budget))}</strong></span>
-                              <span className="jps-flow-part"><span>Spent</span><strong>{fmt(withTax(approvedUsed))}</strong></span>
+                              <span className="jps-flow-part"><span>Approved price</span><strong>{fmt(withTax(approvedUsed))}</strong></span>
                               <span className="jps-flow-sep">·</span>
                               <span className={over ? 'jps-flow-over' : 'jps-flow-remaining'}>
-                                {over ? <><span>Remaining</span><strong>{fmtSigned(withTax(approvedUsed - group.budget))}</strong></> : <><span>Remaining</span><strong>{fmt(withTax(remaining))}</strong></>}
+                                {group.complete
+                                  ? <><span>Contract impact</span><strong>{fmtSigned(approvedUsed === 0 ? 0 : withTax(approvedUsed - group.budget))}</strong></>
+                                  : <><span>Difference</span><strong>{fmt(withTax(group.budget - approvedUsed))}</strong></>
+                                }
                               </span>
                             </span>
                           );
@@ -1096,6 +1159,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                       );
                     })()}
                   </div>
+                  </Fragment>
                 );
               })}
             </div>
@@ -1264,11 +1328,13 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
               />
               </div>
 
-              {allowanceGroups.map(group => {
+              {sortedAllowanceGroups.map((group, gi, arr) => {
                 const approvedItems = group.items.filter(i => i.status === 'approved');
                 const pendingItems = group.items.filter(i => i.status === 'pending');
                 const isOpen = expandedGroups[group.name];
                 const hasItems = group.items.length > 0;
+                const showInProgressHeader = !group.complete && gi === 0;
+                const showCompletedHeader = group.complete && (gi === 0 || !arr[gi - 1].complete);
 
                 // Determine if this allowance spans multiple locations; if so, sub-group items.
                 const allLocations = new Set(group.items.map(i => i.location || group.location));
@@ -1281,7 +1347,10 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                 }, {} as Record<string, typeof approvedItems>);
 
                 return (
-                  <div key={group.name} className="jps-cat-group">
+                  <Fragment key={group.name}>
+                  {showInProgressHeader && <div className="jps-allowance-divider">In progress</div>}
+                  {showCompletedHeader && <div className="jps-allowance-divider">Completed</div>}
+                  <div className="jps-cat-group">
                     <button
                       className={`jps-cat-header ${isOpen ? 'jps-cat-header-open' : ''} ${hasItems ? '' : 'jps-cat-header-static'}`}
                       onClick={hasItems ? () => toggleGroup(group.name) : undefined}
@@ -1295,15 +1364,17 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                       <div className="jps-cat-header-right">
                         {(() => {
                           const approvedUsed = approvedItems.reduce((s, i) => s + i.price, 0);
-                          const remaining = group.budget - approvedUsed;
                           const over = approvedUsed > group.budget;
                           return (
                             <span className="jps-allowance-flow">
                               <span className="jps-flow-part"><span>Allowance</span><strong>{fmt(group.budget)}</strong></span>
-                              <span className="jps-flow-part"><span>Spent</span><strong>{fmt(approvedUsed)}</strong></span>
+                              <span className="jps-flow-part"><span>Approved price</span><strong>{fmt(approvedUsed)}</strong></span>
                               <span className="jps-flow-sep">·</span>
                               <span className={over ? 'jps-flow-over' : 'jps-flow-remaining'}>
-                                {over ? <><span>Remaining</span><strong>{fmtSigned(approvedUsed - group.budget)}</strong></> : <><span>Remaining</span><strong>{fmt(remaining)}</strong></>}
+                                {group.complete
+                                  ? <><span>Contract impact</span><strong>{fmtSigned(approvedUsed === 0 ? 0 : approvedUsed - group.budget)}</strong></>
+                                  : <><span>Difference</span><strong>{fmt(group.budget - approvedUsed)}</strong></>
+                                }
                               </span>
                             </span>
                           );
@@ -1401,6 +1472,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                       );
                     })()}
                   </div>
+                  </Fragment>
                 );
               })}
             </div>
@@ -1613,15 +1685,22 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
               />
           </div>
 
-          {allowanceGroups.map(group => {
+          {sortedAllowanceGroups.map((group, gi, arr) => {
             const approvedItems = group.items.filter(i => i.status === 'approved');
             const pendingItems = group.items.filter(i => i.status === 'pending');
 
             const isOpen = expandedGroups[group.name];
 
             const hasItems = group.items.length > 0;
+            const showInProgressHeader = !group.complete && gi === 0;
+            const showCompletedHeader = group.complete && (gi === 0 || !arr[gi - 1].complete);
+            const isLastInProgress = !group.complete && (gi === arr.length - 1 || arr[gi + 1].complete);
+            const isLastCompleted = group.complete && gi === arr.length - 1;
             return (
-              <div key={group.name} className="jps-cat-group">
+              <Fragment key={group.name}>
+              {showInProgressHeader && <div className="jps-allowance-divider">In progress</div>}
+                  {showCompletedHeader && <div className="jps-allowance-divider">Completed</div>}
+              <div className="jps-cat-group">
                 <button
                   className={`jps-cat-header ${isOpen ? 'jps-cat-header-open' : ''} ${hasItems ? '' : 'jps-cat-header-static'}`}
                   onClick={hasItems ? () => toggleGroup(group.name) : undefined}
@@ -1634,15 +1713,17 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                   <div className="jps-cat-header-right">
                     {(() => {
                       const approvedUsed = approvedItems.reduce((s, i) => s + i.price, 0);
-                      const remaining = group.budget - approvedUsed;
                       const over = approvedUsed > group.budget;
                       return (
                         <span className="jps-allowance-flow">
                           <span className="jps-flow-part"><span>Allowance</span><strong>{fmt(group.budget)}</strong></span>
-                          <span className="jps-flow-part"><span>Spent</span><strong>{fmt(approvedUsed)}</strong></span>
+                          <span className="jps-flow-part"><span>Approved price</span><strong>{fmt(approvedUsed)}</strong></span>
                           <span className="jps-flow-sep">·</span>
                           <span className={over ? 'jps-flow-over' : 'jps-flow-remaining'}>
-                            {over ? <><span>Remaining</span><strong>{fmtSigned(approvedUsed - group.budget)}</strong></> : <><span>Remaining</span><strong>{fmt(remaining)}</strong></>}
+                            {group.complete
+                                  ? <><span>Contract impact</span><strong>{fmtSigned(approvedUsed === 0 ? 0 : approvedUsed - group.budget)}</strong></>
+                                  : <><span>Difference</span><strong>{fmt(group.budget - approvedUsed)}</strong></>
+                                }
                           </span>
                         </span>
                       );
@@ -1721,6 +1802,41 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                   );
                 })()}
               </div>
+              {isLastInProgress && (
+                <div className="jps-cat-group jps-allowance-subtotal-row">
+                  <div className="jps-cat-header jps-cat-header-static jps-cat-header-subtotal">
+                    <div className="jps-cat-header-left">
+                      <span className="jps-cat-name">Subtotal</span>
+                    </div>
+                    <div className="jps-cat-header-right">
+                      <span className="jps-allowance-flow">
+                        <span className="jps-flow-part"><span>Allowance</span><strong>{fmt(inProgressAllowanceTotals.budget)}</strong></span>
+                        <span className="jps-flow-part"><span>Approved price</span><strong>{fmt(inProgressAllowanceTotals.approved)}</strong></span>
+                        <span className="jps-flow-sep">·</span>
+                        <span className="jps-flow-remaining"><span>Difference</span><strong>{fmt(inProgressAllowanceTotals.difference)}</strong></span>
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
+              {isLastCompleted && (
+                <div className="jps-cat-group jps-allowance-subtotal-row">
+                  <div className="jps-cat-header jps-cat-header-static jps-cat-header-subtotal">
+                    <div className="jps-cat-header-left">
+                      <span className="jps-cat-name">Subtotal</span>
+                    </div>
+                    <div className="jps-cat-header-right">
+                      <span className="jps-allowance-flow">
+                        <span className="jps-flow-part"><span>Allowance</span><strong>{fmt(completedAllowanceTotals.budget)}</strong></span>
+                        <span className="jps-flow-part"><span>Approved price</span><strong>{fmt(completedAllowanceTotals.approved)}</strong></span>
+                        <span className="jps-flow-sep">·</span>
+                        <span className="jps-flow-remaining"><span>Contract impact</span><strong>{fmtSigned(completedAllowanceTotals.contractImpact)}</strong></span>
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
+              </Fragment>
             );
           })}
 
@@ -2108,14 +2224,19 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                   />
                 </div>
 
-                {allowanceGroups.map(group => {
+                {sortedAllowanceGroups.map((group, gi, arr) => {
                   const approvedItems = group.items.filter(i => i.status === 'approved');
                   const groupKey = `s4-${group.name}`;
                   const isOpen = expandedGroups[groupKey];
                   const hasItems = approvedItems.length > 0;
                   const expandable = hasItems;
+                  const showInProgressHeader = !group.complete && gi === 0;
+                const showCompletedHeader = group.complete && (gi === 0 || !arr[gi - 1].complete);
                   return (
-                    <div key={group.name} className="jps-cat-group">
+                    <Fragment key={group.name}>
+                    {showInProgressHeader && <div className="jps-allowance-divider">In progress</div>}
+                  {showCompletedHeader && <div className="jps-allowance-divider">Completed</div>}
+                    <div className="jps-cat-group">
                       <button
                         className={`jps-cat-header ${isOpen && expandable ? 'jps-cat-header-open' : ''} ${expandable ? '' : 'jps-cat-header-static'}`}
                         onClick={expandable ? () => toggleGroup(groupKey) : undefined}
@@ -2128,15 +2249,17 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                         <div className="jps-cat-header-right">
                           {(() => {
                             const approvedUsed = approvedItems.reduce((s, i) => s + i.price, 0);
-                            const remaining = group.budget - approvedUsed;
                             const over = approvedUsed > group.budget;
                             return (
                               <span className="jps-allowance-flow">
                                 <span className="jps-flow-part"><span>Allowance</span><strong>{fmt(withTax(group.budget))}</strong></span>
-                                <span className="jps-flow-part"><span>Spent</span><strong>{fmt(withTax(approvedUsed))}</strong></span>
+                                <span className="jps-flow-part"><span>Approved price</span><strong>{fmt(withTax(approvedUsed))}</strong></span>
                                 <span className="jps-flow-sep">·</span>
                                 <span className={over ? 'jps-flow-over' : 'jps-flow-remaining'}>
-                                  {over ? <><span>Remaining</span><strong>{fmtSigned(withTax(approvedUsed - group.budget))}</strong></> : <><span>Remaining</span><strong>{fmt(withTax(remaining))}</strong></>}
+                                  {group.complete
+                                  ? <><span>Contract impact</span><strong>{fmtSigned(approvedUsed === 0 ? 0 : withTax(approvedUsed - group.budget))}</strong></>
+                                  : <><span>Difference</span><strong>{fmt(withTax(group.budget - approvedUsed))}</strong></>
+                                }
                                 </span>
                               </span>
                             );
@@ -2176,6 +2299,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                         );
                       })()}
                     </div>
+                    </Fragment>
                   );
                 })}
               </div>

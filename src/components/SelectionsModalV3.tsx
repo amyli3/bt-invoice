@@ -403,53 +403,71 @@ export default function SelectionsModalV3({ open, onClose, onAdd, data, addedChi
             return dashIdx >= 0 ? allowanceCode.slice(dashIdx + 3).trim() : allowanceCode;
           })();
 
+          // Match diff-code reversal to the sels (capped at remaining credit)
+          // so we don't over-credit. Any leftover credit stays in reserve until
+          // the allowance is marked complete.
+          const diffCodeTotal = diffCodeSels.reduce((s, c) => s + c.price, 0);
+          const diffCodeReversal =
+            diffCodeSels.length > 0 ? Math.min(creditAfterSameCode, diffCodeTotal) : 0;
+
           const rows: SelectionChild[] = [];
           // Same-code handling depends on the "Group by cost code" toggle.
           // ON  → emit ONE rolled-up line with allowance reversal + sels as a stack.
-          // OFF → emit each sel as its own line + a separate allowance reversal line.
+          //       Exception: if nothing's being absorbed AND there's only one
+          //       sel, the stack is meaningless — emit the sel by its own name.
+          // OFF → emit sels at full price; reversal handled as a combined line below.
           if (sameCodeSels.length > 0) {
             if (groupByCode) {
-              rows.push({
-                ...sameCodeSels[0],
-                lineItem: costCodeName,
-                newInvoiceAmt: sameCodeNet,
-                sourceChildIds: [allowanceChild.id, ...sameCodeSels.map(c => c.id)],
-                rolledUp: [
-                  // Only show the reversal entry in the stack when there's
-                  // actually credit being absorbed — a −$0 row is just noise.
-                  ...(sameCodeAbsorbed > 0
-                    ? [{ name: g.name, amount: -sameCodeAbsorbed, isAllowance: true }]
-                    : []),
-                  ...sameCodeSels.map(c => ({ name: c.lineItem, amount: c.price })),
-                ],
-              });
-            } else {
-              if (sameCodeAbsorbed > 0) {
+              if (sameCodeAbsorbed === 0 && sameCodeSels.length === 1) {
+                rows.push({ ...sameCodeSels[0], newInvoiceAmt: sameCodeSels[0].price });
+              } else {
                 rows.push({
-                  ...allowanceChild,
-                  lineItem: g.name,
-                  newInvoiceAmt: -sameCodeAbsorbed,
+                  ...sameCodeSels[0],
+                  lineItem: costCodeName,
+                  newInvoiceAmt: sameCodeNet,
+                  sourceChildIds: [allowanceChild.id, ...sameCodeSels.map(c => c.id)],
+                  rolledUp: [
+                    // Only show the reversal entry in the stack when there's
+                    // actually credit being absorbed — a −$0 row is just noise.
+                    ...(sameCodeAbsorbed > 0
+                      ? [{ name: g.name, amount: -sameCodeAbsorbed, isAllowance: true }]
+                      : []),
+                    ...sameCodeSels.map(c => ({ name: c.lineItem, amount: c.price })),
+                  ],
                 });
               }
+            } else {
               sameCodeSels.forEach(c => {
                 rows.push({ ...c, newInvoiceAmt: c.price });
               });
             }
           }
-          // Diff-code: emit a reversal at the allowance code (so the budget
-          // shows the allowance was credited back) + each sel at full price.
-          // Match the reversal to the sels (capped at remaining credit) so we
-          // don't over-credit. Any leftover credit stays in reserve until the
-          // allowance is marked complete (then it surfaces in credits-owed).
-          if (diffCodeSels.length > 0 && creditAfterSameCode > 0) {
-            const diffCodeTotal = diffCodeSels.reduce((s, c) => s + c.price, 0);
-            const diffCodeReversal = Math.min(creditAfterSameCode, diffCodeTotal);
-            rows.push({
-              ...allowanceChild,
-              lineItem: g.name,
-              newInvoiceAmt: -diffCodeReversal,
-            });
+
+          // Reversal emission:
+          // ON  → same-code reversal lives inside the stack; emit a separate
+          //       reversal line only for the diff-code portion.
+          // OFF → combine same-code absorbed + diff-code reversal into ONE
+          //       allowance line so the invoice doesn't show two reversals at
+          //       the same cost code.
+          if (groupByCode) {
+            if (diffCodeReversal > 0) {
+              rows.push({
+                ...allowanceChild,
+                lineItem: g.name,
+                newInvoiceAmt: -diffCodeReversal,
+              });
+            }
+          } else {
+            const totalReversal = sameCodeAbsorbed + diffCodeReversal;
+            if (totalReversal > 0) {
+              rows.unshift({
+                ...allowanceChild,
+                lineItem: g.name,
+                newInvoiceAmt: -totalReversal,
+              });
+            }
           }
+
           diffCodeSels.forEach(c => {
             rows.push({ ...c, newInvoiceAmt: c.price });
           });
