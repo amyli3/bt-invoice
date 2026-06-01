@@ -372,6 +372,26 @@ export default function SelectionsModalV3({ open, onClose, onAdd, data, addedChi
             .reduce((s, c) => s + c.price, 0);
           const effectiveRemaining = Math.max(0, remaining - alreadyAddedSelsTotal);
 
+          // Cross-round consolidation: if the allowance reversal is already on
+          // the invoice (from a prior round) AND the builder isn't grouping
+          // into a stack this round, update the existing reversal line to the
+          // new total consumed instead of stacking another partial reversal.
+          // New sels emit at full price as their own lines.
+          if (isAlreadyAdded(allowanceChild) && !groupByCode) {
+            const thisRoundSelsTotal = checkedSelections.reduce((s, c) => s + c.price, 0);
+            const newTotalReversal = Math.min(remaining, alreadyAddedSelsTotal + thisRoundSelsTotal);
+            const rows: SelectionChild[] = checkedSelections.map(c => ({
+              ...c,
+              newInvoiceAmt: c.price,
+            }));
+            return {
+              ...g,
+              children: rows,
+              allowanceUpdate: -newTotalReversal,
+              allowanceChildId: allowanceChild.id,
+            };
+          }
+
           const sameCodeTotal = sameCodeSels.reduce((s, c) => s + c.price, 0);
           const sameCodeAbsorbed = Math.min(sameCodeTotal, effectiveRemaining);
           const sameCodeNet = Math.max(0, sameCodeTotal - effectiveRemaining);
