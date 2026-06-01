@@ -45,7 +45,7 @@ function getInitialPage(): PageType {
   if (qPage && validPages.includes(qPage as PageType)) return qPage as PageType;
   const hash = window.location.hash.replace('#', '').split('&')[0];
   if (validPages.includes(hash as PageType)) return hash as PageType;
-  return 'invoice';
+  return 'invoice-3';
 }
 
 export default function App() {

@@ -145,9 +145,7 @@ export default function TopNav({ onNavigate }: TopNavProps) {
           <button className="topnav-item" onClick={() => { setFinancialOpen(!financialOpen); setJobsOpen(false); setPmOpen(false); }}>Financial {caretDown}</button>
           {financialOpen && (
             <div className="topnav-dropdown">
-              <button className="topnav-dropdown-item" onClick={() => { setFinancialOpen(false); onNavigate?.('invoice'); }}>Invoice</button>
-              <button className="topnav-dropdown-item" onClick={() => { setFinancialOpen(false); onNavigate?.('invoice-2'); }}>Invoice 2</button>
-              <button className="topnav-dropdown-item" onClick={() => { setFinancialOpen(false); onNavigate?.('invoice-3'); }}>Invoice 3</button>
+              <button className="topnav-dropdown-item" onClick={() => { setFinancialOpen(false); onNavigate?.('invoice-3'); }}>Invoice</button>
               <button className="topnav-dropdown-item" onClick={() => { setFinancialOpen(false); onNavigate?.('progress-invoice'); }}>Progress Invoice</button>
               <button className="topnav-dropdown-item" onClick={() => { setFinancialOpen(false); onNavigate?.('estimate'); }}>Estimate</button>
               <button className="topnav-dropdown-item" onClick={() => { setFinancialOpen(false); onNavigate?.('job-costing-budget'); }}>Job Costing Budget</button>

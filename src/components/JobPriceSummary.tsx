@@ -4,6 +4,7 @@ import { BdsActionBar, BdsBadge, BdsButton, BdsIcon, BdsSection, BdsTabs, BdsTex
 import { JCB_TOTALS, JCB_ROWS, MARKUP_PCT } from '../jcbMockData';
 import {
   panelByCategory,
+  panelByCategoryV41Notes,
   panelByLocation,
   panelVarianceTotal,
   type PanelCategoryItem,
@@ -274,8 +275,17 @@ const ActivityKindIcon = ({ kind }: { kind: string }) => {
 export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection, onBack }: { jobOpen?: boolean; onToggleJob?: () => void; onOpenSelection?: (sel: { name: string; category: string; price: number; allowanceName?: string; status: string }) => void; onBack?: () => void; onOpenJCB?: () => void }) {
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
   // v41 (cost category) budget difference: free-form notes the builder types to
-  // record what drove the variance. Keyed by category label.
+  // record what drove the variance. Keyed by cost code.
   const [categoryNotes, setCategoryNotes] = useState<Record<string, string>>({});
+  // v4.1 Notes Save state — confirms to the builder that their notes are now
+  // visible to the client. Resets when they edit again.
+  const [notesSavedAt, setNotesSavedAt] = useState<Date | null>(null);
+  const [notesSnapshot, setNotesSnapshot] = useState<string>('{}');
+  const notesDirty = JSON.stringify(categoryNotes) !== notesSnapshot;
+  const saveNotes = () => {
+    setNotesSnapshot(JSON.stringify(categoryNotes));
+    setNotesSavedAt(new Date());
+  };
   const [activeSlice, setActiveSlice] = useState<'slice1' | 'slice2' | 'slice3' | 'slice4' | 'slice5'>('slice1');
   // Slice 4 = sandbox for Kendall's open book client financials brief (page 7003570340).
   // v1 inline expandable, v2 always-on list, v3 drill-through, v4 grouped sections,
@@ -914,7 +924,15 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
             </div>
           </div>
           <div className="pg-hdr-right">
-            <BdsButton text="Send" displayType="secondary" icon={<BdsIcon name="send" size={14} />} />
+            {activeSlice === 'slice5' && slice4Version === 'v41notes' ? (
+              <BdsButton
+                text={notesDirty || !notesSavedAt ? 'Save' : 'Saved'}
+                displayType={notesDirty || !notesSavedAt ? 'primary' : 'secondary'}
+                onClick={saveNotes}
+              />
+            ) : (
+              <BdsButton text="Send" displayType="secondary" icon={<BdsIcon name="send" size={14} />} />
+            )}
             <BdsButton text="Print" displayType="primary" onClick={() => setShowPrint(true)} />
           </div>
         </div>
@@ -2219,6 +2237,12 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                   <div className="jps-section-header">
                     <BdsText as="h2" size="heavy-lg" className="jps-section-title">Budget difference</BdsText>
                   </div>
+                  {slice4Version === 'v41notes' && notesSavedAt && !notesDirty && (
+                    <div className="jps-notes-saved-banner" role="status">
+                      <BdsIcon name="check" size={14} />
+                      <span>Clients will now see updates on this page.</span>
+                    </div>
+                  )}
                   <div className="jps-s4-side-panel-note">
                     {slice4Version === 'v45'
                       ? "The difference between revised and original budget cost for each location. Approved change orders and selection and allowance changes aren't included."
@@ -2238,8 +2262,8 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                     ) : slice4Version === 'v41notes' ? (
                       <div className="jps-table-header jps-table-budget-notes">
                         <div className="jps-col-title">Cost category</div>
-                        <div className="jps-col-notes">Notes</div>
                         <div className="jps-col-impact">Budget difference</div>
+                        <div className="jps-col-notes">Notes</div>
                       </div>
                     ) : (
                       <div className="jps-table-header jps-table-budget">
@@ -2247,7 +2271,16 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                         <div className="jps-col-impact">Budget difference</div>
                       </div>
                     )}
-                    {(slice4Version === 'v45' ? panelByLocation : panelByCategory).map((group, gi) => {
+                    {(() => {
+                      if (slice4Version === 'v45') return panelByLocation;
+                      if (slice4Version === 'v41notes') {
+                        // Only categories with a positive overall budget
+                        // difference. Underages and $0 categories are hidden
+                        // entirely — same reasoning at the row level below.
+                        return panelByCategoryV41Notes.filter(g => (g.revisedBudget - g.originalBudget) > 0);
+                      }
+                      return panelByCategory;
+                    })().map((group, gi) => {
                       const isV45 = slice4Version === 'v45';
                       const isV41 = slice4Version === 'v41';
                       const isV41Notes = slice4Version === 'v41notes';
@@ -2300,38 +2333,32 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                         );
                       }
                       if (isV41Notes) {
-                        // v4.1 budget difference = revised client price − original client price
-                        // (i.e., CO + selection impact). Distinct from `variance`
-                        // (spent vs revised) used elsewhere.
+                        // v4.1 budget difference = revised − original (CO + selection
+                        // impact). Filtered to overages only — the visible children
+                        // sum may not equal the group's headline number because
+                        // zero/underage codes are hidden but still in the rollup.
                         const groupPriceDiff = group.revisedBudget - group.originalBudget;
+                        const overItems = group.items.filter(i => (i.revisedBudget - i.originalBudget) > 0);
+                        const expandable = overItems.length > 0;
                         return (
                           <Fragment key={gi}>
                             <div
-                              className={`jps-table-row jps-table-budget-notes ${hasItems ? 'jps-table-row-toggle' : ''} ${isOpen ? 'jps-table-row-toggle-open' : ''}`}
-                              onClick={hasItems ? () => toggleGroup(groupKey) : undefined}
-                              role={hasItems ? 'button' : undefined}
-                              tabIndex={hasItems ? 0 : -1}
-                              onKeyDown={hasItems ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleGroup(groupKey); } } : undefined}
+                              className={`jps-table-row jps-table-budget-notes ${expandable ? 'jps-table-row-toggle' : ''} ${isOpen ? 'jps-table-row-toggle-open' : ''}`}
+                              onClick={expandable ? () => toggleGroup(groupKey) : undefined}
+                              role={expandable ? 'button' : undefined}
+                              tabIndex={expandable ? 0 : -1}
+                              onKeyDown={expandable ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleGroup(groupKey); } } : undefined}
                             >
                               <div className="jps-col-title">
-                                {hasItems && <BdsIcon name={isOpen ? 'chevron-down' : 'chevron-right'} size={12} />}
+                                {expandable && <BdsIcon name={isOpen ? 'chevron-down' : 'chevron-right'} size={12} />}
                                 <span className="jps-item-name">{group.category}</span>
-                              </div>
-                              <div className="jps-col-notes" onClick={(e) => e.stopPropagation()}>
-                                <input
-                                  type="text"
-                                  className="jps-notes-input"
-                                  placeholder="Add a note"
-                                  value={categoryNotes[group.category] ?? ''}
-                                  onChange={(e) => setCategoryNotes(prev => ({ ...prev, [group.category]: e.target.value }))}
-                                  aria-label={`Notes for ${group.category}`}
-                                />
                               </div>
                               <div className="jps-col-impact">
                                 <span className={groupPriceDiff >= 0 ? 'jps-impact-up' : 'jps-impact-down'}>{fmtSigned(groupPriceDiff)}</span>
                               </div>
+                              <div className="jps-col-notes" />
                             </div>
-                            {isOpen && group.items.map((item) => {
+                            {isOpen && overItems.map((item) => {
                               const itemPriceDiff = item.revisedBudget - item.originalBudget;
                               return (
                                 <div key={item.code} className="jps-table-row jps-table-budget-notes jps-table-row-nested">
@@ -2339,9 +2366,39 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                                     <span className="jps-budget-nested-code">{item.code}</span>
                                     <span className="jps-budget-nested-name">{item.name}</span>
                                   </div>
-                                  <div className="jps-col-notes" />
                                   <div className="jps-col-impact">
                                     <span className={itemPriceDiff >= 0 ? 'jps-impact-up' : 'jps-impact-down'}>{fmtSigned(itemPriceDiff)}</span>
+                                  </div>
+                                  <div className="jps-col-notes" onClick={(e) => e.stopPropagation()}>
+                                    <textarea
+                                      className="jps-notes-input"
+                                      placeholder="Add note"
+                                      rows={1}
+                                      value={categoryNotes[item.code] ?? ''}
+                                      onChange={(e) => setCategoryNotes(prev => ({ ...prev, [item.code]: e.target.value }))}
+                                      onKeyDown={(e) => {
+                                        if (e.key !== 'Enter' || e.shiftKey) return;
+                                        const ta = e.currentTarget;
+                                        const pos = ta.selectionStart;
+                                        const value = ta.value;
+                                        const lineStart = value.lastIndexOf('\n', pos - 1) + 1;
+                                        const currentLine = value.slice(lineStart, pos);
+                                        if (currentLine === '• ') {
+                                          // Empty bullet → strip it and exit list
+                                          e.preventDefault();
+                                          const next = value.slice(0, lineStart) + value.slice(pos);
+                                          setCategoryNotes(prev => ({ ...prev, [item.code]: next }));
+                                          requestAnimationFrame(() => { ta.selectionStart = ta.selectionEnd = lineStart; });
+                                        } else if (currentLine.startsWith('• ')) {
+                                          // Continue bullet on next line
+                                          e.preventDefault();
+                                          const next = value.slice(0, pos) + '\n• ' + value.slice(pos);
+                                          setCategoryNotes(prev => ({ ...prev, [item.code]: next }));
+                                          requestAnimationFrame(() => { ta.selectionStart = ta.selectionEnd = pos + 3; });
+                                        }
+                                      }}
+                                      aria-label={`Notes for ${item.code} ${item.name}`}
+                                    />
                                   </div>
                                 </div>
                               );
@@ -2408,8 +2465,8 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                     ) : slice4Version === 'v41notes' ? (
                       <div className="jps-table-row jps-table-budget-notes jps-row-total">
                         <div className="jps-col-title">Total</div>
+                        <div className="jps-col-impact">{fmtSigned(panelByCategoryV41Notes.reduce((s, g) => s + (g.revisedBudget - g.originalBudget), 0))}</div>
                         <div className="jps-col-notes"></div>
-                        <div className="jps-col-impact">{fmtSigned(panelByCategory.reduce((s, g) => s + (g.revisedBudget - g.originalBudget), 0))}</div>
                       </div>
                     ) : slice4Version === 'v41' ? (
                       <div className="jps-table-row jps-table-budget jps-row-total">

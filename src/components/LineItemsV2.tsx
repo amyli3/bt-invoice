@@ -4,7 +4,6 @@ import { Invoice, LineItem, ColumnVisibility } from '../types';
 import { COST_TYPES, getNextId } from '../mockData';
 import { fmt, parseTaxRate } from '../utils';
 import { BdsText } from '../bds';
-import ColumnToggle from './ColumnToggle';
 
 function AddFromDropdown({ onOpenEstimate, onOpenSelections }: { onOpenEstimate?: () => void; onOpenSelections?: () => void }) {
   const [open, setOpen] = useState(false);
@@ -174,7 +173,7 @@ interface Props {
   onOpenSelections?: () => void;
 }
 
-export default function LineItems({ invoice, onChange, vis, onVisChange, onOpenEstimate, onOpenSelections }: Props) {
+export default function LineItems({ invoice, onChange, vis, onOpenEstimate, onOpenSelections }: Props) {
   const add = () => onChange({...invoice, lineItems: [...invoice.lineItems, { id: getNextId(), description: '', costCode: '', costType: 'Material', unitCost: 0, quantity: 1, unit: '--', markup: 0 }]});
   const upd = (i: number, item: LineItem) => { const l = [...invoice.lineItems]; l[i] = item; onChange({...invoice, lineItems: l}); };
   const rem = (i: number) => {
@@ -194,8 +193,7 @@ export default function LineItems({ invoice, onChange, vis, onVisChange, onOpenE
 
   return (
     <div className="sec" style={{paddingBottom: 0}}>
-      <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, flexWrap: 'wrap', gap: 8}}>
-        <ColumnToggle columns={vis} onChange={onVisChange} />
+      <div style={{display: 'flex', justifyContent: 'flex-end', alignItems: 'center', marginBottom: 8, flexWrap: 'wrap', gap: 8}}>
         <AddFromDropdown onOpenEstimate={onOpenEstimate} onOpenSelections={onOpenSelections} />
       </div>
       <div className="lt-scroll liv2-lt-scroll">

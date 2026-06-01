@@ -1470,7 +1470,7 @@ table { width: 100%; border-collapse: collapse; }
 .jps-budget-nested-name { color: var(--g700); }
 
 /* 3-column layout (budget difference w/ notes — v4 cost category) */
-.jps-table-budget-notes { display: grid; grid-template-columns: 1.6fr 2fr 1fr; }
+.jps-table-budget-notes { display: grid; grid-template-columns: 1.6fr 1fr 2fr; }
 .jps-table-budget-notes .jps-col-impact { text-align: right; }
 .jps-table-budget-notes .jps-col-title { display: flex; align-items: center; gap: 6px; }
 .jps-col-notes { display: flex; align-items: center; min-width: 0; }
@@ -1484,8 +1484,23 @@ table { width: 100%; border-collapse: collapse; }
   border-radius: 4px;
   padding: 6px 8px;
   transition: border-color 120ms ease, background-color 120ms ease;
+  resize: vertical;
+  min-height: 30px;
+  line-height: 1.4;
+  font-family: inherit;
 }
 .jps-notes-input::placeholder { color: var(--g400); font-style: italic; }
+
+/* v4.1 Notes — saved confirmation banner under the Budget difference header. */
+.jps-notes-saved-banner {
+  display: flex; align-items: center; gap: 8px;
+  margin: -8px 0 16px; padding: 8px 12px;
+  background: var(--green-bg, #E6F4EA);
+  border: 1px solid var(--green, #1E7E34);
+  border-radius: 6px;
+  color: var(--green, #1E7E34);
+  font-size: 13px; font-weight: 500;
+}
 .jps-notes-input:hover { border-color: var(--g200); background: white; }
 .jps-notes-input:focus { outline: none; border-color: var(--bt-blue); background: white; }
 

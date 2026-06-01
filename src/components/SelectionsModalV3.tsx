@@ -116,11 +116,6 @@ export default function SelectionsModalV3({ open, onClose, onAdd, data, addedChi
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [includeDescs, setIncludeDescs] = useState(true);
   const [groupByCode, setGroupByCode] = useState(true);
-  // Demo toggle: three variants of the group meta header for team review.
-  //  pi-both       — "Previously invoiced" includes allowance pre-bill OR sels billed prior (V2 override behavior)
-  //  pi-allowance  — "Previously invoiced" is just the allowance pre-bill (current V3)
-  //  four-col      — Budget · Invoiced · Remaining · Invoice amount
-  const [headerMode, setHeaderMode] = useState<'pi-both' | 'pi-allowance' | 'four-col'>('pi-allowance');
 
   // V2 model: per-row checkboxes. Two distinct flows depending on whether
   // the allowance was already invoiced.
@@ -354,25 +349,39 @@ export default function SelectionsModalV3({ open, onClose, onAdd, data, addedChi
         if (checkedSelections.length === 0) return null;
         const remaining = remainingBudget(g);
 
-        // Variant B model: pre-billed allowance acts as a credit that absorbs
-        // same-code sels (sel-matched). The wizard emits one netted line that
-        // includes the allowance reversal and the sels as a rolled-up stack —
-        // so the breakdown stays visible on the invoice even when net = $0.
-        // For diff-code sels, emit a reversal of the remaining unabsorbed credit
-        // plus sels at full price (so the budget is correctly tracked at each
-        // cost code). Applies when allowance is NOT marked complete (otherwise
-        // the existing credits-owed section handles it).
-        if (headerMode === 'pi-allowance' && !g.isComplete) {
+        // V3 model: pre-billed allowance acts as a credit that absorbs same-code
+        // sels (sel-matched). The wizard emits one netted line that includes the
+        // allowance reversal and the sels as a rolled-up stack — so the breakdown
+        // stays visible on the invoice even when net = $0. For diff-code sels,
+        // emit a reversal of the remaining unabsorbed credit plus sels at full
+        // price (so the budget is correctly tracked at each cost code). Applies
+        // when allowance is NOT marked complete (otherwise the existing
+        // credits-owed section handles it).
+        if (!g.isComplete) {
           const allowanceChild = g.children.find(c => c.selection === 'Allowance');
           if (!allowanceChild) return null;
           const allowanceCode = allowanceChild.costCode;
           const sameCodeSels = checkedSelections.filter(c => c.costCode === allowanceCode);
           const diffCodeSels = checkedSelections.filter(c => c.costCode !== allowanceCode);
 
+          // Sels already added on THIS invoice (from a prior wizard round)
+          // also consume the credit — otherwise the remaining math would
+          // ignore round-1 adds and overstate available credit in round 2.
+          const alreadyAddedSelsTotal = g.children
+            .filter(c => c.selection !== 'Allowance' && isAlreadyAdded(c))
+            .reduce((s, c) => s + c.price, 0);
+          const effectiveRemaining = Math.max(0, remaining - alreadyAddedSelsTotal);
+
           const sameCodeTotal = sameCodeSels.reduce((s, c) => s + c.price, 0);
-          const sameCodeAbsorbed = Math.min(sameCodeTotal, remaining);
-          const sameCodeNet = Math.max(0, sameCodeTotal - remaining);
-          const creditAfterSameCode = Math.max(0, remaining - sameCodeTotal);
+          const sameCodeAbsorbed = Math.min(sameCodeTotal, effectiveRemaining);
+          const sameCodeNet = Math.max(0, sameCodeTotal - effectiveRemaining);
+          const creditAfterSameCode = Math.max(0, effectiveRemaining - sameCodeTotal);
+
+          // Strip the cost code number prefix ("9030 - Kitchen Fixtures" → "Kitchen Fixtures")
+          const costCodeName = (() => {
+            const dashIdx = allowanceCode.indexOf(' - ');
+            return dashIdx >= 0 ? allowanceCode.slice(dashIdx + 3).trim() : allowanceCode;
+          })();
 
           const rows: SelectionChild[] = [];
           // Same-code handling depends on the "Group by cost code" toggle.
@@ -382,11 +391,15 @@ export default function SelectionsModalV3({ open, onClose, onAdd, data, addedChi
             if (groupByCode) {
               rows.push({
                 ...sameCodeSels[0],
-                lineItem: g.name,
+                lineItem: costCodeName,
                 newInvoiceAmt: sameCodeNet,
                 sourceChildIds: [allowanceChild.id, ...sameCodeSels.map(c => c.id)],
                 rolledUp: [
-                  { name: `${g.name} reversal`, amount: -sameCodeAbsorbed, isAllowance: true },
+                  // Only show the reversal entry in the stack when there's
+                  // actually credit being absorbed — a −$0 row is just noise.
+                  ...(sameCodeAbsorbed > 0
+                    ? [{ name: g.name, amount: -sameCodeAbsorbed, isAllowance: true }]
+                    : []),
                   ...sameCodeSels.map(c => ({ name: c.lineItem, amount: c.price })),
                 ],
               });
@@ -394,7 +407,7 @@ export default function SelectionsModalV3({ open, onClose, onAdd, data, addedChi
               if (sameCodeAbsorbed > 0) {
                 rows.push({
                   ...allowanceChild,
-                  lineItem: `${g.name} reversal`,
+                  lineItem: g.name,
                   newInvoiceAmt: -sameCodeAbsorbed,
                 });
               }
@@ -403,13 +416,18 @@ export default function SelectionsModalV3({ open, onClose, onAdd, data, addedChi
               });
             }
           }
-          // Diff-code: emit an explicit reversal at the allowance code (so the
-          // budget shows the allowance was credited back) + each sel at full price.
+          // Diff-code: emit a reversal at the allowance code (so the budget
+          // shows the allowance was credited back) + each sel at full price.
+          // Match the reversal to the sels (capped at remaining credit) so we
+          // don't over-credit. Any leftover credit stays in reserve until the
+          // allowance is marked complete (then it surfaces in credits-owed).
           if (diffCodeSels.length > 0 && creditAfterSameCode > 0) {
+            const diffCodeTotal = diffCodeSels.reduce((s, c) => s + c.price, 0);
+            const diffCodeReversal = Math.min(creditAfterSameCode, diffCodeTotal);
             rows.push({
               ...allowanceChild,
-              lineItem: `${g.name} reversal`,
-              newInvoiceAmt: -creditAfterSameCode,
+              lineItem: g.name,
+              newInvoiceAmt: -diffCodeReversal,
             });
           }
           diffCodeSels.forEach(c => {
@@ -541,56 +559,28 @@ export default function SelectionsModalV3({ open, onClose, onAdd, data, addedChi
           </div>
           <div className="selv2-group-meta">
             {g.type === 'allowance' && (() => {
-              const budget = g.allowanceBudget ?? 0;
               const preBill = g.allowancePreInvoiced ?? 0;
-              const invoicedSelsTotal = g.children
-                .filter(c => c.selection !== 'Allowance' && c.newInvoiceAmt === null)
-                .reduce((s, c) => s + c.price, 0);
-
-              if (headerMode === 'four-col') {
-                const invoiced = Math.max(preBill, invoicedSelsTotal);
-                const remaining = budget - invoiced;
-                return (
-                  <>
-                    <div className="selv2-meta-item">
-                      <div className="selv2-meta-label">Budget</div>
-                      <div className="selv2-meta-value">${fmt(budget)}</div>
-                    </div>
-                    <div className="selv2-meta-item">
-                      <div className="selv2-meta-label">Invoiced</div>
-                      <div className="selv2-meta-value">${fmt(invoiced)}</div>
-                    </div>
-                    <div className="selv2-meta-item">
-                      <div className="selv2-meta-label">Remaining</div>
-                      <div className="selv2-meta-value">{fmtCurrency(remaining)}</div>
-                    </div>
-                  </>
-                );
-              }
-
-              if (headerMode === 'pi-both') {
-                // V2-style override: max(pre-bill, sels billed prior).
-                const piBoth = Math.max(preBill, invoicedSelsTotal);
-                if (piBoth <= 0) return null;
-                return (
-                  <div className="selv2-meta-item">
-                    <div className="selv2-meta-label">Previously invoiced allowance</div>
-                    <div className="selv2-meta-value">${fmt(piBoth)}</div>
-                  </div>
-                );
-              }
-
-              // pi-allowance (Variant B): show REMAINING unused credit, which
-              // reduces as selections are checked. If marked complete, just
-              // show the static pre-bill since the credit-owed section handles it.
               if (preBill <= 0) return null;
+              // Show REMAINING unused credit, which reduces as selections are
+              // checked. If marked complete, just show the static pre-bill since
+              // the credit-owed section handles it.
               let credit = preBill;
               if (!g.isComplete) {
-                const remaining = Math.max(0, preBill - invoicedSelsTotal);
-                const checkedNewSelsTotal = g.children
-                  .filter(c => c.selection !== 'Allowance' && checked[c.id] && c.newInvoiceAmt !== null)
+                const invoicedSelsTotal = g.children
+                  .filter(c => c.selection !== 'Allowance' && c.newInvoiceAmt === null)
                   .reduce((s, c) => s + c.price, 0);
-                credit = Math.max(0, remaining - checkedNewSelsTotal);
+                const alreadyAddedSelsTotal = g.children
+                  .filter(c => c.selection !== 'Allowance' && isAlreadyAdded(c))
+                  .reduce((s, c) => s + c.price, 0);
+                // Hide-decision uses only COMMITTED consumption (prior invoices +
+                // already-added sels). Display-value also subtracts currently-
+                // checked sels so the builder sees the credit shrink in real time.
+                const remainingBeforeChecks = Math.max(0, preBill - invoicedSelsTotal - alreadyAddedSelsTotal);
+                if (remainingBeforeChecks <= 0) return null;
+                const checkedNewSelsTotal = g.children
+                  .filter(c => c.selection !== 'Allowance' && checked[c.id] && !isAlreadyAdded(c) && c.newInvoiceAmt !== null)
+                  .reduce((s, c) => s + c.price, 0);
+                credit = Math.max(0, remainingBeforeChecks - checkedNewSelsTotal);
               }
               return (
                 <div className="selv2-meta-item">
@@ -731,31 +721,6 @@ export default function SelectionsModalV3({ open, onClose, onAdd, data, addedChi
             Choose approved selections and allowances to invoice.
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', background: 'var(--g50)', border: '1px dashed var(--g200)', borderRadius: 6, fontSize: 12 }}>
-            <span style={{ fontWeight: 600, color: 'var(--g600)' }}>Demo · group header variant:</span>
-            <button
-              type="button"
-              onClick={() => setHeaderMode('pi-both')}
-              style={{ padding: '4px 10px', borderRadius: 4, border: '1px solid ' + (headerMode === 'pi-both' ? 'var(--bt-blue)' : 'var(--g300)'), background: headerMode === 'pi-both' ? 'var(--bt-blue)' : '#fff', color: headerMode === 'pi-both' ? '#fff' : 'var(--g700)', cursor: 'pointer', fontSize: 12 }}
-            >
-              A · "Previously invoiced" (allowance + sels)
-            </button>
-            <button
-              type="button"
-              onClick={() => setHeaderMode('pi-allowance')}
-              style={{ padding: '4px 10px', borderRadius: 4, border: '1px solid ' + (headerMode === 'pi-allowance' ? 'var(--bt-blue)' : 'var(--g300)'), background: headerMode === 'pi-allowance' ? 'var(--bt-blue)' : '#fff', color: headerMode === 'pi-allowance' ? '#fff' : 'var(--g700)', cursor: 'pointer', fontSize: 12 }}
-            >
-              B · "Previously invoiced" (allowance only)
-            </button>
-            <button
-              type="button"
-              onClick={() => setHeaderMode('four-col')}
-              style={{ padding: '4px 10px', borderRadius: 4, border: '1px solid ' + (headerMode === 'four-col' ? 'var(--bt-blue)' : 'var(--g300)'), background: headerMode === 'four-col' ? 'var(--bt-blue)' : '#fff', color: headerMode === 'four-col' ? '#fff' : 'var(--g700)', cursor: 'pointer', fontSize: 12 }}
-            >
-              C · Budget / Invoiced / Remaining
-            </button>
-          </div>
-
           <div className="selv2-controls">
             <label className="selv2-inline-check selv2-controls-primary" onClick={toggleAll}>
               <div className={"est-check" + (globalState === 'all' ? ' on' : globalState === 'partial' ? ' partial' : '')} />
@@ -785,8 +750,56 @@ export default function SelectionsModalV3({ open, onClose, onAdd, data, addedChi
             )}
             {standalone.length > 0 && (
               <>
-                <div className="selv2-section-label" style={{ marginTop: 12 }}>Standalone selections</div>
-                {standalone.map(renderGroup)}
+                <div className="selv2-section-label" style={{ marginTop: 12 }}>Selections</div>
+                <div className="selv2-children" style={{ background: 'white', border: '1px solid var(--g200)', borderRadius: 8, overflow: 'hidden' }}>
+                  <table className="selv2-table">
+                    <colgroup>
+                      <col style={{ width: 40 }} />
+                      <col />
+                      <col style={{ width: 150 }} />
+                      <col style={{ width: 110 }} />
+                      <col style={{ width: 130 }} />
+                    </colgroup>
+                    <thead>
+                      <tr>
+                        <th></th>
+                        <th>Line item</th>
+                        <th>Cost code</th>
+                        <th>Cost type</th>
+                        <th style={{ textAlign: 'right' }}>Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {standalone.flatMap(g =>
+                        g.children.filter(c => c.selection !== 'Allowance' && c.newInvoiceAmt !== null).map(c => {
+                          const isOn = !!checked[c.id];
+                          return (
+                            <tr key={c.id}>
+                              <td>
+                                <div
+                                  className={"est-check" + (isOn ? ' on' : '')}
+                                  onClick={() => toggleChild(g, c)}
+                                />
+                              </td>
+                              <td>
+                                <div className="selv2-cell-name">
+                                  <span className="selv2-row-icon"><SelectionIcon /></span>
+                                  <span>{c.lineItem}</span>
+                                  {c.selectionStatus && (
+                                    <span className="selv2-pill selv2-pill-approved">{c.selectionStatus}</span>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="selv2-cell-mono">{c.costCode}</td>
+                              <td className="selv2-cell-type">{c.costType || 'Selection'}</td>
+                              <td style={{ textAlign: 'right', fontWeight: 500 }}>${fmt(c.price)}</td>
+                            </tr>
+                          );
+                        }),
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </>
             )}
             {creditsOwed.length > 0 && (
@@ -808,7 +821,7 @@ export default function SelectionsModalV3({ open, onClose, onAdd, data, addedChi
                       <tr>
                         <th></th>
                         <th>Allowance</th>
-                        <th style={{ textAlign: 'right' }}>Previously invoiced allowance</th>
+                        <th style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>Previously invoiced allowance</th>
                         <th style={{ textAlign: 'right' }}>Actual cost</th>
                         <th style={{ textAlign: 'right' }}>Credit amount</th>
                       </tr>

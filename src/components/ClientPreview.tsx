@@ -141,8 +141,6 @@ export default function ClientPreview({ invoice, clientVis, groupBy = 'estimate'
 
   return (
     <div className="paper">
-      <div className="paper-accent"></div>
-
       <div className="paper-sec" style={{padding: '24px 28px'}}>
         <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24}}>
           <div>

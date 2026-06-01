@@ -789,7 +789,7 @@ export default function SelectionsPage({
       </div>
 
       <div className="sp-body">
-        {audience !== 'client' && (() => {
+        {false && audience !== 'client' && (() => {
           const s = computeAllowanceSummary(completedIds);
           const canReallocate = s.totalHeld > 0 && s.totalOver > 0;
           return (
