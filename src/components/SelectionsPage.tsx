@@ -126,6 +126,20 @@ const INVOICE_REF_SEED: Record<string, InvoiceRef> = {
   'ms-17': { subject: 'Draft 1' }, // Cabinet install (still a draft)
 };
 
+// Fake % invoiced per allowance for the prototype. In production this is
+// invoicedAmount / approvedPrice. Seeded here so every allowance row shows a
+// bar with realistic variety (some fully billed, some partial, some untouched).
+const PCT_INVOICED_MAP: Record<string, number> = {
+  'ma-5': 0,
+  'ma-6': 35,
+  'ma-8': 100,
+  'ma-1': 60,
+  'ma-2': 80,
+  'ma-7': 25,
+  'ma-9': 45,
+  'ma-10': 15,
+};
+
 function rollupInvoiceRef(refs: InvoiceRef[]): InvoiceRef | undefined {
   if (refs.length === 0) return undefined;
   const allSame = refs.every(r => r.subject === refs[0].subject);
@@ -298,6 +312,21 @@ const InvoicedCell = ({ amount, invoiceRef, onOpen }: { amount: number; invoiceR
       subject={invoiceRef.subject}
       onClick={onOpen}
     />
+  );
+};
+
+const PctInvoicedCell = ({ pct }: { pct: number }) => {
+  const clamped = Math.min(100, Math.max(0, pct));
+  return (
+    <div className="sp-pct-bar-row">
+      <div className="sp-pct-bar">
+        <div
+          className={`sp-pct-bar-fill${clamped >= 100 ? ' sp-pct-bar-fill-full' : ''}`}
+          style={{ width: `${clamped}%` }}
+        />
+      </div>
+      <span className="sp-pct-value">{Math.round(clamped)}%</span>
+    </div>
   );
 };
 
@@ -505,6 +534,7 @@ export default function SelectionsPage({
           <div className={`sp-col-remaining sp-section-remaining${groupRemaining < 0 ? ' sp-section-remaining-over' : ''}`}>
             {fmt(groupRemaining)}
           </div>
+          <div className="sp-col-pct"></div>
           <div className="sp-col-status"></div>
           <div className="sp-col-category"></div>
           <div className="sp-col-location"></div>
@@ -551,6 +581,9 @@ export default function SelectionsPage({
           <div className={`sp-col-remaining sp-remaining-amount${overBudget ? ' sp-remaining-over' : ''}`}>
             {fmt(allowanceRemaining)}
           </div>
+          <div className="sp-col-pct">
+            <PctInvoicedCell pct={PCT_INVOICED_MAP[row.id] ?? 0} />
+          </div>
           <div className="sp-col-status">
             {completedIds.has(row.id) && <StatusBadge status="Completed" />}
           </div>
@@ -582,6 +615,7 @@ export default function SelectionsPage({
                 <div className="sp-col-price">{fmt(opt.clientPrice)}</div>
                 <div className="sp-col-approved">{opt.approvedPrice !== null ? fmt(opt.approvedPrice) : ''}</div>
                 <div className="sp-col-remaining"></div>
+                <div className="sp-col-pct"></div>
                 <div className="sp-col-status"><StatusBadge status={audience === 'builder' ? deriveBuilderStatus(opt.status) : deriveRowStatus(opt.status, opt.dueDate)} /></div>
                 <div className="sp-col-category">{opt.category}</div>
                 <div className="sp-col-location">{opt.location}</div>
@@ -684,6 +718,7 @@ export default function SelectionsPage({
       <div className="sp-col-price">{fmt(row.clientPrice)}</div>
       <div className="sp-col-approved">{row.approvedPrice !== null ? fmt(row.approvedPrice) : ''}</div>
       <div className="sp-col-remaining"></div>
+      <div className="sp-col-pct"></div>
       <div className="sp-col-status"><StatusBadge status={audience === 'builder' ? deriveBuilderStatus(row.status) : deriveRowStatus(row.status, row.dueDate)} /></div>
       <div className="sp-col-category">{row.category}</div>
       <div className="sp-col-location">{row.location}</div>
@@ -872,6 +907,7 @@ export default function SelectionsPage({
               <div className="sp-col-price">Budget</div>
               <div className="sp-col-approved">Spent</div>
               <div className="sp-col-remaining">Remaining</div>
+              <div className="sp-col-pct">% invoiced</div>
               <div className="sp-col-status">Status</div>
               <div className="sp-col-category">Category</div>
               <div className="sp-col-location">Location</div>
@@ -908,6 +944,7 @@ export default function SelectionsPage({
               <div className="sp-col-price"><strong>{fmt(totalsClientPrice)}</strong></div>
               <div className="sp-col-approved"></div>
               <div className="sp-col-remaining"></div>
+              <div className="sp-col-pct"></div>
               <div className="sp-col-status"></div>
               <div className="sp-col-category"></div>
               <div className="sp-col-location"></div>

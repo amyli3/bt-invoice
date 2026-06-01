@@ -2,6 +2,9 @@ import type { ModalAllowance } from './components/AIAPayApp';
 
 export type InvoiceSelectionScenario = ModalAllowance & {
   scenarioNote?: string;
+  // V3 model: allowance is never billed directly; only selections invoice.
+  // Override the V2 hover text when V3 behavior differs meaningfully.
+  scenarioNoteV3?: string;
   closeoutMode?: 'credit';
 };
 
@@ -13,6 +16,7 @@ export const INVOICE_SELECTION_SCENARIOS: InvoiceSelectionScenario[] = [
     budgetAmount: 4000,
     previouslyInvoiced: 0,
     scenarioNote: 'Allowance not yet invoiced. Selections came in over budget.',
+    scenarioNoteV3: 'Selections came in over budget. Bill the selections at full price — the allowance budget is exceeded but is a tracker only, never billed as a line.',
     selections: [
       { id: 'ms-12', name: 'Bathroom Faucet Set', costCode: '4010', costType: 'Material', originalPrice: 2000, approvedPrice: 2200, status: 'approved' },
       { id: 'ms-13', name: 'Shower Valve Kit', costCode: '4010', costType: 'Material', originalPrice: 2000, approvedPrice: 2500, status: 'approved' },
@@ -25,6 +29,7 @@ export const INVOICE_SELECTION_SCENARIOS: InvoiceSelectionScenario[] = [
     budgetAmount: 1000,
     previouslyInvoiced: 0,
     scenarioNote: 'Allowance not yet invoiced. Selection came in under — unspent amount stays available.',
+    scenarioNoteV3: 'Selection came in under budget. Only the selection invoices; unspent allowance budget stays on the budget side and is never billed.',
     selections: [
       { id: 'ms-14', name: 'Pendant light fixtures', costCode: '8010', costType: 'Material', originalPrice: 500, approvedPrice: 500, status: 'approved' },
     ],
@@ -36,6 +41,7 @@ export const INVOICE_SELECTION_SCENARIOS: InvoiceSelectionScenario[] = [
     budgetAmount: 2000,
     previouslyInvoiced: 0,
     scenarioNote: 'Selection already invoiced, allowance has unspent budget. Allowance was never pre-billed — no credit owed on close-out.',
+    scenarioNoteV3: 'The selection was already invoiced on a prior invoice (filtered out of the list). Nothing new to bill. Unspent allowance budget stays on the budget side.',
     selections: [
       { id: 'ms-19', name: 'Interior wall paint', costCode: '9050', costType: 'Material', originalPrice: 1200, approvedPrice: 1200, status: 'invoiced' },
     ],
@@ -67,18 +73,6 @@ export const INVOICE_SELECTION_SCENARIOS: InvoiceSelectionScenario[] = [
     ],
   },
   {
-    id: 'ma-9',
-    name: 'Appliances Allowance',
-    costCode: '9070 - Appliances',
-    budgetAmount: 4000,
-    previouslyInvoiced: 4000,
-    closeoutMode: 'credit',
-    scenarioNote: 'Allowance pre-invoiced. Selection bills at a different cost code — keep both rows so categories stay transparent.',
-    selections: [
-      { id: 'ms-21', name: 'Sub-Zero Built-in Refrigerator', costCode: '9075 - Built-in Appliances', costType: 'Material', originalPrice: 4000, approvedPrice: 2500, status: 'approved' },
-    ],
-  },
-  {
     id: 'ma-7',
     name: 'Master Bath Cabinets Allowance',
     costCode: '9040 - Cabinets',
@@ -92,29 +86,6 @@ export const INVOICE_SELECTION_SCENARIOS: InvoiceSelectionScenario[] = [
     ],
   },
   {
-    id: 'ma-10',
-    name: 'Tile Allowance',
-    costCode: '7020 - Tile',
-    budgetAmount: 3000,
-    previouslyInvoiced: 0,
-    scenarioNote: 'Not pre-invoiced. Selections at different cost codes ran over budget — each code stays on its own invoice line.',
-    selections: [
-      { id: 'ms-22', name: 'Porcelain floor tile', costCode: '7020', costType: 'Material', originalPrice: 1800, approvedPrice: 2000, status: 'approved' },
-      { id: 'ms-23', name: 'Marble accent border', costCode: '7025 - Decorative Tile', costType: 'Material', originalPrice: 1200, approvedPrice: 1500, status: 'approved' },
-    ],
-  },
-  {
-    id: 'ma-11',
-    name: 'HVAC Allowance',
-    costCode: '5010 - HVAC',
-    budgetAmount: 6000,
-    previouslyInvoiced: 0,
-    scenarioNote: 'Not pre-invoiced. Selection came in under at a different cost code — remaining $2,000 stays in the allowance bucket.',
-    selections: [
-      { id: 'ms-24', name: 'Heat pump unit', costCode: '5015 - HVAC Equipment', costType: 'Equipment', originalPrice: 4200, approvedPrice: 4000, status: 'approved' },
-    ],
-  },
-  {
     id: 'ma-12',
     name: 'Electrical Allowance',
     costCode: '6020 - Electrical',
@@ -124,17 +95,6 @@ export const INVOICE_SELECTION_SCENARIOS: InvoiceSelectionScenario[] = [
     selections: [
       { id: 'ms-25', name: 'Smart panel upgrade', costCode: '6025 - Smart Home', costType: 'Equipment', originalPrice: 2200, approvedPrice: 2500, status: 'approved' },
       { id: 'ms-26', name: 'Premium recessed lighting', costCode: '6020', costType: 'Material', originalPrice: 1500, approvedPrice: 1800, status: 'approved' },
-    ],
-  },
-  {
-    id: 'ma-13',
-    name: 'Trim & Millwork Allowance',
-    costCode: '8030 - Trim',
-    budgetAmount: 5000,
-    previouslyInvoiced: 5000,
-    scenarioNote: 'Pre-invoiced, not closed out. Selection at a different cost code — reversal and selection stay on separate invoice lines, netting to a credit.',
-    selections: [
-      { id: 'ms-27', name: 'Premium baseboards', costCode: '8035 - Specialty Millwork', costType: 'Material', originalPrice: 2000, approvedPrice: 2200, status: 'approved' },
     ],
   },
 ];

@@ -15,6 +15,7 @@ import ClientColumnToggle from './components/ClientColumnToggle';
 import EstimateModal from './components/EstimateModal';
 import SelectionsModal from './components/SelectionsModal';
 import SelectionsModalV2 from './components/SelectionsModalV2';
+import SelectionsModalV3 from './components/SelectionsModalV3';
 import JobPriceSummary from './components/JobPriceSummary';
 import SelectionsPage from './components/SelectionsPage';
 import OptionDetailPage from './components/OptionDetailPage';
@@ -33,9 +34,9 @@ import UnderageFlows from './components/UnderageFlows';
 import { JOBS } from './mockData';
 import { getNextId } from './mockData';
 
-type PageType = 'invoice' | 'invoice-2' | 'job-price-summary' | 'selections' | 'option-detail' | 'progress-invoice' | 'change-order' | 'change-order-list' | 'client-portal' | 'client-jps' | 'estimate' | 'client-selections' | 'client-selections-2' | 'client-selections-3' | 'mobile-budget' | 'job-costing-budget' | 'underage-flows';
+type PageType = 'invoice' | 'invoice-2' | 'invoice-3' | 'job-price-summary' | 'selections' | 'option-detail' | 'progress-invoice' | 'change-order' | 'change-order-list' | 'client-portal' | 'client-jps' | 'estimate' | 'client-selections' | 'client-selections-2' | 'client-selections-3' | 'mobile-budget' | 'job-costing-budget' | 'underage-flows';
 
-const validPages: PageType[] = ['invoice', 'invoice-2', 'job-price-summary', 'selections', 'option-detail', 'progress-invoice', 'change-order', 'change-order-list', 'client-portal', 'client-jps', 'estimate', 'client-selections', 'client-selections-2', 'client-selections-3', 'mobile-budget', 'job-costing-budget', 'underage-flows'];
+const validPages: PageType[] = ['invoice', 'invoice-2', 'invoice-3', 'job-price-summary', 'selections', 'option-detail', 'progress-invoice', 'change-order', 'change-order-list', 'client-portal', 'client-jps', 'estimate', 'client-selections', 'client-selections-2', 'client-selections-3', 'mobile-budget', 'job-costing-budget', 'underage-flows'];
 
 function getInitialPage(): PageType {
   // Support ?page=X query param (used when hash is occupied by Figma capture)
@@ -274,6 +275,12 @@ export default function App() {
       type: 'allowance' as 'allowance' | 'selection',
       name: ma.name,
       scenarioNote: ma.scenarioNote,
+      scenarioNoteV3: ma.scenarioNoteV3,
+      // Raw allowance pre-bill amount (no override). V3 displays this as
+      // "Previously invoiced" so the label means specifically "what was
+      // billed for THIS allowance on a prior invoice" — not the sum of
+      // selections billed earlier.
+      allowancePreInvoiced: ma.previouslyInvoiced,
       canMarkComplete: ma.id === 'ma-2',
       isComplete: markedComplete,
       revisedPrice: selectionsTotal,
@@ -316,6 +323,8 @@ export default function App() {
       type: 'selection' as const,
       name: ss.name,
       scenarioNote: ss.scenarioNote,
+      scenarioNoteV3: undefined,
+      allowancePreInvoiced: 0,
       canMarkComplete: false,
       isComplete: false,
       revisedPrice: ss.approvedPrice,
@@ -585,6 +594,8 @@ export default function App() {
     );
   }
 
+  const isInvoiceV2Like = activePage === 'invoice-2' || activePage === 'invoice-3';
+
   return (
     <div style={{display: 'flex', flexDirection: 'column', height: '100vh'}}>
       <TopNav onNavigate={(page) => setActivePage(page as PageType)} />
@@ -602,12 +613,12 @@ export default function App() {
 
           <div className="split">
             <div
-              className={"builder" + (previewHidden && activePage === 'invoice-2' && !isNarrow ? ' builder-full' : '')}
+              className={"builder" + (previewHidden && isInvoiceV2Like && !isNarrow ? ' builder-full' : '')}
               style={isNarrow && activeView !== 'builder' ? {display: 'none'} : {}}
             >
               <InvoiceInfo invoice={invoice} onChange={setInvoice} />
               <OwnerPrice invoice={invoice} onChange={setInvoice} />
-              {invoice.mode === 'lineItems' && (activePage === 'invoice-2'
+              {invoice.mode === 'lineItems' && (isInvoiceV2Like
                 ? <LineItemsV2 invoice={invoice} onChange={setInvoice} vis={vis} onVisChange={setVis} onOpenEstimate={() => setEstModalOpen(true)} onOpenSelections={() => setSelV2ModalOpen(true)} />
                 : <LineItems invoice={invoice} onChange={setInvoice} vis={vis} onVisChange={setVis} onOpenEstimate={() => setEstModalOpen(true)} onOpenSelections={() => setSelModalOpen(true)} />)}
               <Notes invoice={invoice} onChange={setInvoice} />
@@ -615,7 +626,7 @@ export default function App() {
             <div className="preview" style={{
               ...(isNarrow && activeView !== 'preview' ? {display: 'none'} : {}),
               padding: 0,
-              display: (isNarrow && activeView !== 'preview') || (previewHidden && activePage === 'invoice-2' && !isNarrow) ? 'none' : 'flex',
+              display: (isNarrow && activeView !== 'preview') || (previewHidden && isInvoiceV2Like && !isNarrow) ? 'none' : 'flex',
               flexDirection: 'column',
             }}>
               <div className="preview-tabs">
@@ -626,7 +637,7 @@ export default function App() {
                 <div className="preview-tabs-right">
                   {previewTab === 'client' && (
                     <>
-                      {activePage === 'invoice-2' && (
+                      {isInvoiceV2Like && (
                         <div className="client-group-toggle" role="tablist" aria-label="Group line items for client">
                           <button type="button" className={"client-group-tab" + (clientGroupBy === 'estimate' ? ' on' : '')} onClick={() => setClientGroupBy('estimate')} aria-selected={clientGroupBy === 'estimate'}>By estimate</button>
                           <button type="button" className={"client-group-tab" + (clientGroupBy === 'costcode' ? ' on' : '')} onClick={() => setClientGroupBy('costcode')} aria-selected={clientGroupBy === 'costcode'}>By cost code</button>
@@ -639,7 +650,7 @@ export default function App() {
                 </div>
               </div>
               <div style={{flex: 1, overflowY: 'auto', padding: 24, background: 'var(--g50)'}}>
-                {previewTab === 'client' && <ClientPreview invoice={invoice} clientVis={clientVis} groupBy={activePage === 'invoice-2' ? clientGroupBy : 'estimate'} />}
+                {previewTab === 'client' && <ClientPreview invoice={invoice} clientVis={clientVis} groupBy={isInvoiceV2Like ? clientGroupBy : 'estimate'} />}
                 {previewTab === 'email' && <EmailPreview invoice={invoice} />}
               </div>
             </div>
@@ -647,7 +658,7 @@ export default function App() {
 
           <div className="bbar">
             <button className="btn btn-s" onClick={() => setInvoice(defaultInvoice)}>Cancel</button>
-            {activePage === 'invoice-2' && !isNarrow && (
+            {isInvoiceV2Like && !isNarrow && (
               <button
                 type="button"
                 className="btn btn-s"
@@ -676,13 +687,20 @@ export default function App() {
         jobName={currentJob?.name || 'Job name'}
         addedGroupIds={invoice.lineItems.filter(li => li.relatedItem?.groupId).map(li => li.relatedItem!.groupId)}
         onMarkComplete={toggleAllowanceComplete}
-        heldUnderages={activePage === 'invoice-2' ? heldUnderages : []}
-        onApplyReallocation={activePage === 'invoice-2' ? handleApplyReallocation : undefined}
+        heldUnderages={isInvoiceV2Like ? heldUnderages : []}
+        onApplyReallocation={isInvoiceV2Like ? handleApplyReallocation : undefined}
         showNegativeBalances
         data={selectionsModalData}
       />
       <SelectionsModalV2
-        open={selV2ModalOpen}
+        open={selV2ModalOpen && activePage === 'invoice-2'}
+        onClose={() => setSelV2ModalOpen(false)}
+        onAdd={handleAddFromSelections}
+        addedChildIds={invoice.lineItems.flatMap(li => li.relatedItem?.childIds ?? [])}
+        data={selectionsModalData}
+      />
+      <SelectionsModalV3
+        open={selV2ModalOpen && activePage === 'invoice-3'}
         onClose={() => setSelV2ModalOpen(false)}
         onAdd={handleAddFromSelections}
         addedChildIds={invoice.lineItems.flatMap(li => li.relatedItem?.childIds ?? [])}

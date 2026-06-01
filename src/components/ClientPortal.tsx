@@ -283,9 +283,7 @@ export default function ClientPortal({ onNavigate }: { onNavigate?: (page: strin
             <div className="cp-financials-grid">
               {/* Total price card — mirrors the JPS openbook demo (v4) */}
               <div className="jps-pane cp-fin-jps-pane">
-                <div className="jps-pane-label">Total price</div>
-                <div className="jps-pane-big" style={{ marginTop: 4 }}>{fmtUsd(currentPrice)}</div>
-                <div className="jps-pane-breakdown" style={{ marginTop: 16 }}>
+                <div className="jps-pane-breakdown">
                   <div className="jps-breakdown-line">
                     <span>Original client price</span>
                     <span>{fmtUsd(fin.contractPrice)}</span>
@@ -316,6 +314,10 @@ export default function ClientPortal({ onNavigate }: { onNavigate?: (page: strin
                   <div className="jps-breakdown-line">
                     <span>Tax</span>
                     <span>{fmtUsd(fin.tax)}</span>
+                  </div>
+                  <div className="jps-breakdown-line cp-fin-total-line">
+                    <span>Total price</span>
+                    <span>{fmtUsd(currentPrice)}</span>
                   </div>
                 </div>
               </div>
