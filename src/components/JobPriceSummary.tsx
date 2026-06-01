@@ -186,7 +186,9 @@ const inProgressAllowanceTotals = allowanceGroups.filter(g => !g.complete).reduc
     acc.approved += approved;
     // Difference = approved − budget. Positive when over-budget, negative when
     // under. Matches the per-row formula so the subtotal sign matches its rows.
-    acc.difference += g.budget - approved;
+    // Skip allowances with no approved spending — those render "—" on their
+    // row, so excluding them keeps the subtotal in sync with what the user sees.
+    acc.difference += approved === 0 ? 0 : g.budget - approved;
     return acc;
   },
   { budget: 0, approved: 0, difference: 0 },
@@ -1114,7 +1116,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                               <span className={over ? 'jps-flow-over' : 'jps-flow-remaining'}>
                                 {group.complete
                                   ? <><span>Contract impact</span><strong>{fmtSigned(approvedUsed === 0 ? 0 : withTax(approvedUsed - group.budget))}</strong></>
-                                  : <><span>Difference</span><strong>{fmt(withTax(group.budget - approvedUsed))}</strong></>
+                                  : <><span>Difference</span><strong>{approvedUsed === 0 ? '—' : fmt(withTax(group.budget - approvedUsed))}</strong></>
                                 }
                               </span>
                             </span>
@@ -1373,7 +1375,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                               <span className={over ? 'jps-flow-over' : 'jps-flow-remaining'}>
                                 {group.complete
                                   ? <><span>Contract impact</span><strong>{fmtSigned(approvedUsed === 0 ? 0 : approvedUsed - group.budget)}</strong></>
-                                  : <><span>Difference</span><strong>{fmt(group.budget - approvedUsed)}</strong></>
+                                  : <><span>Difference</span><strong>{approvedUsed === 0 ? '—' : fmt(group.budget - approvedUsed)}</strong></>
                                 }
                               </span>
                             </span>
@@ -1722,7 +1724,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                           <span className={over ? 'jps-flow-over' : 'jps-flow-remaining'}>
                             {group.complete
                                   ? <><span>Contract impact</span><strong>{fmtSigned(approvedUsed === 0 ? 0 : approvedUsed - group.budget)}</strong></>
-                                  : <><span>Difference</span><strong>{fmt(group.budget - approvedUsed)}</strong></>
+                                  : <><span>Difference</span><strong>{approvedUsed === 0 ? '—' : fmt(group.budget - approvedUsed)}</strong></>
                                 }
                           </span>
                         </span>
@@ -2258,7 +2260,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                                 <span className={over ? 'jps-flow-over' : 'jps-flow-remaining'}>
                                   {group.complete
                                   ? <><span>Contract impact</span><strong>{fmtSigned(approvedUsed === 0 ? 0 : withTax(approvedUsed - group.budget))}</strong></>
-                                  : <><span>Difference</span><strong>{fmt(withTax(group.budget - approvedUsed))}</strong></>
+                                  : <><span>Difference</span><strong>{approvedUsed === 0 ? '—' : fmt(withTax(group.budget - approvedUsed))}</strong></>
                                 }
                                 </span>
                               </span>
