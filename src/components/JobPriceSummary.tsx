@@ -1009,7 +1009,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
               if (next === 'slice5') setSlice4Version('v41');
             }}
             tabs={[
-              { key: 'slice1', label: 'Slice 1' },
+              { key: 'slice1', label: 'Fixed price' },
               { key: 'slice5', label: 'Openbook' },
             ]}
           />
