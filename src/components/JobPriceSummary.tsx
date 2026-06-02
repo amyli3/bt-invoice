@@ -332,7 +332,7 @@ const ActivityKindIcon = ({ kind }: { kind: string }) => {
 
 /* ── Component ── */
 
-export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection, onBack }: { jobOpen?: boolean; onToggleJob?: () => void; onOpenSelection?: (sel: { name: string; category: string; price: number; allowanceName?: string; status: string }) => void; onBack?: () => void; onOpenJCB?: () => void }) {
+export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection, onBack, isClient = false, shareBudgetDiff = false, companyDefaultShare = false, jobShareOverride = 'default', onCompanyDefaultChange, onJobShareOverrideChange, lastSharedAt = null }: { jobOpen?: boolean; onToggleJob?: () => void; onOpenSelection?: (sel: { name: string; category: string; price: number; allowanceName?: string; status: string }) => void; onBack?: () => void; onOpenJCB?: () => void; isClient?: boolean; shareBudgetDiff?: boolean; companyDefaultShare?: boolean; jobShareOverride?: 'default' | 'show' | 'hide'; onCompanyDefaultChange?: (v: boolean) => void; onJobShareOverrideChange?: (v: 'default' | 'show' | 'hide') => void; lastSharedAt?: Date | null }) {
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
   // v41 (cost category) budget difference: free-form notes the builder types to
   // record what drove the variance. Keyed by cost code.
@@ -353,6 +353,8 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
   // bar + decision callout (Sarah review, May 2026).
   const [slice4Version, setSlice4Version] = useState<'v1' | 'v2' | 'v3' | 'v4' | 'v41' | 'v41notes' | 'v411' | 'v45' | 'v5'>('v1');
   const [slice4DrillOpen, setSlice4DrillOpen] = useState(false);
+  // Openbook → "Show to client" — popover for the company-wide default setting.
+  const [companyDefaultOpen, setCompanyDefaultOpen] = useState(false);
   const [showPrint, setShowPrint] = useState(false);
   const [printOptions, setPrintOptions] = useState({
     changeOrders: true,
@@ -1116,7 +1118,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                               <span className={over ? 'jps-flow-over' : 'jps-flow-remaining'}>
                                 {group.complete
                                   ? <><span>Contract impact</span><strong>{fmtSigned(approvedUsed === 0 ? 0 : withTax(approvedUsed - group.budget))}</strong></>
-                                  : <><span>Difference</span><strong>{approvedUsed === 0 ? '—' : fmt(withTax(group.budget - approvedUsed))}</strong></>
+                                  : <><span>Difference</span><strong>{fmt(withTax(group.budget - approvedUsed))}</strong></>
                                 }
                               </span>
                             </span>
@@ -1375,7 +1377,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                               <span className={over ? 'jps-flow-over' : 'jps-flow-remaining'}>
                                 {group.complete
                                   ? <><span>Contract impact</span><strong>{fmtSigned(approvedUsed === 0 ? 0 : approvedUsed - group.budget)}</strong></>
-                                  : <><span>Difference</span><strong>{approvedUsed === 0 ? '—' : fmt(group.budget - approvedUsed)}</strong></>
+                                  : <><span>Difference</span><strong>{fmt(group.budget - approvedUsed)}</strong></>
                                 }
                               </span>
                             </span>
@@ -1724,7 +1726,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                           <span className={over ? 'jps-flow-over' : 'jps-flow-remaining'}>
                             {group.complete
                                   ? <><span>Contract impact</span><strong>{fmtSigned(approvedUsed === 0 ? 0 : approvedUsed - group.budget)}</strong></>
-                                  : <><span>Difference</span><strong>{approvedUsed === 0 ? '—' : fmt(group.budget - approvedUsed)}</strong></>
+                                  : <><span>Difference</span><strong>{fmt(group.budget - approvedUsed)}</strong></>
                                 }
                           </span>
                         </span>
@@ -2260,7 +2262,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                                 <span className={over ? 'jps-flow-over' : 'jps-flow-remaining'}>
                                   {group.complete
                                   ? <><span>Contract impact</span><strong>{fmtSigned(approvedUsed === 0 ? 0 : withTax(approvedUsed - group.budget))}</strong></>
-                                  : <><span>Difference</span><strong>{approvedUsed === 0 ? '—' : fmt(withTax(group.budget - approvedUsed))}</strong></>
+                                  : <><span>Difference</span><strong>{fmt(withTax(group.budget - approvedUsed))}</strong></>
                                 }
                                 </span>
                               </span>
@@ -2358,11 +2360,76 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
               {/* ─── End approved-changes group wrapper ─── */}
 
               {/* ─── Budget difference (v4/v41/v41notes/v411/v45) — table layout matching Change Orders ─── */}
-              {(slice4Version === 'v4' || slice4Version === 'v41' || slice4Version === 'v41notes' || slice4Version === 'v411' || slice4Version === 'v45') && (
+              {/* Client view only renders this section when the builder has opted to share it (shareBudgetDiff). */}
+              {(slice4Version === 'v4' || slice4Version === 'v41' || slice4Version === 'v41notes' || slice4Version === 'v411' || slice4Version === 'v45') && (!isClient || shareBudgetDiff) && (
                 <div className="jps-breakdown-section" id="jps-sec-budget-difference">
-                  <div className="jps-section-header">
+                  <div className="jps-section-header jps-section-header-split">
                     <BdsText as="h2" size="heavy-lg" className="jps-section-title">Budget difference</BdsText>
+                    {!isClient && (
+                      <div className="jps-share-control">
+                        <span className="jps-share-control-label">Show to client</span>
+                        <div className="jps-share-seg" role="radiogroup" aria-label="Show budget difference to client">
+                          {(['default', 'show', 'hide'] as const).map(opt => (
+                            <button
+                              key={opt}
+                              type="button"
+                              role="radio"
+                              aria-checked={jobShareOverride === opt}
+                              className={`jps-share-seg-btn${jobShareOverride === opt ? ' on' : ''}`}
+                              onClick={() => onJobShareOverrideChange?.(opt)}
+                            >
+                              {opt === 'default' ? 'Use default' : opt === 'show' ? 'Show' : 'Hide'}
+                            </button>
+                          ))}
+                        </div>
+                        <div className="jps-company-default">
+                          <button type="button" className="jps-company-default-btn" onClick={() => setCompanyDefaultOpen(o => !o)} aria-expanded={companyDefaultOpen}>
+                            Company default: {companyDefaultShare ? 'On' : 'Off'}
+                            <BdsIcon name="chevron-down" size={12} />
+                          </button>
+                          {companyDefaultOpen && (
+                            <>
+                              <div className="col-vis-backdrop" onClick={() => setCompanyDefaultOpen(false)} />
+                              <div className="jps-company-default-pop">
+                                <div className="jps-company-default-pop-title">Company default</div>
+                                <button
+                                  type="button"
+                                  role="switch"
+                                  aria-checked={companyDefaultShare}
+                                  className={`jps-client-switch${companyDefaultShare ? ' on' : ''}`}
+                                  onClick={() => onCompanyDefaultChange?.(!companyDefaultShare)}
+                                >
+                                  <span className="jps-client-switch-track"><span className="jps-client-switch-thumb" /></span>
+                                  <span className="jps-client-switch-label">Show budget difference to clients by default</span>
+                                </button>
+                                <div className="jps-company-default-pop-help">Applies to every job unless a job overrides it.</div>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
+                  {!isClient && (
+                    <div className={`jps-client-share-note${shareBudgetDiff ? (panelVarianceTotal > 0 ? ' over' : '') : ' muted'}`} role="status">
+                      <BdsIcon name={shareBudgetDiff ? (panelVarianceTotal > 0 ? 'arrow-up' : 'check') : 'x'} size={14} />
+                      <span>
+                        {shareBudgetDiff
+                          ? (panelVarianceTotal > 0
+                            ? <>Your client sees this job is <strong>{fmtSigned(panelVarianceTotal)}</strong> over budget. </>
+                            : <>Your client can see the budget difference for this job. </>)
+                          : <>Hidden from your client. </>}
+                        <span className="jps-share-inherit">
+                          {jobShareOverride === 'default'
+                            ? `Following company default (${companyDefaultShare ? 'On' : 'Off'}).`
+                            : 'Overriding company default.'}
+                        </span>
+                        {shareBudgetDiff && lastSharedAt && (
+                          <span className="jps-share-timestamp"> · Last shared {lastSharedAt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                        )}
+                      </span>
+                    </div>
+                  )}
                   {slice4Version === 'v41notes' && notesSavedAt && !notesDirty && (
                     <div className="jps-notes-saved-banner" role="status">
                       <BdsIcon name="check" size={14} />

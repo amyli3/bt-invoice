@@ -89,6 +89,20 @@ export default function App() {
   });
   const [clientGroupBy, setClientGroupBy] = useState<'estimate' | 'costcode' | 'all'>('estimate');
 
+  // JPS openbook — builder control over showing the whole-job budget difference to
+  // the client. Company-wide default + per-job override (Use default / Show / Hide),
+  // default off. Lifted here so the builder view drives the client (#client-jps) view.
+  const [companyDefaultShare, setCompanyDefaultShare] = useState(false);
+  const [jobShareOverride, setJobShareOverride] = useState<'default' | 'show' | 'hide'>('default');
+  const effectiveShareBudgetDiff =
+    jobShareOverride === 'show' ? true : jobShareOverride === 'hide' ? false : companyDefaultShare;
+  // "Last shared" stamp — set whenever the budget difference becomes visible to the
+  // client. Persists after it's hidden again so the builder can see when it last changed.
+  const [lastSharedAt, setLastSharedAt] = useState<Date | null>(null);
+  useEffect(() => {
+    if (effectiveShareBudgetDiff) setLastSharedAt(new Date());
+  }, [effectiveShareBudgetDiff]);
+
   const [estModalOpen, setEstModalOpen] = useState(false);
   const [selModalOpen, setSelModalOpen] = useState(false);
   const [selV2ModalOpen, setSelV2ModalOpen] = useState(false);
@@ -366,7 +380,7 @@ export default function App() {
       <div style={{display: 'flex', flexDirection: 'column', height: '100vh'}}>
         <ClientTopNav onNavigate={(page) => setActivePage(page as PageType)} />
         <div style={{flex: 1, overflowY: 'auto'}}>
-          <JobPriceSummary jobOpen={false} onBack={() => setActivePage('client-portal')} onOpenSelection={(sel) => { setSelectedOption(sel); setOptionOpenedFrom('client-jps'); setActivePage('option-detail'); }} onOpenJCB={() => setActivePage('job-costing-budget')} />
+          <JobPriceSummary jobOpen={false} isClient shareBudgetDiff={effectiveShareBudgetDiff} onBack={() => setActivePage('client-portal')} onOpenSelection={(sel) => { setSelectedOption(sel); setOptionOpenedFrom('client-jps'); setActivePage('option-detail'); }} onOpenJCB={() => setActivePage('job-costing-budget')} />
         </div>
       </div>
     );
@@ -587,7 +601,7 @@ export default function App() {
         <div style={{display: 'flex', flex: 1, minHeight: 0}}>
           <JobSidebar open={jobOpen} onToggle={() => setJobOpen(false)} selectedJob={selectedJob} onSelectJob={(id) => { setSelectedJob(id); if (isNarrow) setJobOpen(false); }} onHomeClick={() => setActivePage('client-portal')} />
           <div className="content-area">
-            <JobPriceSummary jobOpen={jobOpen} onToggleJob={() => setJobOpen(true)} onOpenSelection={(sel) => { setSelectedOption(sel); setOptionOpenedFrom('job-price-summary'); setActivePage('option-detail'); }} onOpenJCB={() => setActivePage('job-costing-budget')} />
+            <JobPriceSummary jobOpen={jobOpen} onToggleJob={() => setJobOpen(true)} shareBudgetDiff={effectiveShareBudgetDiff} companyDefaultShare={companyDefaultShare} jobShareOverride={jobShareOverride} onCompanyDefaultChange={setCompanyDefaultShare} onJobShareOverrideChange={setJobShareOverride} lastSharedAt={lastSharedAt} onOpenSelection={(sel) => { setSelectedOption(sel); setOptionOpenedFrom('job-price-summary'); setActivePage('option-detail'); }} onOpenJCB={() => setActivePage('job-costing-budget')} />
           </div>
         </div>
       </div>

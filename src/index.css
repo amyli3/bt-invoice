@@ -1325,6 +1325,70 @@ table { width: 100%; border-collapse: collapse; }
 }
 .jps-section-title { font-size: 20px; font-weight: 700; color: var(--bt-midnight); margin: 0; }
 .jps-subsection-title { font-size: 14px; font-weight: 700; color: var(--bt-midnight); margin-bottom: 10px; }
+.jps-section-header-split { gap: 16px; }
+
+/* ── "Show to client" switch — builder opt-in to share budget difference ── */
+.jps-client-switch {
+  display: inline-flex; align-items: center; gap: 8px; flex-shrink: 0;
+  background: none; border: none; padding: 4px; cursor: pointer; font-family: inherit;
+}
+.jps-client-switch-track {
+  position: relative; width: 34px; height: 18px; border-radius: 9px;
+  background: var(--g300); transition: background 0.15s; flex-shrink: 0;
+}
+.jps-client-switch-thumb {
+  position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%;
+  background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,0.2); transition: transform 0.15s;
+}
+.jps-client-switch.on .jps-client-switch-track { background: #004FD6; }
+.jps-client-switch.on .jps-client-switch-thumb { transform: translateX(16px); }
+.jps-client-switch-label { font-size: 13px; font-weight: 500; color: var(--g700); white-space: nowrap; }
+.jps-client-switch:focus-visible { outline: 2px solid #004FD6; outline-offset: 2px; border-radius: 6px; }
+
+/* ── Per-job share control: Use default / Show / Hide + company default ── */
+.jps-share-control { display: inline-flex; align-items: center; gap: 10px; flex-shrink: 0; }
+.jps-share-control-label { font-size: 13px; font-weight: 600; color: var(--g600); }
+.jps-share-seg { display: inline-flex; border: 1px solid var(--g200); border-radius: 8px; overflow: hidden; }
+.jps-share-seg-btn {
+  padding: 6px 12px; font-size: 13px; font-weight: 500; font-family: inherit;
+  border: none; background: #fff; color: var(--g600); cursor: pointer; transition: all 0.12s;
+}
+.jps-share-seg-btn:not(:last-child) { border-right: 1px solid var(--g200); }
+.jps-share-seg-btn:hover { background: var(--g50); }
+.jps-share-seg-btn.on { background: #004FD6; color: #fff; }
+.jps-share-seg-btn.on:hover { background: #004FD6; }
+
+.jps-company-default { position: relative; }
+.jps-company-default-btn {
+  display: inline-flex; align-items: center; gap: 4px; padding: 6px 10px;
+  font-size: 13px; font-weight: 500; font-family: inherit;
+  background: #fff; border: 1px solid var(--g200); border-radius: 8px; color: var(--g700); cursor: pointer;
+}
+.jps-company-default-btn:hover { background: var(--g50); }
+.jps-company-default-pop {
+  position: absolute; right: 0; top: calc(100% + 6px); z-index: 30; width: 280px;
+  background: #fff; border: 1px solid var(--g200); border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.12); padding: 14px;
+}
+.jps-company-default-pop-title {
+  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
+  color: var(--g500); margin-bottom: 10px;
+}
+.jps-company-default-pop .jps-client-switch { padding: 0; align-items: flex-start; }
+.jps-company-default-pop .jps-client-switch-label { white-space: normal; text-align: left; }
+.jps-company-default-pop-help { font-size: 12px; color: var(--g500); margin-top: 8px; line-height: 16px; }
+
+/* Status note — what the client currently sees, inheritance, and last-shared stamp */
+.jps-client-share-note {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 16px;
+  padding: 8px 12px; border-radius: var(--radius); font-size: 13px; line-height: 18px;
+  background: var(--bds-color-info-background, #E6F6FF); color: #004FD6;
+}
+.jps-client-share-note strong { font-weight: 700; }
+.jps-client-share-note.over { background: #FEF2F2; color: var(--red); }
+.jps-client-share-note.muted { background: var(--g100); color: var(--g600); }
+.jps-share-inherit { opacity: 0.85; }
+.jps-share-timestamp { opacity: 0.85; }
 
 /* ── Category groups ── */
 .jps-cat-group { margin-bottom: 12px; }
