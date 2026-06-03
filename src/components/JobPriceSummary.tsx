@@ -164,35 +164,17 @@ const allowanceGroups = allowances.map(a => {
   return { name: a.name, budget: a.budget, used: maxUsed, items, fromCO: a.fromCO, location: a.location, complete: !!a.complete };
 });
 
-// In-progress first, then marked complete. Used by every JPS slice's allowance
-// list so the two groups render under separate sub-section headers.
-const sortedAllowanceGroups = [
-  ...allowanceGroups.filter(g => !g.complete),
-  ...allowanceGroups.filter(g => g.complete),
-];
+// All allowances sorted alphanumerically by name — no status grouping; completed
+// and in-progress are interleaved, distinguished by their status tag + value.
+const byName = (a: typeof allowanceGroups[number], b: typeof allowanceGroups[number]) =>
+  a.name.localeCompare(b.name, 'en', { numeric: true, sensitivity: 'base' });
+const sortedAllowanceGroups = [...allowanceGroups].sort(byName);
 
-// Subtotals for the In progress / Completed sub-sections. Both use the same
-// shape (budget / approved) and a third value that differs by state:
-//   - In progress → Remaining (budget − approved). Negative when the section
-//     is collectively over-budget; positive when collectively under.
-//   - Completed → Contract impact (approved − budget, $0 if nothing approved).
+// Completed allowance totals — feeds approvedSelectionsTotal (contract impact
+// of completed allowances). Uses approved − budget per group ($0 if nothing approved).
 function approvedFor(group: typeof allowanceGroups[number]) {
   return group.items.filter(i => i.status === 'approved').reduce((s, i) => s + i.price, 0);
 }
-const inProgressAllowanceTotals = allowanceGroups.filter(g => !g.complete).reduce(
-  (acc, g) => {
-    const approved = approvedFor(g);
-    acc.budget += g.budget;
-    acc.approved += approved;
-    // Difference = approved − budget. Positive when over-budget, negative when
-    // under. Matches the per-row formula so the subtotal sign matches its rows.
-    // Skip allowances with no approved spending — those render "—" on their
-    // row, so excluding them keeps the subtotal in sync with what the user sees.
-    acc.difference += approved === 0 ? 0 : g.budget - approved;
-    return acc;
-  },
-  { budget: 0, approved: 0, difference: 0 },
-);
 const completedAllowanceTotals = allowanceGroups.filter(g => g.complete).reduce(
   (acc, g) => {
     const approved = approvedFor(g);
@@ -284,6 +266,9 @@ const postContractSelections = allSelections.filter(s => !s.allowanceName && s.t
 
 const fmt = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 });
 const fmtSigned = (n: number) => (n > 0 ? '+' : '') + fmt(n);
+// Allowance variance value: a signed number carries direction (+ = over budget,
+// − = under budget). Neutral color so it reads as information, not an alarm.
+const VarianceValue = ({ value }: { value: number }) => <strong>{fmtSigned(value)}</strong>;
 // Inline icons for activity kinds (Bill / PO / Time clock / Receipt / Cost adjustment).
 // 14×14, currentColor — tints with the surrounding text color.
 const ActivityKindIcon = ({ kind }: { kind: string }) => {
@@ -332,7 +317,7 @@ const ActivityKindIcon = ({ kind }: { kind: string }) => {
 
 /* ── Component ── */
 
-export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection, onBack, isClient = false, shareBudgetDiff = false, companyDefaultShare = false, jobShareOverride = 'default', onCompanyDefaultChange, onJobShareOverrideChange, lastSharedAt = null }: { jobOpen?: boolean; onToggleJob?: () => void; onOpenSelection?: (sel: { name: string; category: string; price: number; allowanceName?: string; status: string }) => void; onBack?: () => void; onOpenJCB?: () => void; isClient?: boolean; shareBudgetDiff?: boolean; companyDefaultShare?: boolean; jobShareOverride?: 'default' | 'show' | 'hide'; onCompanyDefaultChange?: (v: boolean) => void; onJobShareOverrideChange?: (v: 'default' | 'show' | 'hide') => void; lastSharedAt?: Date | null }) {
+export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection, onBack, isClient = false, shareBudgetDiff = false, onShareBudgetDiffChange }: { jobOpen?: boolean; onToggleJob?: () => void; onOpenSelection?: (sel: { name: string; category: string; price: number; allowanceName?: string; status: string }) => void; onBack?: () => void; onOpenJCB?: () => void; isClient?: boolean; shareBudgetDiff?: boolean; onShareBudgetDiffChange?: (v: boolean) => void }) {
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
   // v41 (cost category) budget difference: free-form notes the builder types to
   // record what drove the variance. Keyed by cost code.
@@ -353,9 +338,27 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
   // bar + decision callout (Sarah review, May 2026).
   const [slice4Version, setSlice4Version] = useState<'v1' | 'v2' | 'v3' | 'v4' | 'v41' | 'v41notes' | 'v411' | 'v45' | 'v5'>('v1');
   const [slice4DrillOpen, setSlice4DrillOpen] = useState(false);
-  // Openbook → "Show to client" — popover for the company-wide default setting.
-  const [companyDefaultOpen, setCompanyDefaultOpen] = useState(false);
   const [showPrint, setShowPrint] = useState(false);
+  // Send job price summary to client — channel preferences, default both on.
+  const [showSend, setShowSend] = useState(false);
+  const [sendEmail, setSendEmail] = useState(true);
+  const [sendSms, setSendSms] = useState(true);
+  // Share activity log = lightweight version history. Each Send appends an entry
+  // capturing what the client saw (view + whether the budget difference was shown).
+  // Seeded with prior shares so the history reads as a record from day one.
+  const [shareLog, setShareLog] = useState<{ at: Date; channels: string[]; view: string; budgetShared: boolean }[]>([
+    { at: new Date('2026-05-15T10:12:00'), channels: ['Email', 'SMS'], view: 'Openbook', budgetShared: true },
+    { at: new Date('2026-04-15T09:30:00'), channels: ['Email'], view: 'Openbook', budgetShared: false },
+    { at: new Date('2026-03-15T11:00:00'), channels: ['Email', 'SMS'], view: 'Fixed price', budgetShared: false },
+    { at: new Date('2026-02-15T14:35:00'), channels: ['Email'], view: 'Fixed price', budgetShared: false },
+  ]);
+  const [showShareHistory, setShowShareHistory] = useState(false);
+  // Viewing an older shared version — reconstructs what the client saw (view +
+  // budget-difference visibility) in a read-only preview. Null = live builder view.
+  const [previewShare, setPreviewShare] = useState<{ at: Date; channels: string[]; view: string; budgetShared: boolean } | null>(null);
+  // When previewing an older version, render as the client saw it.
+  const viewAsClient = isClient || !!previewShare;
+  const effShareBudgetDiff = previewShare ? previewShare.budgetShared : shareBudgetDiff;
   const [printOptions, setPrintOptions] = useState({
     changeOrders: true,
     payments: true,
@@ -666,21 +669,21 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                     {printSortableHeader(gridId, 'date', 'Date', 'jps-print-th-date')}
                     {printSortableHeader(gridId, 'budget', 'Allowance', 'jps-print-th-right')}
                     {printSortableHeader(gridId, 'spent', 'Price', 'jps-print-th-right')}
-                    {printSortableHeader(gridId, 'remaining', 'Remaining', 'jps-print-th-right')}
+                    {printSortableHeader(gridId, 'remaining', 'Difference', 'jps-print-th-right')}
                   </tr>
                 </thead>
                 <tbody>
-                  {sortedAllowances.map(({ group: g, spent, remaining }, i) => {
+                  {sortedAllowances.map(({ group: g, spent }, i) => {
                     const nestedItems = includePending ? g.items : g.items.filter(it => it.status === 'approved');
                     const showNested = printOptions.expandAllowances;
                     return (
                       <Fragment key={i}>
                         <tr className="jps-print-allowance-row jps-print-allowance-row-expanded">
-                          <td><strong>{g.name}</strong></td>
+                          <td><strong>{g.name}</strong> <span className={`jps-print-status${g.complete ? ' done' : ''}`}>{g.complete ? 'Completed' : 'In progress'}</span></td>
                           <td></td>
                           <td className="jps-print-td-right"><strong>{fmt(g.budget)}</strong></td>
                           <td className="jps-print-td-right"><strong>{fmt(spent)}</strong></td>
-                          <td className="jps-print-td-right"><strong>{fmt(remaining)}</strong></td>
+                          <td className="jps-print-td-right"><strong>{fmtSigned(spent - g.budget)}</strong></td>
                         </tr>
                         {showNested && nestedItems.map((it, j) => (
                           <tr key={`${i}-${j}`} className="jps-print-nested-row">
@@ -986,21 +989,143 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
             </div>
           </div>
           <div className="pg-hdr-right">
+            {!viewAsClient && shareLog.length > 0 && (
+              <div className="jps-last-shared">
+                <span className="jps-last-shared-text">Last shared {shareLog[0].at.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</span>
+                <BdsButton
+                  displayType="secondary"
+                  ariaLabel="View activity log"
+                  onClick={() => setShowShareHistory(true)}
+                  icon={<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" /><path d="M3 3v5h5" /><path d="M12 7v5l4 2" /></svg>}
+                />
+              </div>
+            )}
             {activeSlice === 'slice5' && slice4Version === 'v41notes' ? (
               <BdsButton
                 text={notesDirty || !notesSavedAt ? 'Save' : 'Saved'}
                 displayType={notesDirty || !notesSavedAt ? 'primary' : 'secondary'}
                 onClick={saveNotes}
               />
-            ) : (
-              <BdsButton text="Send" displayType="secondary" icon={<BdsIcon name="send" size={14} />} />
-            )}
+            ) : !viewAsClient ? (
+              <BdsButton text="Send" displayType="secondary" icon={<BdsIcon name="send" size={14} />} onClick={() => setShowSend(true)} />
+            ) : null}
             <BdsButton text="Print" displayType="primary" onClick={() => setShowPrint(true)} />
           </div>
         </div>
       </div>
 
+      {/* Send job price summary modal — builder shares the JPS with their client. */}
+      {!isClient && showSend && (
+        <div className="jps-send-scrim" onClick={() => setShowSend(false)}>
+          <div className="jps-send-modal" role="dialog" aria-modal="true" aria-labelledby="jps-send-title" onClick={(e) => e.stopPropagation()}>
+            <div className="jps-send-header">
+              <BdsText as="h2" size="heavy-lg" className="jps-send-title">Send job price summary</BdsText>
+              <p className="jps-send-sub">Choose how to send this job price summary to your client.</p>
+              <button type="button" className="jps-send-close" onClick={() => setShowSend(false)} aria-label="Close">
+                <BdsIcon name="x" size={20} />
+              </button>
+            </div>
+            <div className="jps-send-body">
+              <div className="jps-send-recipient">
+                <span className="jps-send-avatar">JJ</span>
+                <div className="jps-send-contact">
+                  <div className="jps-send-name">Jenna Johnson</div>
+                  <div className="jps-send-detail">jenna.johnson@email.com</div>
+                  <div className="jps-send-detail">+1 (402) 555 0147</div>
+                </div>
+                <div className="jps-send-channels">
+                  <label className="jps-send-check">
+                    <input type="checkbox" checked={sendEmail} onChange={(e) => setSendEmail(e.target.checked)} />
+                    <span className="jps-send-checkbox" aria-hidden="true" />
+                    <span>Email</span>
+                  </label>
+                  <label className="jps-send-check">
+                    <input type="checkbox" checked={sendSms} onChange={(e) => setSendSms(e.target.checked)} />
+                    <span className="jps-send-checkbox" aria-hidden="true" />
+                    <span>SMS</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+            <div className="jps-send-footer">
+              <BdsButton
+                text="Schedule send"
+                displayType="secondary"
+                icon={<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 7.5V12l3 1.8" /></svg>}
+                onClick={() => setShowSend(false)}
+              />
+              <BdsButton text="Send" displayType="primary" disabled={!sendEmail && !sendSms} onClick={() => {
+                setShareLog(prev => [{
+                  at: new Date(),
+                  channels: [sendEmail ? 'Email' : null, sendSms ? 'SMS' : null].filter(Boolean) as string[],
+                  view: activeSlice === 'slice1' ? 'Fixed price' : 'Openbook',
+                  budgetShared: shareBudgetDiff,
+                }, ...prev]);
+                setShowSend(false);
+              }} />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Share history (activity log) — version history of what the client has seen. */}
+      {!isClient && showShareHistory && (
+        <div className="jps-send-scrim" onClick={() => setShowShareHistory(false)}>
+          <div className="jps-send-modal" role="dialog" aria-modal="true" aria-labelledby="jps-history-title" onClick={(e) => e.stopPropagation()}>
+            <div className="jps-send-header">
+              <BdsText as="h2" size="heavy-lg" className="jps-send-title">Shared with client</BdsText>
+              <p className="jps-send-sub">A record of each time this job price summary was shared, and what your client saw.</p>
+              <button type="button" className="jps-send-close" onClick={() => setShowShareHistory(false)} aria-label="Close">
+                <BdsIcon name="x" size={20} />
+              </button>
+            </div>
+            <div className="jps-send-body">
+              <ul className="jps-history-list">
+                {shareLog.map((e, i) => (
+                  <li key={i} className="jps-history-item">
+                    <span className="jps-history-dot" />
+                    <div className="jps-history-content">
+                      <div className="jps-history-top">
+                        <span className="jps-history-date">
+                          {e.at.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                        </span>
+                        <button
+                          type="button"
+                          className="jps-history-view"
+                          onClick={() => {
+                            setActiveSlice(e.view === 'Fixed price' ? 'slice1' : 'slice5');
+                            if (e.view !== 'Fixed price') setSlice4Version('v41');
+                            setPreviewShare(e);
+                            setShowShareHistory(false);
+                          }}
+                        >
+                          View
+                        </button>
+                      </div>
+                      {e.budgetShared && (
+                        <div className="jps-history-meta">
+                          Budget difference shown
+                        </div>
+                      )}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="jps-body">
+
+        {previewShare && (
+          <div className="jps-version-banner">
+            <span>
+              This is the job price summary shared with your client on {previewShare.at.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+            </span>
+            <button type="button" className="jps-version-exit" onClick={() => setPreviewShare(null)}>Exit</button>
+          </div>
+        )}
 
         {/* ═══ Slice switcher + expand/collapse all ═══ */}
         <div className="jps-slice-tabs">
@@ -1086,17 +1211,13 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
               />
               </div>
 
-              {sortedAllowanceGroups.map((group, gi, arr) => {
+              {sortedAllowanceGroups.map((group) => {
                 const approvedItems = group.items.filter(i => i.status === 'approved');
                 const isOpen = expandedGroups[group.name];
                 const hasItems = approvedItems.length > 0;
-                const showInProgressHeader = !group.complete && gi === 0;
-                const showCompletedHeader = group.complete && (gi === 0 || !arr[gi - 1].complete);
-                return (
+                                                return (
                   <Fragment key={group.name}>
-                  {showInProgressHeader && <div className="jps-allowance-divider">In progress</div>}
-                  {showCompletedHeader && <div className="jps-allowance-divider">Completed</div>}
-                  <div className="jps-cat-group">
+                                                      <div className="jps-cat-group">
                     <button
                       className={`jps-cat-header ${isOpen ? 'jps-cat-header-open' : ''} ${hasItems ? '' : 'jps-cat-header-static'}`}
                       onClick={hasItems ? () => toggleGroup(group.name) : undefined}
@@ -1104,7 +1225,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                     >
                       <div className="jps-cat-header-left">
                         {hasItems && <BdsIcon name={isOpen ? 'chevron-down' : 'chevron-right'} size={16} />}
-                        <span className="jps-cat-name">{group.name}</span>
+                        <span className="jps-cat-name">{group.name}</span><BdsBadge text={group.complete ? 'Completed' : 'In progress'} displayType={group.complete ? 'success' : 'info'} />
                       </div>
                       <div className="jps-cat-header-right">
                         {(() => {
@@ -1112,13 +1233,13 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                           const over = approvedUsed > group.budget;
                           return (
                             <span className="jps-allowance-flow">
-                              <span className="jps-flow-part"><span>Allowance</span><strong>{fmt(withTax(group.budget))}</strong></span>
                               <span className="jps-flow-part"><span>Approved price</span><strong>{fmt(withTax(approvedUsed))}</strong></span>
+                              <span className="jps-flow-part"><span>Allowance</span><strong>{fmt(withTax(group.budget))}</strong></span>
                               <span className="jps-flow-sep">·</span>
                               <span className={over ? 'jps-flow-over' : 'jps-flow-remaining'}>
                                 {group.complete
-                                  ? <><span>Contract impact</span><strong>{fmtSigned(approvedUsed === 0 ? 0 : withTax(approvedUsed - group.budget))}</strong></>
-                                  : <><span>Difference</span><strong>{fmt(withTax(group.budget - approvedUsed))}</strong></>
+                                  ? <><span>Difference</span><VarianceValue value={approvedUsed === 0 ? 0 : withTax(approvedUsed - group.budget)} /></>
+                                  : <><span>Difference</span><VarianceValue value={withTax(approvedUsed - group.budget)} /></>
                                 }
                               </span>
                             </span>
@@ -1332,14 +1453,12 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
               />
               </div>
 
-              {sortedAllowanceGroups.map((group, gi, arr) => {
+              {sortedAllowanceGroups.map((group) => {
                 const approvedItems = group.items.filter(i => i.status === 'approved');
                 const pendingItems = group.items.filter(i => i.status === 'pending');
                 const isOpen = expandedGroups[group.name];
                 const hasItems = group.items.length > 0;
-                const showInProgressHeader = !group.complete && gi === 0;
-                const showCompletedHeader = group.complete && (gi === 0 || !arr[gi - 1].complete);
-
+                                
                 // Determine if this allowance spans multiple locations; if so, sub-group items.
                 const allLocations = new Set(group.items.map(i => i.location || group.location));
                 const spansLocations = allLocations.size > 1;
@@ -1352,9 +1471,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
 
                 return (
                   <Fragment key={group.name}>
-                  {showInProgressHeader && <div className="jps-allowance-divider">In progress</div>}
-                  {showCompletedHeader && <div className="jps-allowance-divider">Completed</div>}
-                  <div className="jps-cat-group">
+                                                      <div className="jps-cat-group">
                     <button
                       className={`jps-cat-header ${isOpen ? 'jps-cat-header-open' : ''} ${hasItems ? '' : 'jps-cat-header-static'}`}
                       onClick={hasItems ? () => toggleGroup(group.name) : undefined}
@@ -1362,7 +1479,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                     >
                       <div className="jps-cat-header-left">
                         {hasItems && <BdsIcon name={isOpen ? 'chevron-down' : 'chevron-right'} size={16} />}
-                        <span className="jps-cat-name">{group.name}</span>
+                        <span className="jps-cat-name">{group.name}</span><BdsBadge text={group.complete ? 'Completed' : 'In progress'} displayType={group.complete ? 'success' : 'info'} />
                         {group.fromCO && <span className="jps-cat-from-co">From CO: {group.fromCO}</span>}
                       </div>
                       <div className="jps-cat-header-right">
@@ -1371,13 +1488,13 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                           const over = approvedUsed > group.budget;
                           return (
                             <span className="jps-allowance-flow">
-                              <span className="jps-flow-part"><span>Allowance</span><strong>{fmt(group.budget)}</strong></span>
                               <span className="jps-flow-part"><span>Approved price</span><strong>{fmt(approvedUsed)}</strong></span>
+                              <span className="jps-flow-part"><span>Allowance</span><strong>{fmt(group.budget)}</strong></span>
                               <span className="jps-flow-sep">·</span>
                               <span className={over ? 'jps-flow-over' : 'jps-flow-remaining'}>
                                 {group.complete
-                                  ? <><span>Contract impact</span><strong>{fmtSigned(approvedUsed === 0 ? 0 : approvedUsed - group.budget)}</strong></>
-                                  : <><span>Difference</span><strong>{fmt(group.budget - approvedUsed)}</strong></>
+                                  ? <><span>Difference</span><VarianceValue value={approvedUsed === 0 ? 0 : approvedUsed - group.budget} /></>
+                                  : <><span>Difference</span><VarianceValue value={approvedUsed - group.budget} /></>
                                 }
                               </span>
                             </span>
@@ -1689,22 +1806,16 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
               />
           </div>
 
-          {sortedAllowanceGroups.map((group, gi, arr) => {
+          {sortedAllowanceGroups.map((group) => {
             const approvedItems = group.items.filter(i => i.status === 'approved');
             const pendingItems = group.items.filter(i => i.status === 'pending');
 
             const isOpen = expandedGroups[group.name];
 
             const hasItems = group.items.length > 0;
-            const showInProgressHeader = !group.complete && gi === 0;
-            const showCompletedHeader = group.complete && (gi === 0 || !arr[gi - 1].complete);
-            const isLastInProgress = !group.complete && (gi === arr.length - 1 || arr[gi + 1].complete);
-            const isLastCompleted = group.complete && gi === arr.length - 1;
-            return (
+                                    return (
               <Fragment key={group.name}>
-              {showInProgressHeader && <div className="jps-allowance-divider">In progress</div>}
-                  {showCompletedHeader && <div className="jps-allowance-divider">Completed</div>}
-              <div className="jps-cat-group">
+                                              <div className="jps-cat-group">
                 <button
                   className={`jps-cat-header ${isOpen ? 'jps-cat-header-open' : ''} ${hasItems ? '' : 'jps-cat-header-static'}`}
                   onClick={hasItems ? () => toggleGroup(group.name) : undefined}
@@ -1712,7 +1823,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                 >
                   <div className="jps-cat-header-left">
                     {hasItems && <BdsIcon name={isOpen ? 'chevron-down' : 'chevron-right'} size={16} />}
-                    <span className="jps-cat-name">{group.name}</span>
+                    <span className="jps-cat-name">{group.name}</span><BdsBadge text={group.complete ? 'Completed' : 'In progress'} displayType={group.complete ? 'success' : 'info'} />
                   </div>
                   <div className="jps-cat-header-right">
                     {(() => {
@@ -1720,13 +1831,13 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                       const over = approvedUsed > group.budget;
                       return (
                         <span className="jps-allowance-flow">
-                          <span className="jps-flow-part"><span>Allowance</span><strong>{fmt(group.budget)}</strong></span>
                           <span className="jps-flow-part"><span>Approved price</span><strong>{fmt(approvedUsed)}</strong></span>
+                          <span className="jps-flow-part"><span>Allowance</span><strong>{fmt(group.budget)}</strong></span>
                           <span className="jps-flow-sep">·</span>
                           <span className={over ? 'jps-flow-over' : 'jps-flow-remaining'}>
                             {group.complete
-                                  ? <><span>Contract impact</span><strong>{fmtSigned(approvedUsed === 0 ? 0 : approvedUsed - group.budget)}</strong></>
-                                  : <><span>Difference</span><strong>{fmt(group.budget - approvedUsed)}</strong></>
+                                  ? <><span>Difference</span><VarianceValue value={approvedUsed === 0 ? 0 : approvedUsed - group.budget} /></>
+                                  : <><span>Difference</span><VarianceValue value={approvedUsed - group.budget} /></>
                                 }
                           </span>
                         </span>
@@ -1806,40 +1917,6 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                   );
                 })()}
               </div>
-              {isLastInProgress && (
-                <div className="jps-cat-group jps-allowance-subtotal-row">
-                  <div className="jps-cat-header jps-cat-header-static jps-cat-header-subtotal">
-                    <div className="jps-cat-header-left">
-                      <span className="jps-cat-name">Subtotal</span>
-                    </div>
-                    <div className="jps-cat-header-right">
-                      <span className="jps-allowance-flow">
-                        <span className="jps-flow-part"><span>Allowance</span><strong>{fmt(inProgressAllowanceTotals.budget)}</strong></span>
-                        <span className="jps-flow-part"><span>Approved price</span><strong>{fmt(inProgressAllowanceTotals.approved)}</strong></span>
-                        <span className="jps-flow-sep">·</span>
-                        <span className="jps-flow-remaining"><span>Difference</span><strong>{fmt(inProgressAllowanceTotals.difference)}</strong></span>
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              )}
-              {isLastCompleted && (
-                <div className="jps-cat-group jps-allowance-subtotal-row">
-                  <div className="jps-cat-header jps-cat-header-static jps-cat-header-subtotal">
-                    <div className="jps-cat-header-left">
-                      <span className="jps-cat-name">Subtotal</span>
-                    </div>
-                    <div className="jps-cat-header-right">
-                      <span className="jps-allowance-flow">
-                        <span className="jps-flow-part"><span>Allowance</span><strong>{fmt(completedAllowanceTotals.budget)}</strong></span>
-                        <span className="jps-flow-part"><span>Approved price</span><strong>{fmt(completedAllowanceTotals.approved)}</strong></span>
-                        <span className="jps-flow-sep">·</span>
-                        <span className="jps-flow-remaining"><span>Contract impact</span><strong>{fmtSigned(completedAllowanceTotals.contractImpact)}</strong></span>
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              )}
               </Fragment>
             );
           })}
@@ -2228,19 +2305,15 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                   />
                 </div>
 
-                {sortedAllowanceGroups.map((group, gi, arr) => {
+                {sortedAllowanceGroups.map((group) => {
                   const approvedItems = group.items.filter(i => i.status === 'approved');
                   const groupKey = `s4-${group.name}`;
                   const isOpen = expandedGroups[groupKey];
                   const hasItems = approvedItems.length > 0;
                   const expandable = hasItems;
-                  const showInProgressHeader = !group.complete && gi === 0;
-                const showCompletedHeader = group.complete && (gi === 0 || !arr[gi - 1].complete);
-                  return (
+                                                    return (
                     <Fragment key={group.name}>
-                    {showInProgressHeader && <div className="jps-allowance-divider">In progress</div>}
-                  {showCompletedHeader && <div className="jps-allowance-divider">Completed</div>}
-                    <div className="jps-cat-group">
+                                                          <div className="jps-cat-group">
                       <button
                         className={`jps-cat-header ${isOpen && expandable ? 'jps-cat-header-open' : ''} ${expandable ? '' : 'jps-cat-header-static'}`}
                         onClick={expandable ? () => toggleGroup(groupKey) : undefined}
@@ -2248,7 +2321,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                       >
                         <div className="jps-cat-header-left">
                           {expandable && <BdsIcon name={isOpen ? 'chevron-down' : 'chevron-right'} size={16} />}
-                          <span className="jps-cat-name">{group.name}</span>
+                          <span className="jps-cat-name">{group.name}</span><BdsBadge text={group.complete ? 'Completed' : 'In progress'} displayType={group.complete ? 'success' : 'info'} />
                         </div>
                         <div className="jps-cat-header-right">
                           {(() => {
@@ -2256,13 +2329,13 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                             const over = approvedUsed > group.budget;
                             return (
                               <span className="jps-allowance-flow">
-                                <span className="jps-flow-part"><span>Allowance</span><strong>{fmt(withTax(group.budget))}</strong></span>
                                 <span className="jps-flow-part"><span>Approved price</span><strong>{fmt(withTax(approvedUsed))}</strong></span>
+                                <span className="jps-flow-part"><span>Allowance</span><strong>{fmt(withTax(group.budget))}</strong></span>
                                 <span className="jps-flow-sep">·</span>
                                 <span className={over ? 'jps-flow-over' : 'jps-flow-remaining'}>
                                   {group.complete
-                                  ? <><span>Contract impact</span><strong>{fmtSigned(approvedUsed === 0 ? 0 : withTax(approvedUsed - group.budget))}</strong></>
-                                  : <><span>Difference</span><strong>{fmt(withTax(group.budget - approvedUsed))}</strong></>
+                                  ? <><span>Difference</span><VarianceValue value={approvedUsed === 0 ? 0 : withTax(approvedUsed - group.budget)} /></>
+                                  : <><span>Difference</span><VarianceValue value={withTax(approvedUsed - group.budget)} /></>
                                 }
                                 </span>
                               </span>
@@ -2361,75 +2434,23 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
 
               {/* ─── Budget difference (v4/v41/v41notes/v411/v45) — table layout matching Change Orders ─── */}
               {/* Client view only renders this section when the builder has opted to share it (shareBudgetDiff). */}
-              {(slice4Version === 'v4' || slice4Version === 'v41' || slice4Version === 'v41notes' || slice4Version === 'v411' || slice4Version === 'v45') && (!isClient || shareBudgetDiff) && (
+              {(slice4Version === 'v4' || slice4Version === 'v41' || slice4Version === 'v41notes' || slice4Version === 'v411' || slice4Version === 'v45') && (!viewAsClient || effShareBudgetDiff) && (
                 <div className="jps-breakdown-section" id="jps-sec-budget-difference">
                   <div className="jps-section-header jps-section-header-split">
                     <BdsText as="h2" size="heavy-lg" className="jps-section-title">Budget difference</BdsText>
-                    {!isClient && (
-                      <div className="jps-share-control">
-                        <span className="jps-share-control-label">Show to client</span>
-                        <div className="jps-share-seg" role="radiogroup" aria-label="Show budget difference to client">
-                          {(['default', 'show', 'hide'] as const).map(opt => (
-                            <button
-                              key={opt}
-                              type="button"
-                              role="radio"
-                              aria-checked={jobShareOverride === opt}
-                              className={`jps-share-seg-btn${jobShareOverride === opt ? ' on' : ''}`}
-                              onClick={() => onJobShareOverrideChange?.(opt)}
-                            >
-                              {opt === 'default' ? 'Use default' : opt === 'show' ? 'Show' : 'Hide'}
-                            </button>
-                          ))}
-                        </div>
-                        <div className="jps-company-default">
-                          <button type="button" className="jps-company-default-btn" onClick={() => setCompanyDefaultOpen(o => !o)} aria-expanded={companyDefaultOpen}>
-                            Company default: {companyDefaultShare ? 'On' : 'Off'}
-                            <BdsIcon name="chevron-down" size={12} />
-                          </button>
-                          {companyDefaultOpen && (
-                            <>
-                              <div className="col-vis-backdrop" onClick={() => setCompanyDefaultOpen(false)} />
-                              <div className="jps-company-default-pop">
-                                <div className="jps-company-default-pop-title">Company default</div>
-                                <button
-                                  type="button"
-                                  role="switch"
-                                  aria-checked={companyDefaultShare}
-                                  className={`jps-client-switch${companyDefaultShare ? ' on' : ''}`}
-                                  onClick={() => onCompanyDefaultChange?.(!companyDefaultShare)}
-                                >
-                                  <span className="jps-client-switch-track"><span className="jps-client-switch-thumb" /></span>
-                                  <span className="jps-client-switch-label">Show budget difference to clients by default</span>
-                                </button>
-                                <div className="jps-company-default-pop-help">Applies to every job unless a job overrides it.</div>
-                              </div>
-                            </>
-                          )}
-                        </div>
-                      </div>
+                    {!viewAsClient && (
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={shareBudgetDiff}
+                        className={`jps-client-switch${shareBudgetDiff ? ' on' : ''}`}
+                        onClick={() => onShareBudgetDiffChange?.(!shareBudgetDiff)}
+                      >
+                        <span className="jps-client-switch-track"><span className="jps-client-switch-thumb" /></span>
+                        <span className="jps-client-switch-label">Show to client</span>
+                      </button>
                     )}
                   </div>
-                  {!isClient && (
-                    <div className={`jps-client-share-note${shareBudgetDiff ? (panelVarianceTotal > 0 ? ' over' : '') : ' muted'}`} role="status">
-                      <BdsIcon name={shareBudgetDiff ? (panelVarianceTotal > 0 ? 'arrow-up' : 'check') : 'x'} size={14} />
-                      <span>
-                        {shareBudgetDiff
-                          ? (panelVarianceTotal > 0
-                            ? <>Your client sees this job is <strong>{fmtSigned(panelVarianceTotal)}</strong> over budget. </>
-                            : <>Your client can see the budget difference for this job. </>)
-                          : <>Hidden from your client. </>}
-                        <span className="jps-share-inherit">
-                          {jobShareOverride === 'default'
-                            ? `Following company default (${companyDefaultShare ? 'On' : 'Off'}).`
-                            : 'Overriding company default.'}
-                        </span>
-                        {shareBudgetDiff && lastSharedAt && (
-                          <span className="jps-share-timestamp"> · Last shared {lastSharedAt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
-                        )}
-                      </span>
-                    </div>
-                  )}
                   {slice4Version === 'v41notes' && notesSavedAt && !notesDirty && (
                     <div className="jps-notes-saved-banner" role="status">
                       <BdsIcon name="check" size={14} />
@@ -2465,14 +2486,15 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                       </div>
                     )}
                     {(() => {
-                      if (slice4Version === 'v45') return panelByLocation;
+                      // $0 budget-difference lines are hidden across all versions.
+                      if (slice4Version === 'v45') return panelByLocation.filter(g => g.variance !== 0);
                       if (slice4Version === 'v41notes') {
                         // Only categories with a positive overall budget
                         // difference. Underages and $0 categories are hidden
                         // entirely — same reasoning at the row level below.
                         return panelByCategoryV41Notes.filter(g => (g.revisedBudget - g.originalBudget) > 0);
                       }
-                      return panelByCategory;
+                      return panelByCategory.filter(g => (g.revisedBudget - g.originalBudget) !== 0);
                     })().map((group, gi) => {
                       const isV45 = slice4Version === 'v45';
                       const isV41 = slice4Version === 'v41';
@@ -2499,7 +2521,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                                 <span className={group.variance >= 0 ? 'jps-impact-up' : 'jps-impact-down'}>{fmtSigned(group.variance)}</span>
                               </div>
                             </div>
-                            {isOpen && group.items.map((item) => (
+                            {isOpen && group.items.filter(item => item.variance !== 0).map((item) => (
                               <div key={item.code} className="jps-table-row jps-table-budget jps-table-row-nested">
                                 <div className="jps-col-title">
                                   <span className="jps-budget-nested-code">{item.code}</span>

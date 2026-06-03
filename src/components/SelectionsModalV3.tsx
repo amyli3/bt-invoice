@@ -749,14 +749,14 @@ export default function SelectionsModalV3({ open, onClose, onAdd, data, addedChi
       <div className="est-modal selv2-modal" onClick={e => e.stopPropagation()}>
         <div className="est-modal-hdr">
           <div>
-            <h2 className="selv2-title">Add selections and allowances to invoice</h2>
+            <h2 className="selv2-title">Add selections to invoice</h2>
           </div>
           <button className="est-modal-close" onClick={onClose}>&times;</button>
         </div>
 
         <div className="est-modal-body selv2-body">
           <div className="selv2-desc">
-            Choose approved selections and allowances to invoice.
+            Invoice for post-contract allowance overages and selection option changes. Previously invoiced allowances will be credited against new approved selections.
           </div>
 
           <div className="selv2-controls">

@@ -1327,6 +1327,102 @@ table { width: 100%; border-collapse: collapse; }
 .jps-subsection-title { font-size: 14px; font-weight: 700; color: var(--bt-midnight); margin-bottom: 10px; }
 .jps-section-header-split { gap: 16px; }
 
+/* ── Send job price summary modal (BDS spec: 605px, overlay shadow) ── */
+.jps-send-scrim {
+  position: fixed; inset: 0; z-index: 1000;
+  background: rgba(14, 15, 16, 0.4);
+  display: flex; align-items: center; justify-content: center; padding: 16px;
+}
+.jps-send-modal {
+  width: 605px; max-width: 100%;
+  background: #fff; border: 1px solid #e2e7f0; border-radius: 8px;
+  box-shadow: 0 10px 30px -13px rgba(14, 15, 16, 0.2); overflow: hidden;
+}
+.jps-send-header { position: relative; display: flex; flex-direction: column; gap: 12px; padding: 24px 24px 12px; }
+.jps-send-title { font-size: 20px; font-weight: 600; line-height: 24px; color: #202227; margin: 0; }
+.jps-send-sub { font-size: 14px; line-height: 20px; color: #202227; margin: 0; }
+.jps-send-close {
+  position: absolute; top: 8px; right: 8px; width: 36px; height: 36px;
+  display: flex; align-items: center; justify-content: center;
+  border: none; background: none; border-radius: 8px; cursor: pointer; color: #202227;
+}
+.jps-send-close:hover { background: var(--g100); }
+.jps-send-body { padding: 12px 24px 16px; }
+.jps-send-recipient {
+  display: flex; align-items: center; gap: 15px;
+  border: 1px solid var(--g200); border-radius: 4px; padding: 12px 8px;
+}
+.jps-send-avatar {
+  width: 49px; height: 49px; border-radius: 50%; flex-shrink: 0;
+  background: #EDE4FB; color: #834be7; font-size: 14px; font-weight: 500;
+  display: flex; align-items: center; justify-content: center;
+}
+.jps-send-contact { flex: 1 0 0; min-width: 0; }
+.jps-send-name { font-size: 14px; font-weight: 700; line-height: 20px; color: #000; }
+.jps-send-detail { font-size: 14px; line-height: 20px; color: #000; }
+.jps-send-channels { display: flex; align-items: center; gap: 16px; padding: 0 8px; }
+.jps-send-check { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; font-size: 14px; color: #202227; }
+.jps-send-check input { position: absolute; opacity: 0; width: 0; height: 0; }
+.jps-send-checkbox {
+  width: 16px; height: 16px; border-radius: 2px; border: 1px solid var(--g300);
+  background: #fff; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.jps-send-check input:checked + .jps-send-checkbox { background: #004FD6; border-color: #004FD6; }
+.jps-send-check input:checked + .jps-send-checkbox::after {
+  content: ''; width: 4px; height: 8px; margin-top: -2px;
+  border: solid #fff; border-width: 0 2px 2px 0; transform: rotate(45deg);
+}
+.jps-send-check input:focus-visible + .jps-send-checkbox { outline: 2px solid #004FD6; outline-offset: 2px; }
+.jps-send-footer { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 24px 24px; }
+
+/* "Last shared" header: plain text + an activity-log icon button. */
+.jps-last-shared { display: inline-flex; align-items: center; gap: 10px; }
+.jps-last-shared-text { font-size: 13px; font-weight: 500; color: var(--g500); white-space: nowrap; }
+.jps-activity-log-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; border: none; background: none; cursor: pointer;
+  color: var(--g500); border-radius: 6px;
+}
+.jps-activity-log-btn:hover { color: #004FD6; background: var(--g100); }
+.jps-activity-log-btn:focus-visible { outline: 2px solid #004FD6; outline-offset: 2px; }
+
+/* "View this version" link in each history entry */
+.jps-history-view {
+  background: none; border: none; cursor: pointer; font-family: inherit;
+  font-size: 13px; font-weight: 500; color: #004FD6; padding: 0;
+}
+.jps-history-view:hover { text-decoration: underline; }
+
+/* Read-only banner while previewing an older shared version */
+.jps-version-banner {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  width: 100%; max-width: 1200px; box-sizing: border-box;
+  background: var(--bds-color-info-background, #E6F6FF); color: #004FD6;
+  border-radius: var(--radius); padding: 10px 16px; margin-bottom: 16px;
+  font-size: 13px; line-height: 18px;
+}
+.jps-version-exit {
+  flex-shrink: 0; background: #fff; border: 1px solid #004FD6; color: #004FD6;
+  font-family: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
+  padding: 4px 12px; border-radius: 6px;
+}
+.jps-version-exit:hover { background: #004FD6; color: #fff; }
+
+/* Share history timeline */
+.jps-history-list { list-style: none; margin: 0; padding: 4px 0; display: flex; flex-direction: column; }
+.jps-history-item { position: relative; display: flex; gap: 12px; padding: 0 0 18px 4px; }
+.jps-history-item:last-child { padding-bottom: 0; }
+.jps-history-dot { position: relative; flex-shrink: 0; width: 10px; height: 10px; border-radius: 50%; background: #004FD6; margin-top: 4px; }
+.jps-history-item:not(:last-child) .jps-history-dot::after {
+  content: ''; position: absolute; left: 50%; top: 14px; transform: translateX(-50%);
+  width: 1px; height: calc(100% + 14px); background: var(--g200);
+}
+.jps-history-item:not(:first-child) .jps-history-dot { background: var(--g300); }
+.jps-history-content { flex: 1 0 0; min-width: 0; }
+.jps-history-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.jps-history-date { font-size: 14px; font-weight: 400; color: var(--g800); }
+.jps-history-meta { font-size: 13px; color: var(--g500); margin-top: 2px; }
+
 /* ── "Show to client" switch — builder opt-in to share budget difference ── */
 .jps-client-switch {
   display: inline-flex; align-items: center; gap: 8px; flex-shrink: 0;
@@ -1669,6 +1765,14 @@ table { width: 100%; border-collapse: collapse; }
 .jps-print-summary-values strong { color: var(--bt-midnight); font-weight: 700; }
 
 .jps-print-section { margin-bottom: 24px; page-break-inside: avoid; }
+/* Allowance status tag in the printout (In progress / Completed) */
+.jps-print-status {
+  display: inline-block; font-size: 9px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.04em; color: var(--g500); border: 1px solid var(--g300);
+  border-radius: 4px; padding: 0 5px; margin-left: 6px; vertical-align: middle;
+  white-space: nowrap;
+}
+.jps-print-status.done { color: var(--g700); border-color: var(--g400); }
 .jps-print-section-title {
   font-size: 13px; font-weight: 700; color: var(--bt-midnight);
   margin: 0 0 8px; padding: 0;
@@ -1787,7 +1891,7 @@ table { width: 100%; border-collapse: collapse; }
 
 /* Allowance header: label stacked over amount, three columns (Allowance / Spent / Remaining or Overage) */
 .jps-allowance-flow {
-  display: inline-flex; align-items: flex-start; gap: 24px; flex-wrap: wrap;
+  display: inline-flex; align-items: center; gap: 24px; flex-wrap: wrap;
 }
 .jps-flow-part,
 .jps-flow-remaining,
@@ -2032,6 +2136,19 @@ table { width: 100%; border-collapse: collapse; }
 
   /* Subgroup rollup */
   .jps-subgroup-rollup-amt { font-size: 11px; }
+}
+
+/* ── Mobile: session additions (share controls, send/history modals, version banner) ── */
+@media (max-width: 700px) {
+  /* "Last shared {month}" text crowds the action buttons — keep just the activity-log icon */
+  .jps-last-shared-text { display: none; }
+  /* Send / history modal: recipient block and footer wrap instead of overflowing */
+  .jps-send-recipient { flex-wrap: wrap; gap: 12px; }
+  .jps-send-channels { padding: 0; width: 100%; }
+  .jps-send-footer { flex-wrap: wrap; }
+  .jps-send-footer .bds-r-button { flex: 1 1 auto; }
+  /* Viewing-older-version banner stacks its message above the Exit button */
+  .jps-version-banner { flex-direction: column; align-items: flex-start; gap: 8px; }
 }
 
 /* Allowance header flow — only stack when the flow math can't fit inline */
