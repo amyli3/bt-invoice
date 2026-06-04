@@ -164,11 +164,6 @@ const allowanceGroups = allowances.map(a => {
   return { name: a.name, budget: a.budget, used: maxUsed, items, fromCO: a.fromCO, location: a.location, complete: !!a.complete };
 });
 
-// All allowances sorted alphanumerically by name — no status grouping; completed
-// and in-progress are interleaved, distinguished by their status tag + value.
-const byName = (a: typeof allowanceGroups[number], b: typeof allowanceGroups[number]) =>
-  a.name.localeCompare(b.name, 'en', { numeric: true, sensitivity: 'base' });
-const sortedAllowanceGroups = [...allowanceGroups].sort(byName);
 
 // Completed allowance totals — feeds approvedSelectionsTotal (contract impact
 // of completed allowances). Uses approved − budget per group ($0 if nothing approved).
@@ -364,7 +359,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
     payments: true,
     expandAllowances: true,
   });
-  type SortColumn = 'title' | 'date' | 'price' | 'impact' | 'budget' | 'spent' | 'remaining';
+  type SortColumn = 'title' | 'date' | 'price' | 'impact' | 'budget' | 'spent' | 'remaining' | 'status';
   type SortDir = 'asc' | 'desc';
   type SortState = { column: SortColumn; direction: SortDir };
   const defaultSort: SortState = { column: 'date', direction: 'asc' };
@@ -446,6 +441,59 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
 
   const toggleGroup = (name: string) => setExpandedGroups(prev => ({ ...prev, [name]: !prev[name] }));
 
+  // Payments sorted by the shared print-payments sort state (persists to print).
+  const paymentsSorted = sortItems('print-payments', payments.map(p => ({ ...p, price: p.amount })));
+
+  // Allowance list ordering — shares the print allowances sort state (gridId
+  // 'print-allowances') so on-screen sorting persists to the print page. Default: name.
+  const [allowanceSortOpen, setAllowanceSortOpen] = useState(false);
+  const allowanceSort = sortByGrid['print-allowances'] ?? { column: 'title' as SortColumn, direction: 'asc' as SortDir };
+  const sortedAllowanceGroups = [...allowanceGroups].sort((a, b) => {
+    const sign = allowanceSort.direction === 'asc' ? 1 : -1;
+    const spentA = approvedFor(a), spentB = approvedFor(b);
+    switch (allowanceSort.column) {
+      case 'budget': return sign * (a.budget - b.budget);
+      case 'spent': return sign * (spentA - spentB);
+      case 'remaining': return sign * ((a.budget - spentA) - (b.budget - spentB));
+      case 'status': return sign * ((a.complete ? 1 : 0) - (b.complete ? 1 : 0));
+      default: return sign * a.name.localeCompare(b.name, 'en', { numeric: true, sensitivity: 'base' });
+    }
+  });
+  const ALLOWANCE_SORT_OPTS: { col: SortColumn; label: string }[] = [
+    { col: 'title', label: 'Name' },
+    { col: 'budget', label: 'Allowance' },
+    { col: 'remaining', label: 'Difference' },
+    { col: 'status', label: 'Status' },
+  ];
+  const allowanceSortControl = (
+    <div className="jps-allowance-sort">
+      <BdsButton
+        displayType="secondary"
+        onClick={() => setAllowanceSortOpen(o => !o)}
+        icon={<BdsIcon name={allowanceSort.direction === 'asc' ? 'sort-asc' : 'sort-desc'} size={14} />}
+        text={`Sort: ${ALLOWANCE_SORT_OPTS.find(o => o.col === allowanceSort.column)?.label ?? 'Name'}`}
+      />
+      {allowanceSortOpen && (
+        <>
+          <div className="col-vis-backdrop" onClick={() => setAllowanceSortOpen(false)} />
+          <div className="jps-sort-pop">
+            {ALLOWANCE_SORT_OPTS.map(o => (
+              <button
+                key={o.col}
+                type="button"
+                className={`jps-sort-pop-item${allowanceSort.column === o.col ? ' active' : ''}`}
+                onClick={() => { toggleSort('print-allowances', o.col); setAllowanceSortOpen(false); }}
+              >
+                <span>{o.label}</span>
+                {allowanceSort.column === o.col && <SortArrows state={allowanceSort.direction} />}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+
   // Combined standalone selections grid — single rendering used across all slices.
   // Merges "— price update" rows into their base (e.g., the toilet scenario) and shows
   // Title / Date / Original price / Revised price / Contract impact + a column-total row.
@@ -487,13 +535,13 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
     return (
       <div className="jps-table">
         <div className="jps-table-header jps-table-sel-standalone">
-          <div className="jps-col-title">Title</div>
-          <div className="jps-col-date">Date</div>
+          {sortableHeader('sel-standalone', 'title', 'Title', 'jps-col-title')}
+          {sortableHeader('sel-standalone', 'date', 'Date', 'jps-col-date')}
           <div className="jps-col-price-orig">Initial price</div>
-          <div className="jps-col-price-revised">Approved price</div>
-          <div className="jps-col-impact">Contract impact</div>
+          {sortableHeader('sel-standalone', 'price', 'Approved price', 'jps-col-price-revised')}
+          {sortableHeader('sel-standalone', 'impact', 'Contract impact', 'jps-col-impact')}
         </div>
-        {orderedRows.map((item, i) => (
+        {sortItems('sel-standalone', orderedRows.map(r => ({ ...r, price: r.revisedPrice, _impact: r.contractImpact }))).map((item, i) => (
           <div key={i} className={`jps-table-row jps-table-sel-standalone${item.status === 'pending' ? ' jps-row-pending' : ''}`}>
             <div className="jps-col-title">
               <div>
@@ -644,10 +692,14 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
               return { group: g, spent, remaining: g.budget - spent, latestTs };
             });
             const gridId = 'print-allowances';
-            const alSort = getSort(gridId);
+            // Default to title/asc to match the live allowance list (which has no
+            // date column), so the printout order matches the screen until the
+            // builder picks a sort.
+            const alSort = sortByGrid[gridId] ?? { column: 'title' as SortColumn, direction: 'asc' as SortDir };
             const sortedAllowances = [...printAllowanceRows].sort((a, b) => {
               const sign = alSort.direction === 'asc' ? 1 : -1;
               if (alSort.column === 'title') return sign * a.group.name.localeCompare(b.group.name);
+              if (alSort.column === 'status') return sign * ((a.group.complete ? 1 : 0) - (b.group.complete ? 1 : 0));
               if (alSort.column === 'budget') return sign * (a.group.budget - b.group.budget);
               if (alSort.column === 'spent') return sign * (a.spent - b.spent);
               if (alSort.column === 'remaining') return sign * (a.remaining - b.remaining);
@@ -666,6 +718,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                 <thead>
                   <tr>
                     {printSortableHeader(gridId, 'title', 'Title')}
+                    {printSortableHeader(gridId, 'status', 'Status')}
                     {printSortableHeader(gridId, 'date', 'Date', 'jps-print-th-date')}
                     {printSortableHeader(gridId, 'budget', 'Allowance', 'jps-print-th-right')}
                     {printSortableHeader(gridId, 'spent', 'Price', 'jps-print-th-right')}
@@ -679,7 +732,8 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                     return (
                       <Fragment key={i}>
                         <tr className="jps-print-allowance-row jps-print-allowance-row-expanded">
-                          <td><strong>{g.name}</strong> <span className={`jps-print-status${g.complete ? ' done' : ''}`}>{g.complete ? 'Completed' : 'In progress'}</span></td>
+                          <td><strong>{g.name}</strong></td>
+                          <td><span className={`jps-print-status${g.complete ? ' done' : ''}`}>{g.complete ? 'Completed' : 'In progress'}</span></td>
                           <td></td>
                           <td className="jps-print-td-right"><strong>{fmt(g.budget)}</strong></td>
                           <td className="jps-print-td-right"><strong>{fmt(spent)}</strong></td>
@@ -691,6 +745,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                               <span className="jps-print-nested-name">{it.name}</span>
                               {it.status === 'pending' && <span className="jps-print-nested-status"> · Pending</span>}
                             </td>
+                            <td></td>
                             <td className="jps-print-td-date">{it.date || '—'}</td>
                             <td></td>
                             <td className="jps-print-td-right">{fmt(it.price)}</td>
@@ -1203,6 +1258,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
             <div className="jps-breakdown-section" id="jps-sec-allowances">
               <div className="jps-section-header">
                 <BdsText as="h2" size="heavy-lg" className="jps-section-title">Allowances</BdsText>
+                {allowanceSortControl}
               <BdsButton
                 displayType="secondary"
                 onClick={toggleAll}
@@ -1306,7 +1362,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
 
             {/* Slice 1: Change Orders — approved only */}
             {(() => {
-              const coApproved = changeOrders.filter(c => c.status === 'approved');
+              const coApproved = sortItems('print-co-approved', changeOrders.filter(c => c.status === 'approved'));
               if (coApproved.length === 0) return null;
               return (
                 <div className="jps-breakdown-section" id="jps-sec-change-orders">
@@ -1316,8 +1372,8 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                   <div className="jps-table">
                     <div className="jps-table-header jps-table-co">
                       <div className="jps-col-title">Title</div>
-                      <div className="jps-col-date">Approved date</div>
-                      <div className="jps-col-impact">Contract impact</div>
+                      {sortableHeader('print-co-approved', 'date', 'Approved date', 'jps-col-date')}
+                      {sortableHeader('print-co-approved', 'price', 'Contract impact', 'jps-col-impact')}
                     </div>
                     {coApproved.map((co, i) => (
                       <div key={i} className="jps-table-row jps-table-co">
@@ -1350,11 +1406,11 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
               <div className="jps-table">
                 <div className="jps-table-header jps-table-payments">
                   <div className="jps-col-title">Title</div>
-                  <div className="jps-col-date">Date</div>
+                  {sortableHeader('print-payments', 'date', 'Date', 'jps-col-date')}
                   <div className="jps-col-method">Payment type</div>
-                  <div className="jps-col-amount">Amount</div>
+                  {sortableHeader('print-payments', 'price', 'Amount', 'jps-col-amount')}
                 </div>
-                {payments.map((p, i) => (
+                {paymentsSorted.map((p, i) => (
                   <div key={i} className="jps-table-row jps-table-payments">
                     <div className="jps-col-title"><span className="jps-item-name">{p.name}</span></div>
                     <div className="jps-col-date">{p.date}</div>
@@ -1445,6 +1501,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
             <div className="jps-breakdown-section" id="jps-sec-allowances">
               <div className="jps-section-header">
                 <BdsText as="h2" size="heavy-lg" className="jps-section-title">Allowances</BdsText>
+                {allowanceSortControl}
               <BdsButton
                 displayType="secondary"
                 onClick={toggleAll}
@@ -1613,7 +1670,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
 
             {/* Change Orders — approved only; pending as pill below */}
             {(() => {
-              const coApproved = changeOrders.filter(c => c.status === 'approved');
+              const coApproved = sortItems('print-co-approved', changeOrders.filter(c => c.status === 'approved'));
               const coPending = changeOrders.filter(c => c.status === 'pending');
               return (
                 <div className="jps-breakdown-section" id="jps-sec-change-orders">
@@ -1623,8 +1680,8 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                   <div className="jps-table">
                     <div className="jps-table-header jps-table-co">
                       <div className="jps-col-title">Title</div>
-                      <div className="jps-col-date">Approved date</div>
-                      <div className="jps-col-impact">Contract impact</div>
+                      {sortableHeader('print-co-approved', 'date', 'Approved date', 'jps-col-date')}
+                      {sortableHeader('print-co-approved', 'price', 'Contract impact', 'jps-col-impact')}
                     </div>
                     {coApproved.map((co, i) => (
                       <div key={i} className="jps-table-row jps-table-co">
@@ -1697,11 +1754,11 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
               <div className="jps-table">
                 <div className="jps-table-header jps-table-payments">
                   <div className="jps-col-title">Title</div>
-                  <div className="jps-col-date">Date</div>
+                  {sortableHeader('print-payments', 'date', 'Date', 'jps-col-date')}
                   <div className="jps-col-method">Payment type</div>
-                  <div className="jps-col-amount">Amount</div>
+                  {sortableHeader('print-payments', 'price', 'Amount', 'jps-col-amount')}
                 </div>
-                {payments.map((p, i) => (
+                {paymentsSorted.map((p, i) => (
                   <div key={i} className="jps-table-row jps-table-payments">
                     <div className="jps-col-title"><span className="jps-item-name">{p.name}</span></div>
                     <div className="jps-col-date">{p.date}</div>
@@ -1798,6 +1855,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
         <div className="jps-breakdown-section" id="jps-sec-allowances">
           <div className="jps-section-header">
             <BdsText as="h2" size="heavy-lg" className="jps-section-title">Allowances</BdsText>
+                {allowanceSortControl}
               <BdsButton
                 displayType="secondary"
                 onClick={toggleAll}
@@ -1943,7 +2001,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
           </div>
           <div className="jps-cat-group">
           {(() => {
-            const coApproved = changeOrders.filter(c => c.status === 'approved');
+            const coApproved = sortItems('print-co-approved', changeOrders.filter(c => c.status === 'approved'));
             const coPending = changeOrders.filter(c => c.status === 'pending');
             const coDeclined = changeOrders.filter(c => c.status === 'declined');
             const renderCoRow = (co: ChangeOrder, key: string | number, withBadge = true) => (
@@ -1968,8 +2026,8 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                 <div className="jps-table">
                   <div className="jps-table-header jps-table-co">
                     <div className="jps-col-title">Title</div>
-                    <div className="jps-col-date">Approved date</div>
-                    <div className="jps-col-impact">Contract impact</div>
+                    {sortableHeader('print-co-approved', 'date', 'Approved date', 'jps-col-date')}
+                    {sortableHeader('print-co-approved', 'price', 'Contract impact', 'jps-col-impact')}
                   </div>
 
                   {coApproved.map((co, i) => renderCoRow(co, i))}
@@ -2022,11 +2080,11 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
           <div className="jps-table">
             <div className="jps-table-header jps-table-payments">
               <div className="jps-col-title">Title</div>
-              <div className="jps-col-date">Date</div>
+              {sortableHeader('print-payments', 'date', 'Date', 'jps-col-date')}
               <div className="jps-col-method">Payment type</div>
-              <div className="jps-col-amount">Amount</div>
+              {sortableHeader('print-payments', 'price', 'Amount', 'jps-col-amount')}
             </div>
-            {payments.map((p, i) => (
+            {paymentsSorted.map((p, i) => (
               <div key={i} className="jps-table-row jps-table-payments">
                 <div className="jps-col-title"><span className="jps-item-name">{p.name}</span></div>
                 <div className="jps-col-date">{p.date}</div>
@@ -2297,6 +2355,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
               <div className="jps-breakdown-section" id="jps-sec-allowances">
                 <div className="jps-section-header">
                   <BdsText as="h2" size="heavy-lg" className="jps-section-title">Allowances</BdsText>
+                {allowanceSortControl}
                   <BdsButton
                     displayType="secondary"
                     onClick={toggleAll}
@@ -2398,7 +2457,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
 
               {/* ─── Change Orders ─── */}
               {(() => {
-                const coApproved = changeOrders.filter(c => c.status === 'approved');
+                const coApproved = sortItems('print-co-approved', changeOrders.filter(c => c.status === 'approved'));
                 if (coApproved.length === 0) return null;
                 return (
                   <div className="jps-breakdown-section" id="jps-sec-change-orders">
@@ -2408,8 +2467,8 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                     <div className="jps-table">
                       <div className="jps-table-header jps-table-co">
                         <div className="jps-col-title">Title</div>
-                        <div className="jps-col-date">Approved date</div>
-                        <div className="jps-col-impact">Contract impact</div>
+                        {sortableHeader('print-co-approved', 'date', 'Approved date', 'jps-col-date')}
+                        {sortableHeader('print-co-approved', 'price', 'Contract impact', 'jps-col-impact')}
                       </div>
                       {coApproved.map((co, i) => (
                         <div key={i} className="jps-table-row jps-table-co">
@@ -2706,11 +2765,11 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                 <div className="jps-table">
                   <div className="jps-table-header jps-table-payments">
                     <div className="jps-col-title">Title</div>
-                    <div className="jps-col-date">Date</div>
+                    {sortableHeader('print-payments', 'date', 'Date', 'jps-col-date')}
                     <div className="jps-col-method">Payment type</div>
-                    <div className="jps-col-amount">Amount</div>
+                    {sortableHeader('print-payments', 'price', 'Amount', 'jps-col-amount')}
                   </div>
-                  {payments.map((p, i) => (
+                  {paymentsSorted.map((p, i) => (
                     <div key={i} className="jps-table-row jps-table-payments">
                       <div className="jps-col-title"><span className="jps-item-name">{p.name}</span></div>
                       <div className="jps-col-date">{p.date}</div>

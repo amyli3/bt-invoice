@@ -92,6 +92,15 @@ select.fi {
 }
 .topnav-icon-btn:hover { background: rgba(255,255,255,0.1); }
 .topnav-icon-btn svg { fill: white; }
+
+/* Blue header (topnav) responsive: nav scrolls, search hidden, tighter spacing */
+@media (max-width: 768px) {
+  .topnav { padding: 0 8px; gap: 8px; }
+  .topnav-left { flex: 1 1 auto; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+  .topnav-left::-webkit-scrollbar { display: none; }
+  .topnav-item { padding: 4px 6px; font-size: 13px; }
+  .topnav-search { display: none; }
+}
 .topnav-avatar {
   display: flex; align-items: center; justify-content: center;
   width: 24px; height: 24px; background: #c4fae2; border-radius: 20px;
@@ -1327,6 +1336,21 @@ table { width: 100%; border-collapse: collapse; }
 .jps-subsection-title { font-size: 14px; font-weight: 700; color: var(--bt-midnight); margin-bottom: 10px; }
 .jps-section-header-split { gap: 16px; }
 
+/* Allowance list sort control (shares state with the print allowances table) */
+.jps-allowance-sort { position: relative; margin-left: auto; margin-right: 8px; }
+.jps-sort-pop {
+  position: absolute; right: 0; top: calc(100% + 6px); z-index: 30; min-width: 180px;
+  background: #fff; border: 1px solid var(--g200); border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.12); padding: 4px;
+}
+.jps-sort-pop-item {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%;
+  background: none; border: none; cursor: pointer; font-family: inherit; text-align: left;
+  font-size: 13px; color: var(--g700); padding: 8px 10px; border-radius: 6px;
+}
+.jps-sort-pop-item:hover { background: var(--g100); }
+.jps-sort-pop-item.active { color: #004FD6; font-weight: 600; }
+
 /* ── Send job price summary modal (BDS spec: 605px, overlay shadow) ── */
 .jps-send-scrim {
   position: fixed; inset: 0; z-index: 1000;
@@ -1492,9 +1516,10 @@ table { width: 100%; border-collapse: collapse; }
   display: flex; align-items: center; justify-content: space-between; width: 100%;
   padding: 12px 16px; background: var(--g50); border: 1px solid var(--g200); border-radius: 10px;
   cursor: pointer; font-family: inherit; margin-bottom: 0; transition: background 0.1s;
+  text-align: left;
 }
 .jps-cat-header:hover { background: var(--g100); }
-.jps-cat-header-left { display: flex; align-items: center; gap: 8px; }
+.jps-cat-header-left { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .jps-cat-header-right { display: flex; align-items: center; gap: 12px; }
 .jps-cat-name { font-size: 15px; font-weight: 700; color: var(--bt-midnight); }
 .jps-cat-count { font-size: 12px; color: var(--g400); }
@@ -1765,14 +1790,9 @@ table { width: 100%; border-collapse: collapse; }
 .jps-print-summary-values strong { color: var(--bt-midnight); font-weight: 700; }
 
 .jps-print-section { margin-bottom: 24px; page-break-inside: avoid; }
-/* Allowance status tag in the printout (In progress / Completed) */
-.jps-print-status {
-  display: inline-block; font-size: 9px; font-weight: 600; text-transform: uppercase;
-  letter-spacing: 0.04em; color: var(--g500); border: 1px solid var(--g300);
-  border-radius: 4px; padding: 0 5px; margin-left: 6px; vertical-align: middle;
-  white-space: nowrap;
-}
-.jps-print-status.done { color: var(--g700); border-color: var(--g400); }
+/* Allowance status in the printout (In progress / Completed) — plain text,
+   identical weight and color for both states; the label text alone distinguishes them. */
+.jps-print-status { font-size: 11px; font-weight: 400; color: var(--g600); white-space: nowrap; }
 .jps-print-section-title {
   font-size: 13px; font-weight: 700; color: var(--bt-midnight);
   margin: 0 0 8px; padding: 0;
@@ -2104,12 +2124,25 @@ table { width: 100%; border-collapse: collapse; }
   /* Change orders: wider date column so dates don't clip */
   .jps-table-co { grid-template-columns: 2fr 1.2fr 1fr; }
 
-  /* ── Page header: compact single row on mobile ── */
-  /* Hide breadcrumb to free the row for the action buttons */
+  /* ── Page header: title on its own line, actions wrap to a full-width row below ── */
   .jps-page .pg-hdr-sub { display: none; }
-  /* Keep title + buttons on one line; left side shrinks to available space */
-  .jps-page .pg-hdr-content { flex-wrap: nowrap; align-items: center; }
-  .jps-page .pg-hdr-right { flex-shrink: 0; flex-wrap: nowrap; }
+  .jps-page .pg-hdr-content { flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 12px 16px; }
+  .jps-page .pg-title { font-size: 17px; line-height: 1.2; }
+  .jps-page .pg-hdr-right { flex: 1 1 100%; justify-content: flex-end; flex-wrap: wrap; gap: 8px; }
+  /* Section headers: title on its own line, action buttons (Sort / Expand all) wrap below */
+  .jps-section-header { flex-wrap: wrap; gap: 8px 10px; }
+  .jps-section-title { flex: 1 1 100%; }
+  .jps-allowance-sort { margin-left: 0; margin-right: 0; }
+  .jps-section-header .bds-r-button { flex: 0 1 auto; }
+}
+
+/* ── Mobile: data grids scroll horizontally instead of squeezing columns to overlap ── */
+@media (max-width: 700px) {
+  .jps-table { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  /* Comfortable min-widths so columns keep their proportions; the table scrolls. */
+  .jps-table-sel-standalone { min-width: 680px; }
+  .jps-table-co { min-width: 460px; }
+  .jps-table-payments { min-width: 480px; }
 }
 
 /* ── Mobile-friendly additions for hero, panes, slice tabs, flow header, pending pill ── */
@@ -2151,16 +2184,25 @@ table { width: 100%; border-collapse: collapse; }
   .jps-version-banner { flex-direction: column; align-items: flex-start; gap: 8px; }
 }
 
-/* Allowance header flow — only stack when the flow math can't fit inline */
+/* Allowance header flow — stack vertically on mobile so the math never forces width */
 @media (max-width: 560px) {
-  .jps-allowance-flow { gap: 12px 16px; }
+  .jps-cat-header { flex-direction: column; align-items: flex-start; gap: 8px; padding: 12px 14px; }
+  .jps-cat-header-left,
+  .jps-cat-header-right { width: 100%; min-width: 0; }
+  /* Status tag floats to the right of the name row for a cleaner mobile layout */
+  .jps-cat-header-left .bds-r-badge { margin-left: auto; }
+
+  /* Each part becomes a full-width "label … value" row */
+  .jps-allowance-flow { flex-direction: column; align-items: stretch; gap: 6px; width: 100%; }
+  .jps-flow-part,
+  .jps-flow-remaining,
+  .jps-flow-over {
+    flex-direction: row; justify-content: space-between; align-items: baseline;
+    min-width: 0; width: 100%; text-align: left;
+  }
   .jps-flow-part strong,
   .jps-flow-remaining strong,
   .jps-flow-over strong { font-size: 13px; }
-
-  .jps-cat-header { flex-direction: column; align-items: flex-start; gap: 8px; padding: 12px 14px; }
-  .jps-cat-header-left,
-  .jps-cat-header-right { width: 100%; }
 }
 
 /* ── JPS Responsive: Very small ── */
