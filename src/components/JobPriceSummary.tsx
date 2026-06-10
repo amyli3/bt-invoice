@@ -2620,7 +2620,9 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                       : slice4Version === 'v41' || slice4Version === 'v41notes'
                       ? (
                         <>
-                          The difference between the original and revised client price for each cost category in the job costing budget. Change orders and selections aren't included.{!viewAsClient && <> Clients don't see the budget difference unless you turn it on in <button type="button" className="jps-inline-link" onClick={() => onOpenClientPermissions?.()}>Client permissions</button>.</>}
+                          Shows the difference between the original and revised client price for each cost category in the job costing budget. Change orders and selections aren't included.{!viewAsClient && (shareBudgetDiff
+                            ? <> Your client can currently see the budget difference. Manage it in this job's <button type="button" className="jps-inline-link" onClick={() => onOpenClientPermissions?.()}>client permissions</button>.</>
+                            : <> Clients don't see the budget difference unless you turn it on in this job's <button type="button" className="jps-inline-link" onClick={() => onOpenClientPermissions?.()}>client permissions</button>.</>)}
                         </>
                       )
                       : "The difference between revised and original budget cost for each cost category. Approved change orders and selection and allowance changes aren't included."}
