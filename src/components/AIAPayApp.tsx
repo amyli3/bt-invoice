@@ -1,6 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
 import ReactDOM from 'react-dom';
-import SelectionsModal from './SelectionsModal';
 import SelectionsModalV2 from './SelectionsModalV2';
 import { BdsButton, BdsTextArea } from '../bds';
 
@@ -455,7 +454,7 @@ function getCostCodeViewGroups(addedIds: string[], completedIds: Set<string> = n
 // Mismatched items emit as flat top-level rows at their own selection cost codes —
 // keeps cost-code identity visible instead of burying it under an allowance bucket
 // that no longer reflects where the money is actually being billed.
-function buildAdjLines(items: typeof ESTIMATE_LINES.kitchen, addedIds: string[], allowanceName: string, _allowanceBudget: number): SOVLine[] {
+function buildAdjLines(items: typeof ESTIMATE_LINES.kitchen, addedIds: string[], allowanceName: string, _allowanceBudget: number, costCodeLabel: string = allowanceName): SOVLine[] {
   const addedItems = items.filter(item => addedIds.includes(item.selId));
   if (addedItems.length === 0) return [];
 
@@ -522,7 +521,8 @@ function buildAdjLines(items: typeof ESTIMATE_LINES.kitchen, addedIds: string[],
 
     return {
       id: `adj-group-${code}-${allowanceName.replace(/\s/g, '')}`,
-      description: `${code} - ${allowanceName}`,
+      // Grouped by the selection cost code, labeled by the cost code (not the allowance title).
+      description: `${code} - ${costCodeLabel}`,
       budget: totalBudget,
       previousInvoice: 0,
       thisInvoice: totalThisInvoice,
@@ -638,10 +638,10 @@ function getSelAdjGroups(addedIds: string[], completedIds: Set<string> = new Set
   const groups: CostGroup[] = [est.electrical, est.masonry, est.framing, est.kitchen, est.flooring, est.plumbing, est.drywall, est.hardware];
 
   // Build all adjustment lines grouped by allowance
-  const kitchenAdj = buildAdjLines(ESTIMATE_LINES.kitchen, addedIds, 'Kitchen Allowance', 5000);
-  const flooringAdj = buildAdjLines(ESTIMATE_LINES.flooring, addedIds, 'Flooring Allowance', 8000);
-  const plumbingAdj = buildAdjLines(ESTIMATE_LINES.plumbing, addedIds, 'Plumbing Allowance', 4000);
-  const drywallAdj = buildAdjLines(ESTIMATE_LINES.drywall, addedIds, 'Lighting Allowance', 11000);
+  const kitchenAdj = buildAdjLines(ESTIMATE_LINES.kitchen, addedIds, 'Kitchen Allowance', 5000, 'Kitchen Fixtures');
+  const flooringAdj = buildAdjLines(ESTIMATE_LINES.flooring, addedIds, 'Flooring Allowance', 8000, 'Flooring');
+  const plumbingAdj = buildAdjLines(ESTIMATE_LINES.plumbing, addedIds, 'Plumbing Allowance', 4000, 'Plumbing');
+  const drywallAdj = buildAdjLines(ESTIMATE_LINES.drywall, addedIds, 'Lighting Allowance', 11000, 'Lighting');
   // Hardware (matched codes): the underage credit lives directly on the allowance row above,
   // so no Approved changes entries are needed for it.
 
@@ -1112,7 +1112,6 @@ export default function AIAPayApp({ onNavigate, approvedCOIds, addedCostIds: ext
 
   // "Add from" modal state
   const [showAddFromModal, setShowAddFromModal] = useState(false);
-  const [showSelectionsModal, setShowSelectionsModal] = useState(false);
   const [showSelectionsV2Modal, setShowSelectionsV2Modal] = useState(false);
   const [showCostModal, setShowCostModal] = useState(false);
   const [showCOModal, setShowCOModal] = useState(false);
@@ -1155,15 +1154,10 @@ export default function AIAPayApp({ onNavigate, approvedCOIds, addedCostIds: ext
   }, [addFromDropdownOpen]);
   const [modalChecked, setModalChecked] = useState<Record<string, boolean>>({});
   const [addedSelectionIds, setAddedSelectionIds] = useState<string[]>([]);
-  const [completedAllowanceIds, setCompletedAllowanceIds] = useState<Set<string>>(new Set());
-  const toggleAllowanceComplete = (id: string) => {
-    setCompletedAllowanceIds(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
+  // V1 selections wizard (which had the mark-complete affordance) was archived
+  // in favor of the V2 wizard. The completed-allowance set is still read by the
+  // continuation-sheet grouping below, but nothing toggles it anymore.
+  const [completedAllowanceIds] = useState<Set<string>>(new Set());
 
   const handlePctChange = (lineId: string, pct: number) => {
     setPctOverrides(prev => ({ ...prev, [lineId]: pct }));
@@ -1650,9 +1644,18 @@ export default function AIAPayApp({ onNavigate, approvedCOIds, addedCostIds: ext
     items.forEach((group: any) => {
       if (group.children && group.children.length > 0) {
         group.children.forEach((child: any) => {
-          if (child.selection !== 'Allowance' && child.id) {
-            newIds.push(child.id);
-          }
+          if (child.selection === 'Allowance') return;
+          // When "Combine same-cost-code lines" is on, the wizard nets several
+          // selections into ONE line that carries a single child.id but lists every
+          // underlying selection in sourceChildIds. Expand it so ALL of them land on
+          // the invoice — otherwise only the first (e.g. just "Kohler Farmhouse Sink")
+          // is pulled in even though the wizard billed the full overage.
+          const ids: string[] = Array.isArray(child.sourceChildIds) && child.sourceChildIds.length > 0
+            ? child.sourceChildIds
+            : (child.id ? [child.id] : []);
+          // Skip allowance-origin ids (e.g. "ma-1-rev") rolled into a netted line —
+          // they aren't real selection ids and match nothing on the schedule of values.
+          ids.forEach((id) => { if (id && !id.endsWith('-rev')) newIds.push(id); });
         });
       }
     });
@@ -1841,11 +1844,8 @@ export default function AIAPayApp({ onNavigate, approvedCOIds, addedCostIds: ext
                 </button>
                 {addFromDropdownOpen && (
                   <div className="add-from-dropdown">
-                    <button className="add-from-option" onClick={() => { setAddFromDropdownOpen(false); setShowSelectionsModal(true); }}>
-                      <span style={{ fontWeight: 500 }}>Selections</span>
-                    </button>
                     <button className="add-from-option" onClick={() => { setAddFromDropdownOpen(false); setShowSelectionsV2Modal(true); }}>
-                      <span style={{ fontWeight: 500 }}>Selections 2</span>
+                      <span style={{ fontWeight: 500 }}>Selections</span>
                     </button>
                     <button className="add-from-option" onClick={() => { setAddFromDropdownOpen(false); setShowCostModal(true); }}>
                       <span style={{ fontWeight: 500 }}>Costs</span>
@@ -2608,18 +2608,6 @@ export default function AIAPayApp({ onNavigate, approvedCOIds, addedCostIds: ext
         />
       )}
 
-      {/* Selections Modal (V1) — shared with progress invoice data */}
-      <SelectionsModal
-        open={showSelectionsModal}
-        onClose={() => setShowSelectionsModal(false)}
-        onMarkComplete={toggleAllowanceComplete}
-        showNegativeBalances
-        data={selectionsWizardData}
-        onAdd={handleSelectionsWizardAdd}
-        jobName="Johnson Residence — Full Remodel"
-        addedGroupIds={addedSelectionIds}
-      />
-
       {/* Selections Modal V2 — same data, new wizard from invoice-2 */}
       <SelectionsModalV2
         open={showSelectionsV2Modal}
@@ -2845,17 +2833,42 @@ interface ClientPreviewModalProps {
   onClose: () => void;
 }
 
-function ClientPreviewModal({ groups, totals, showCOCols: _showCOCols, contractorCert, architectCert: _architectCert, onClose }: ClientPreviewModalProps) {
-  void _showCOCols; void _architectCert;
+function ClientPreviewModal({ groups, totals, showCOCols, contractorCert, architectCert: _architectCert, onClose }: ClientPreviewModalProps) {
+  void _architectCert;
   const fmtDate = (s: string) => {
     if (!s) return '';
     return new Date(s + 'T00:00:00').toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric' });
   };
 
-  const allLines = groups.flatMap(g => g.lines);
-  const originalContract = totals.budget;
-  const changeOrderTotal = allLines.reduce((s, l) => s + (l.coAdjustment || 0), 0);
-  const contractSum = originalContract + changeOrderTotal;
+  // Split the schedule of values into Original contract vs Approved changes so the cover
+  // reconciles in BOTH grouping modes. The two views model approved changes differently:
+  //   • Cost-code view: approved changes live in each line's `coAdjustment` (a column).
+  //   • Estimate view: approved changes are their own group ("Approved changes" / CO group)
+  //     and carry the amount in `budget` — there is no coAdjustment.
+  // Summing only coAdjustment zeroed out approved changes in estimate view and mis-attributed
+  // those amounts to Original contract. Classify per group instead (matches #270276 cover-sheet
+  // model + #277657). Grand total is unchanged in both views — only the line 1 / line 2 split.
+  const isApprovedChangeGroup = (g: CostGroup): boolean =>
+    !!(g.isChangeOrder || g.isSelection || g.id === 'approved-changes');
+  let originalContract = 0;
+  let approvedChangesTotal = 0;
+  for (const g of groups) {
+    const acg = isApprovedChangeGroup(g);
+    for (const l of g.lines) {
+      approvedChangesTotal += l.coAdjustment || 0;
+      if (acg) {
+        approvedChangesTotal += l.budget;
+      } else {
+        originalContract += l.budget;
+      }
+    }
+  }
+  const contractSum = originalContract + approvedChangesTotal;
+  // Continuation-sheet partition: original-contract lines vs the approved-change lines
+  // (selections + change orders), so the cover can list the selection items under a
+  // dedicated "Approved changes" section.
+  const contractGroupLines = groups.filter(g => !isApprovedChangeGroup(g)).flatMap(g => g.lines);
+  const approvedChangeLines = groups.filter(isApprovedChangeGroup).flatMap(g => g.lines);
   const completedStored = totals.completed;
   const retainage = totals.retainage;
   const totalEarned = completedStored - retainage;
@@ -2880,14 +2893,41 @@ function ClientPreviewModal({ groups, totals, showCOCols: _showCOCols, contracto
     </div>
   );
 
+  const tdCover: React.CSSProperties = { padding: showCOCols ? '8px 7px' : '8px 10px', borderBottom: '1px solid #f1f5f9', whiteSpace: 'nowrap' };
+  const renderCoverLine = (line: SOVLine, indent = false) => {
+    const coAdj = line.coAdjustment || 0;
+    const revised = line.budget + coAdj;
+    // In cost-code mode the schedule reconciles against revised budget (budget + approved
+    // changes), matching the on-screen grid; otherwise against budget.
+    const divisor = showCOCols ? revised : line.budget;
+    const completed = line.previousInvoice + line.thisInvoice + line.storedMaterials;
+    const pct = divisor > 0 ? (completed / divisor * 100) : 0;
+    const balance = divisor - completed;
+    return (
+      <tr key={line.id}>
+        <td style={{ ...tdCover, color: indent ? '#64748b' : '#475569', paddingLeft: indent ? 28 : 10 }}>{line.description}</td>
+        <td style={{ ...tdCover, textAlign: 'right' }}>${fmt(line.budget)}</td>
+        {showCOCols && <td style={{ ...tdCover, textAlign: 'right' }}>{coAdj !== 0 ? `${coAdj > 0 ? '+' : '-'}$${fmt(Math.abs(coAdj))}` : '—'}</td>}
+        {showCOCols && <td style={{ ...tdCover, textAlign: 'right' }}>${fmt(revised)}</td>}
+        <td style={{ ...tdCover, textAlign: 'right' }}>${fmt(line.previousInvoice)}</td>
+        <td style={{ ...tdCover, textAlign: 'right' }}>${fmt(line.thisInvoice)}</td>
+        <td style={{ ...tdCover, textAlign: 'right' }}>${fmt(line.storedMaterials)}</td>
+        <td style={{ ...tdCover, textAlign: 'right' }}>${fmt(completed)}</td>
+        <td style={{ ...tdCover, textAlign: 'right' }}>{pct > 0 ? `${pct.toFixed(0)}%` : '0%'}</td>
+        <td style={{ ...tdCover, textAlign: 'right' }}>${fmt(balance)}</td>
+        <td style={{ ...tdCover, textAlign: 'right' }}>${fmt(line.retainage)}</td>
+      </tr>
+    );
+  };
+
   return ReactDOM.createPortal(
     <div onClick={onClose} className="aia-preview-backdrop" style={{
       position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(15,23,42,0.45)', backdropFilter: 'blur(2px)',
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '40px 16px 24px',
     }}>
       <div onClick={e => e.stopPropagation()} className="aia-preview-modal" style={{
-        background: 'white', borderRadius: 12, width: '96vw', maxWidth: 1200,
-        maxHeight: '92vh', display: 'flex', flexDirection: 'column',
+        background: 'white', borderRadius: 12, width: '96vw', maxWidth: showCOCols ? 1520 : 1200,
+        maxHeight: 'calc(100vh - 64px)', display: 'flex', flexDirection: 'column',
         boxShadow: '0 24px 80px rgba(0,26,67,0.22)', animation: 'slideUp 0.2s ease',
       }}>
         {/* Header */}
@@ -2904,7 +2944,7 @@ function ClientPreviewModal({ groups, totals, showCOCols: _showCOCols, contracto
         {/* Body — two pages */}
         <div className="aia-preview-body" style={{ flex: 1, overflowY: 'auto', padding: 24, background: '#f1f5f9' }}>
           {/* PAGE 1 — Cover */}
-          <div className="aia-preview-page" style={pageStyle}>
+          <div className="aia-preview-page" style={{ ...pageStyle, maxWidth: showCOCols ? 1480 : pageStyle.maxWidth }}>
             {/* Company header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 28, gap: 24 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -2942,7 +2982,7 @@ function ClientPreviewModal({ groups, totals, showCOCols: _showCOCols, contracto
               <div>
                 <div style={{ fontSize: 15, fontWeight: 700, color: '#0f172a', marginBottom: 16 }}>Application for Payment</div>
                 {dotLine('1. Original contract amount', `$${fmt(originalContract)}`)}
-                {dotLine('2. Total change orders', `$${fmt(changeOrderTotal)}`)}
+                {dotLine('2. Total approved changes', `$${fmt(approvedChangesTotal)}`)}
                 {dotLine('3. Total contract sum (Line 1 + 2)', `$${fmt(contractSum)}`, true)}
                 {dotLine('4. Total completed & stored to date', `$${fmt(completedStored)}`)}
                 <div style={{ paddingLeft: 16, fontSize: 11, color: '#94a3b8', marginBottom: 4 }}>
@@ -2998,75 +3038,78 @@ function ClientPreviewModal({ groups, totals, showCOCols: _showCOCols, contracto
               </div>
             </div>
 
-            {/* Change Order Summary */}
+            {/* Approved changes summary — change orders + selection adjustments */}
             <hr style={{ border: 'none', borderTop: '2px solid #e2e8f0', margin: '20px 0' }} />
-            <div style={{ fontSize: 15, fontWeight: 700, color: '#0f172a', marginBottom: 12 }}>Change order summary</div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: '#0f172a', marginBottom: 12 }}>Approved changes summary</div>
             <div style={{ borderTop: '2px solid #e2e8f0', paddingTop: 8 }}>
               {dotLine('Total changes approved in previous application', `$${fmt(0)}`)}
-              {dotLine('Total changes approved this application', `$${fmt(0)}`)}
-              {dotLine('Total change order amount', `$${fmt(changeOrderTotal)}`)}
+              {dotLine('Total changes approved this application', `$${fmt(approvedChangesTotal)}`)}
+              {dotLine('Total approved changes amount', `$${fmt(approvedChangesTotal)}`)}
             </div>
           </div>
 
           {/* PAGE 2 — Continuation Sheet */}
-          <div className="aia-preview-page" style={{ ...pageStyle, marginBottom: 0 }}>
+          <div className="aia-preview-page" style={{ ...pageStyle, marginBottom: 0, maxWidth: showCOCols ? 1480 : pageStyle.maxWidth, padding: showCOCols ? '40px 32px' : pageStyle.padding }}>
             <div style={{ fontSize: 15, fontWeight: 700, color: '#0f172a', marginBottom: 20 }}>Continuation sheet</div>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+            <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: showCOCols ? 11 : 12, minWidth: showCOCols ? 1040 : 'auto' }}>
               <thead>
                 <tr>
-                  {['Description', 'Scheduled value', 'Previous invoice', 'This invoice', 'Stored materials', 'Completed', '% complete', 'Balance to finish', 'Retainage'].map((h, i) => (
-                    <th key={h} style={{ textAlign: i === 0 ? 'left' : 'right', padding: '8px 10px', fontSize: 11, fontWeight: 600, color: '#64748b', background: '#f8fafc', borderBottom: '2px solid #e2e8f0', whiteSpace: 'nowrap' }}>
+                  {(showCOCols
+                    ? ['Description', 'Scheduled value', 'Approved changes', 'Revised budget', 'Previous invoice', 'This invoice', 'Stored materials', 'Completed', '% complete', 'Balance to finish', 'Retainage']
+                    : ['Description', 'Scheduled value', 'Previous invoice', 'This invoice', 'Stored materials', 'Completed', '% complete', 'Balance to finish', 'Retainage']
+                  ).map((h, i) => (
+                    <th key={h} style={{ textAlign: i === 0 ? 'left' : 'right', padding: showCOCols ? '8px 7px' : '8px 10px', fontSize: showCOCols ? 10 : 11, fontWeight: 600, color: '#64748b', background: '#f8fafc', borderBottom: '2px solid #e2e8f0', whiteSpace: 'nowrap' }}>
                       {h}
                     </th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {groups.map(group => (
-                  group.lines.map(line => {
-                    const completed = line.previousInvoice + line.thisInvoice + line.storedMaterials;
-                    const pct = line.budget > 0 ? (completed / line.budget * 100) : 0;
-                    const balance = line.budget - completed;
-                    return (
-                      <tr key={line.id}>
-                        <td style={{ padding: '8px 10px', borderBottom: '1px solid #f1f5f9', color: '#475569' }}>{line.description}</td>
-                        <td style={{ padding: '8px 10px', borderBottom: '1px solid #f1f5f9', textAlign: 'right' }}>${fmt(line.budget)}</td>
-                        <td style={{ padding: '8px 10px', borderBottom: '1px solid #f1f5f9', textAlign: 'right' }}>${fmt(line.previousInvoice)}</td>
-                        <td style={{ padding: '8px 10px', borderBottom: '1px solid #f1f5f9', textAlign: 'right' }}>${fmt(line.thisInvoice)}</td>
-                        <td style={{ padding: '8px 10px', borderBottom: '1px solid #f1f5f9', textAlign: 'right' }}>${fmt(line.storedMaterials)}</td>
-                        <td style={{ padding: '8px 10px', borderBottom: '1px solid #f1f5f9', textAlign: 'right' }}>${fmt(completed)}</td>
-                        <td style={{ padding: '8px 10px', borderBottom: '1px solid #f1f5f9', textAlign: 'right' }}>{pct > 0 ? `${pct.toFixed(0)}%` : '0%'}</td>
-                        <td style={{ padding: '8px 10px', borderBottom: '1px solid #f1f5f9', textAlign: 'right' }}>${fmt(balance)}</td>
-                        <td style={{ padding: '8px 10px', borderBottom: '1px solid #f1f5f9', textAlign: 'right' }}>${fmt(line.retainage)}</td>
-                      </tr>
-                    );
-                  })
-                ))}
-                {/* Change orders group */}
-                {groups.filter(g => g.isChangeOrder).length > 0 && (
-                  <tr>
-                    <td colSpan={9} style={{ padding: '8px 10px', fontWeight: 600, color: '#0f172a', background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-                      Change orders
-                    </td>
-                  </tr>
+                {contractGroupLines.map(line => renderCoverLine(line))}
+                {/* Approved changes section — selection items + change orders surfaced
+                    as net-new contract value, like change orders. */}
+                {approvedChangeLines.length > 0 && (
+                  <>
+                    <tr>
+                      <td colSpan={showCOCols ? 11 : 9} style={{ padding: '8px 10px', fontWeight: 600, color: '#0f172a', background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                        Approved changes
+                      </td>
+                    </tr>
+                    {approvedChangeLines.flatMap(line =>
+                      line.children && line.children.length > 0
+                        ? [renderCoverLine(line), ...line.children.map(ch => renderCoverLine(ch, true))]
+                        : [renderCoverLine(line)]
+                    )}
+                  </>
                 )}
               </tbody>
               <tfoot>
                 <tr style={{ background: '#eff6ff' }}>
-                  <td style={{ padding: '10px', fontWeight: 700, color: '#0f172a', borderTop: '2px solid #e2e8f0' }}>Total:</td>
-                  <td style={{ padding: '10px', fontWeight: 700, textAlign: 'right', borderTop: '2px solid #e2e8f0' }}>${fmt(totals.budget)}</td>
-                  <td style={{ padding: '10px', fontWeight: 700, textAlign: 'right', borderTop: '2px solid #e2e8f0' }}>${fmt(totals.previousInvoice)}</td>
-                  <td style={{ padding: '10px', fontWeight: 700, textAlign: 'right', borderTop: '2px solid #e2e8f0' }}>${fmt(totals.thisInvoice)}</td>
-                  <td style={{ padding: '10px', fontWeight: 700, textAlign: 'right', borderTop: '2px solid #e2e8f0' }}>${fmt(totals.storedMaterials)}</td>
-                  <td style={{ padding: '10px', fontWeight: 700, textAlign: 'right', borderTop: '2px solid #e2e8f0' }}>${fmt(totals.completed)}</td>
-                  <td style={{ padding: '10px', fontWeight: 700, textAlign: 'right', borderTop: '2px solid #e2e8f0' }}>
-                    {totals.budget > 0 ? `${(totals.completed / totals.budget * 100).toFixed(0)}%` : '—'}
-                  </td>
-                  <td style={{ padding: '10px', fontWeight: 700, textAlign: 'right', borderTop: '2px solid #e2e8f0' }}>${fmt(totals.balance)}</td>
-                  <td style={{ padding: '10px', fontWeight: 700, textAlign: 'right', borderTop: '2px solid #e2e8f0' }}>${fmt(totals.retainage)}</td>
+                  {(() => {
+                    const tf: React.CSSProperties = { padding: '10px', fontWeight: 700, textAlign: 'right', borderTop: '2px solid #e2e8f0' };
+                    const divisor = showCOCols ? contractSum : totals.budget;
+                    const totalBalance = showCOCols ? contractSum - totals.completed : totals.balance;
+                    return (
+                      <>
+                        <td style={{ ...tf, textAlign: 'left', color: '#0f172a' }}>Total:</td>
+                        <td style={tf}>${fmt(showCOCols ? originalContract : totals.budget)}</td>
+                        {showCOCols && <td style={tf}>{approvedChangesTotal !== 0 ? `${approvedChangesTotal > 0 ? '+' : '-'}$${fmt(Math.abs(approvedChangesTotal))}` : '—'}</td>}
+                        {showCOCols && <td style={tf}>${fmt(contractSum)}</td>}
+                        <td style={tf}>${fmt(totals.previousInvoice)}</td>
+                        <td style={tf}>${fmt(totals.thisInvoice)}</td>
+                        <td style={tf}>${fmt(totals.storedMaterials)}</td>
+                        <td style={tf}>${fmt(totals.completed)}</td>
+                        <td style={tf}>{divisor > 0 ? `${(totals.completed / divisor * 100).toFixed(0)}%` : '—'}</td>
+                        <td style={tf}>${fmt(totalBalance)}</td>
+                        <td style={tf}>${fmt(totals.retainage)}</td>
+                      </>
+                    );
+                  })()}
                 </tr>
               </tfoot>
             </table>
+            </div>
           </div>
         </div>
 

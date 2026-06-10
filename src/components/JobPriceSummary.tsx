@@ -1,13 +1,14 @@
 import { useState, Fragment } from 'react';
 import '../bds-tokens.css';
 import { BdsActionBar, BdsBadge, BdsButton, BdsIcon, BdsSection, BdsTabs, BdsText } from '../bds';
-import { JCB_TOTALS, JCB_ROWS, MARKUP_PCT } from '../jcbMockData';
+import { JCB_TOTALS, JCB_ROWS, MARKUP_PCT, JCB_OWNER_PRICE_DELTA, jcbBudgetDiffByCategory } from '../jcbMockData';
 import {
   panelByCategory,
   panelByCategoryV41Notes,
   panelByLocation,
   panelVarianceTotal,
   type PanelCategoryItem,
+  type PanelCategory,
 } from '../v4PanelData';
 
 /* ── Mock Data ── */
@@ -313,7 +314,8 @@ const ActivityKindIcon = ({ kind }: { kind: string }) => {
 /* ── Component ── */
 
 export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection, onBack, isClient = false, shareBudgetDiff = false, onShareBudgetDiffChange }: { jobOpen?: boolean; onToggleJob?: () => void; onOpenSelection?: (sel: { name: string; category: string; price: number; allowanceName?: string; status: string }) => void; onBack?: () => void; onOpenJCB?: () => void; isClient?: boolean; shareBudgetDiff?: boolean; onShareBudgetDiffChange?: (v: boolean) => void }) {
-  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
+  // '__s4-v1-adj__' seeded open so "Approved changes" shows its breakdown by default.
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({ '__s4-v1-adj__': true });
   // v41 (cost category) budget difference: free-form notes the builder types to
   // record what drove the variance. Keyed by cost code.
   const [categoryNotes, setCategoryNotes] = useState<Record<string, string>>({});
@@ -354,17 +356,30 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
   // When previewing an older version, render as the client saw it.
   const viewAsClient = isClient || !!previewShare;
   const effShareBudgetDiff = previewShare ? previewShare.budgetShared : shareBudgetDiff;
+  // Budget difference disclosure. The builder always sees it (so they can review it
+  // before deciding), and a per-section "Show to client" toggle (shareBudgetDiff)
+  // controls whether the client sees it. The variance is always in the headline
+  // price; this only gates the detailed per-category disclosure.
+  const showBudgetDiff = viewAsClient ? effShareBudgetDiff : true;
+  // Beta feedback modal (builder-only)
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const [feedbackText, setFeedbackText] = useState('');
+  const [feedbackSent, setFeedbackSent] = useState(false);
   const [printOptions, setPrintOptions] = useState({
     changeOrders: true,
     payments: true,
     expandAllowances: true,
   });
-  type SortColumn = 'title' | 'date' | 'price' | 'impact' | 'budget' | 'spent' | 'remaining' | 'status';
+  type SortColumn = 'title' | 'date' | 'price' | 'origPrice' | 'impact' | 'budget' | 'spent' | 'remaining' | 'status';
   type SortDir = 'asc' | 'desc';
   type SortState = { column: SortColumn; direction: SortDir };
   const defaultSort: SortState = { column: 'date', direction: 'asc' };
   // Each table is keyed by gridId so sorting one doesn't disturb the others.
-  const [sortByGrid, setSortByGrid] = useState<Record<string, SortState>>({});
+  // Seed the allowance grid so its displayed default (Name/asc) matches toggleSort's
+  // fallback — otherwise the first click on "Name" is a no-op (sets what's already shown).
+  const [sortByGrid, setSortByGrid] = useState<Record<string, SortState>>({
+    'print-allowances': { column: 'title', direction: 'asc' },
+  });
   const getSort = (gridId: string): SortState => sortByGrid[gridId] ?? defaultSort;
 
   // Click a header → if same column, flip direction; otherwise make it active in asc, scoped to gridId.
@@ -381,13 +396,14 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
   // Parse the mock date strings ("Oct 15, 2024") to a comparable timestamp. Items without a date sort last.
   const dateToTs = (d?: string) => (d ? new Date(d).getTime() : 0);
   // Items passed in can optionally expose an `impact` field (post/pre-contract) or an extra `_impact` injected at the call site (allowance table, where impact is computed from chronological running total).
-  const sortItems = <T extends { name: string; date?: string; price: number; impact?: number; _impact?: number }>(gridId: string, items: T[]) => {
+  const sortItems = <T extends { name: string; date?: string; price: number; impact?: number; _impact?: number; originalPrice?: number }>(gridId: string, items: T[]) => {
     const out = [...items];
     const { column, direction } = getSort(gridId);
     const sign = direction === 'asc' ? 1 : -1;
     out.sort((a, b) => {
       if (column === 'title') return sign * a.name.localeCompare(b.name);
       if (column === 'price') return sign * (a.price - b.price);
+      if (column === 'origPrice') return sign * ((a.originalPrice ?? 0) - (b.originalPrice ?? 0));
       if (column === 'impact') return sign * ((a._impact ?? a.impact ?? 0) - (b._impact ?? b.impact ?? 0));
       return sign * (dateToTs(a.date) - dateToTs(b.date));
     });
@@ -396,13 +412,13 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
 
   // Phosphor "arrows-down-up" icon — BDS Sort. Active state is blue, inactive muted.
   // When active and descending, flip vertically so the up-arrow cues descending.
-  const SortArrows = ({ state }: { state: 'asc' | 'desc' | 'none' }) => {
-    const color = state === 'none' ? 'var(--g400)' : 'var(--bt-blue)';
+  const SortArrows = ({ state, size = 9, color }: { state: 'asc' | 'desc' | 'none'; size?: number; color?: string }) => {
+    const fillColor = color ?? (state === 'none' ? 'var(--g400)' : 'var(--bt-blue)');
     return (
       <svg
         aria-hidden
-        width="9"
-        height="9"
+        width={size}
+        height={size}
         viewBox="0 0 22 22"
         fill="none"
         style={{ display: 'block', flexShrink: 0, transform: state === 'desc' ? 'scaleY(-1)' : undefined }}
@@ -411,7 +427,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
           fillRule="evenodd"
           clipRule="evenodd"
           d="M5.99327 0.883379C5.93551 0.38604 5.51284 0 5 0C4.44772 0 4 0.447715 4 1V18.585L1.70711 16.2929L1.6129 16.2097C1.22061 15.9047 0.653377 15.9324 0.292893 16.2929C-0.0976311 16.6834 -0.0976311 17.3166 0.292893 17.7071L4.29289 21.7071L4.3871 21.7903L4.47929 21.854L4.57678 21.9063L4.68786 21.9503L4.79927 21.9798L4.92476 21.9972L5 22L5.11747 21.9932L5.26599 21.9642L5.37134 21.9288L5.48406 21.8753L5.59531 21.8037C5.63433 21.7747 5.67171 21.7425 5.70711 21.7071L9.70711 17.7071L9.7903 17.6129C10.0953 17.2206 10.0676 16.6534 9.70711 16.2929L9.6129 16.2097C9.22061 15.9047 8.65338 15.9324 8.29289 16.2929L6 18.585V1L5.99327 0.883379ZM16.8804 0.00708792L16.8515 0.0110178L16.734 0.0358451L16.6287 0.0712255L16.5159 0.124671L16.4047 0.196335C16.3657 0.225313 16.3283 0.257499 16.2929 0.292893L12.2929 4.29289L12.2097 4.3871C11.9047 4.77939 11.9324 5.34662 12.2929 5.70711L12.3871 5.7903C12.7794 6.09532 13.3466 6.06759 13.7071 5.70711L16 3.415V21L16.0067 21.1166C16.0645 21.614 16.4872 22 17 22C17.5523 22 18 21.5523 18 21V3.415L20.2929 5.70711L20.3871 5.7903C20.7794 6.09532 21.3466 6.06759 21.7071 5.70711C22.0976 5.31658 22.0976 4.68342 21.7071 4.29289L17.7071 0.292893L17.6255 0.219696L17.5207 0.145995L17.4232 0.0936734L17.3121 0.0497381L17.2007 0.0202401L17.0752 0.00279536L17 7.5e-06L16.8804 0.00708792Z"
-          fill={color}
+          fill={fillColor}
         />
       </svg>
     );
@@ -459,35 +475,43 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
       default: return sign * a.name.localeCompare(b.name, 'en', { numeric: true, sensitivity: 'base' });
     }
   });
-  const ALLOWANCE_SORT_OPTS: { col: SortColumn; label: string }[] = [
-    { col: 'title', label: 'Name' },
-    { col: 'budget', label: 'Allowance' },
-    { col: 'remaining', label: 'Difference' },
-    { col: 'status', label: 'Status' },
+  // Explicit-direction sort menu: each item is a complete sort (field + direction),
+  // so one click applies it — no hidden toggle / re-click to flip.
+  const ALLOWANCE_SORT_OPTS: { col: SortColumn; dir: SortDir; label: string }[] = [
+    { col: 'title', dir: 'asc', label: 'Name (A–Z)' },
+    { col: 'title', dir: 'desc', label: 'Name (Z–A)' },
+    { col: 'budget', dir: 'desc', label: 'Allowance (high–low)' },
+    { col: 'budget', dir: 'asc', label: 'Allowance (low–high)' },
+    { col: 'remaining', dir: 'desc', label: 'Difference (high–low)' },
+    { col: 'remaining', dir: 'asc', label: 'Difference (low–high)' },
+    { col: 'status', dir: 'asc', label: 'Status' },
   ];
   const allowanceSortControl = (
     <div className="jps-allowance-sort">
       <BdsButton
         displayType="secondary"
         onClick={() => setAllowanceSortOpen(o => !o)}
-        icon={<BdsIcon name={allowanceSort.direction === 'asc' ? 'sort-asc' : 'sort-desc'} size={14} />}
-        text={`Sort: ${ALLOWANCE_SORT_OPTS.find(o => o.col === allowanceSort.column)?.label ?? 'Name'}`}
+        icon={<SortArrows state={allowanceSort.direction} size={14} color="currentColor" />}
+        text="Sort"
       />
       {allowanceSortOpen && (
         <>
           <div className="col-vis-backdrop" onClick={() => setAllowanceSortOpen(false)} />
           <div className="jps-sort-pop">
-            {ALLOWANCE_SORT_OPTS.map(o => (
-              <button
-                key={o.col}
-                type="button"
-                className={`jps-sort-pop-item${allowanceSort.column === o.col ? ' active' : ''}`}
-                onClick={() => { toggleSort('print-allowances', o.col); setAllowanceSortOpen(false); }}
-              >
-                <span>{o.label}</span>
-                {allowanceSort.column === o.col && <SortArrows state={allowanceSort.direction} />}
-              </button>
-            ))}
+            {ALLOWANCE_SORT_OPTS.map(o => {
+              const active = allowanceSort.column === o.col && allowanceSort.direction === o.dir;
+              return (
+                <button
+                  key={`${o.col}-${o.dir}`}
+                  type="button"
+                  className={`jps-sort-pop-item${active ? ' active' : ''}`}
+                  onClick={() => { setSortByGrid(prev => ({ ...prev, 'print-allowances': { column: o.col, direction: o.dir } })); setAllowanceSortOpen(false); }}
+                >
+                  <span>{o.label}</span>
+                  {active && <BdsIcon name="check" size={14} />}
+                </button>
+              );
+            })}
           </div>
         </>
       )}
@@ -537,7 +561,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
         <div className="jps-table-header jps-table-sel-standalone">
           {sortableHeader('sel-standalone', 'title', 'Title', 'jps-col-title')}
           {sortableHeader('sel-standalone', 'date', 'Date', 'jps-col-date')}
-          <div className="jps-col-price-orig">Initial price</div>
+          {sortableHeader('sel-standalone', 'origPrice', 'Initial price', 'jps-col-price-orig')}
           {sortableHeader('sel-standalone', 'price', 'Approved price', 'jps-col-price-revised')}
           {sortableHeader('sel-standalone', 'impact', 'Contract impact', 'jps-col-impact')}
         </div>
@@ -675,9 +699,9 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
               Omaha, NE 68114
             </div>
             <div className="jps-print-summary-values">
-              <div><span>Approved price:</span><strong>{fmt(revisedClientPrice + (activeSlice === 'slice4' || activeSlice === 'slice5' ? billVarianceTotal : 0))}</strong></div>
+              <div><span>Approved price:</span><strong>{fmt(revisedClientPrice + (activeSlice === 'slice4' || activeSlice === 'slice5' ? JCB_OWNER_PRICE_DELTA : 0))}</strong></div>
               <div><span>Amount paid:</span><strong>{fmt(paymentsReceived)}</strong></div>
-              <div><span>Remaining to pay:</span><strong>{fmt(remainingBalance + (activeSlice === 'slice4' || activeSlice === 'slice5' ? billVarianceTotal : 0))}</strong></div>
+              <div><span>Remaining to pay:</span><strong>{fmt(remainingBalance + (activeSlice === 'slice4' || activeSlice === 'slice5' ? JCB_OWNER_PRICE_DELTA : 0))}</strong></div>
             </div>
           </div>
 
@@ -919,7 +943,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
           )}
 
           {/* Budget difference — openbook (slice4/slice5) only */}
-          {(activeSlice === 'slice4' || activeSlice === 'slice5') && (
+          {(activeSlice === 'slice4' || activeSlice === 'slice5') && showBudgetDiff && (
             <section className="jps-print-section">
               <h3 className="jps-print-section-title">Budget difference</h3>
               <table className="jps-print-table">
@@ -930,15 +954,15 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                   </tr>
                 </thead>
                 <tbody>
-                  {panelByCategory.map((group, i) => (
+                  {jcbBudgetDiffByCategory.map((group, i) => (
                     <tr key={i}>
                       <td>{group.category}</td>
-                      <td className="jps-print-td-right">{fmtSigned(group.variance)}</td>
+                      <td className="jps-print-td-right">{fmt(group.delta)}</td>
                     </tr>
                   ))}
                   <tr className="jps-print-total-row">
                     <td><strong>Total</strong></td>
-                    <td className="jps-print-td-right"><strong>{fmtSigned(panelVarianceTotal)}</strong></td>
+                    <td className="jps-print-td-right"><strong>{fmt(JCB_OWNER_PRICE_DELTA)}</strong></td>
                   </tr>
                 </tbody>
               </table>
@@ -979,7 +1003,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
           {/* Totals block — bottom right. Openbook slice rolls bill contributions into the math. */}
           {(() => {
             const isOpenbook = activeSlice === 'slice4' || activeSlice === 'slice5';
-            const billsContrib = isOpenbook ? billVarianceTotal : 0;
+            const billsContrib = isOpenbook ? JCB_OWNER_PRICE_DELTA : 0;
             const approvedChangesPrint = changeOrdersTotal + approvedSelectionsTotal + billsContrib;
             const revisedPricePrint = revisedClientPrice + billsContrib;
             const remainingPrint = revisedPricePrint - paymentsReceived - creditMemos;
@@ -992,7 +1016,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
               <div className="jps-print-totals-line jps-print-totals-nested-2"><span>Selection and allowance changes</span><span>{fmt(approvedSelectionsTotal)}</span></div>
               <div className="jps-print-totals-line jps-print-totals-nested-2"><span>Change orders</span><span>{fmt(changeOrdersTotal)}</span></div>
               {isOpenbook && (
-                <div className="jps-print-totals-line jps-print-totals-nested-2"><span>Budget difference</span><span>{fmt(billVarianceTotal)}</span></div>
+                <div className="jps-print-totals-line jps-print-totals-nested-2"><span>Budget difference</span><span>{fmt(JCB_OWNER_PRICE_DELTA)}</span></div>
               )}
               <div className="jps-print-totals-line jps-print-totals-nested"><span>Tax</span><span>{fmt(totalTax)}</span></div>
             </div>
@@ -1054,6 +1078,14 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                   icon={<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" /><path d="M3 3v5h5" /><path d="M12 7v5l4 2" /></svg>}
                 />
               </div>
+            )}
+            {!viewAsClient && (
+              <BdsButton
+                displayType="secondary"
+                ariaLabel="Give feedback"
+                onClick={() => { setFeedbackSent(false); setFeedbackOpen(true); }}
+                icon={<svg width="14" height="18" viewBox="0 0 22.0009 28.0001" fill="none" aria-hidden="true"><path fillRule="evenodd" clipRule="evenodd" d="M21.3524 7.28088C19.7502 2.82144 15.4723 -0.110852 10.7351 0.00321325C4.77283 0.143546 -0.0324698 5.09533 0.000165251 11.062C0.0164467 14.4243 1.57236 17.5946 4.22274 19.6646C4.71245 20.0458 4.99875 20.6297 5.00029 21.2487L5.0003 22.0001L5.00579 22.1494C5.08217 23.1842 5.94595 24.0001 7.0003 24.0001H15.0003L15.1496 23.9946C16.1844 23.9183 17.0003 23.0545 17.0003 22.0001L17.0003 21.2471L17.0084 21.079C17.0586 20.5222 17.3399 20.0038 17.7893 19.6556C21.5211 16.7247 22.9546 11.7403 21.3524 7.28088ZM17.0003 27.0001C17.0003 26.4478 16.5526 26.0001 16.0003 26.0001H6.00032L5.8837 26.0068C5.38636 26.0646 5.00032 26.4872 5.00032 27.0001C5.00032 27.5524 5.44803 28.0001 6.00032 28.0001H16.0003L16.1169 27.9934C16.6143 27.9356 17.0003 27.5129 17.0003 27.0001ZM11.0589 2.0002L10.7827 2.00265C5.91054 2.11732 1.97349 6.17438 2.00017 11.0517C2.013 13.7005 3.19354 16.203 5.21553 17.8957L5.63039 18.2342C6.43786 18.9408 6.92888 19.9423 6.9931 21.0153L7.00029 21.2462L7.0003 22.0001H15.0003L15.0004 21.2411C15.0073 20.0789 15.5146 18.9801 16.3812 18.225L16.7844 17.8959C19.6653 15.4803 20.7484 11.5146 19.4702 7.95714C18.1905 4.39535 14.8246 2.02426 11.0589 2.0002ZM12.1832 4.11223L12.0671 4.09931C11.5671 4.07292 11.1157 4.42492 11.0297 4.93051C10.9372 5.47498 11.3036 5.99139 11.848 6.08394C13.9363 6.43891 15.573 8.07357 15.9305 10.1614C16.0238 10.7058 16.5406 11.0715 17.085 10.9783C17.6293 10.8851 17.9951 10.3682 17.9018 9.82385C17.401 6.89923 15.1084 4.60945 12.1832 4.11223Z" fill="currentColor" /></svg>}
+              />
             )}
             {activeSlice === 'slice5' && slice4Version === 'v41notes' ? (
               <BdsButton
@@ -1118,6 +1150,44 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                 }, ...prev]);
                 setShowSend(false);
               }} />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Budget difference beta feedback modal (builder-only) */}
+      {!viewAsClient && feedbackOpen && (
+        <div className="jps-send-scrim" onClick={() => setFeedbackOpen(false)}>
+          <div className="jps-send-modal" role="dialog" aria-modal="true" aria-label="Share feedback" onClick={(e) => e.stopPropagation()}>
+            <div className="jps-send-header">
+              <BdsText as="h2" size="heavy-lg" className="jps-send-title">Share feedback</BdsText>
+              <p className="jps-send-sub">Tell us what's working or what could be better on this page.</p>
+              <button type="button" className="jps-send-close" onClick={() => setFeedbackOpen(false)} aria-label="Close">
+                <BdsIcon name="x" size={20} />
+              </button>
+            </div>
+            <div className="jps-send-body">
+              {feedbackSent ? (
+                <div className="jps-feedback-thanks">Thanks — your feedback helps us improve.</div>
+              ) : (
+                <textarea
+                  className="jps-feedback-input"
+                  rows={4}
+                  placeholder="What's working? What's confusing?"
+                  value={feedbackText}
+                  onChange={(e) => setFeedbackText(e.target.value)}
+                />
+              )}
+            </div>
+            <div className="jps-send-footer">
+              {feedbackSent ? (
+                <BdsButton text="Done" displayType="primary" onClick={() => setFeedbackOpen(false)} />
+              ) : (
+                <>
+                  <BdsButton text="Cancel" displayType="secondary" onClick={() => setFeedbackOpen(false)} />
+                  <BdsButton text="Send feedback" displayType="primary" disabled={!feedbackText.trim()} onClick={() => { setFeedbackSent(true); setFeedbackText(''); }} />
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -1371,7 +1441,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                   </div>
                   <div className="jps-table">
                     <div className="jps-table-header jps-table-co">
-                      <div className="jps-col-title">Title</div>
+                      {sortableHeader('print-co-approved', 'title', 'Title', 'jps-col-title')}
                       {sortableHeader('print-co-approved', 'date', 'Approved date', 'jps-col-date')}
                       {sortableHeader('print-co-approved', 'price', 'Contract impact', 'jps-col-impact')}
                     </div>
@@ -1405,7 +1475,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
               </div>
               <div className="jps-table">
                 <div className="jps-table-header jps-table-payments">
-                  <div className="jps-col-title">Title</div>
+                  {sortableHeader('print-payments', 'title', 'Title', 'jps-col-title')}
                   {sortableHeader('print-payments', 'date', 'Date', 'jps-col-date')}
                   <div className="jps-col-method">Payment type</div>
                   {sortableHeader('print-payments', 'price', 'Amount', 'jps-col-amount')}
@@ -1679,7 +1749,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                   </div>
                   <div className="jps-table">
                     <div className="jps-table-header jps-table-co">
-                      <div className="jps-col-title">Title</div>
+                      {sortableHeader('print-co-approved', 'title', 'Title', 'jps-col-title')}
                       {sortableHeader('print-co-approved', 'date', 'Approved date', 'jps-col-date')}
                       {sortableHeader('print-co-approved', 'price', 'Contract impact', 'jps-col-impact')}
                     </div>
@@ -1753,7 +1823,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
               </div>
               <div className="jps-table">
                 <div className="jps-table-header jps-table-payments">
-                  <div className="jps-col-title">Title</div>
+                  {sortableHeader('print-payments', 'title', 'Title', 'jps-col-title')}
                   {sortableHeader('print-payments', 'date', 'Date', 'jps-col-date')}
                   <div className="jps-col-method">Payment type</div>
                   {sortableHeader('print-payments', 'price', 'Amount', 'jps-col-amount')}
@@ -2025,7 +2095,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
               <>
                 <div className="jps-table">
                   <div className="jps-table-header jps-table-co">
-                    <div className="jps-col-title">Title</div>
+                    {sortableHeader('print-co-approved', 'title', 'Title', 'jps-col-title')}
                     {sortableHeader('print-co-approved', 'date', 'Approved date', 'jps-col-date')}
                     {sortableHeader('print-co-approved', 'price', 'Contract impact', 'jps-col-impact')}
                   </div>
@@ -2079,7 +2149,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
           </div>
           <div className="jps-table">
             <div className="jps-table-header jps-table-payments">
-              <div className="jps-col-title">Title</div>
+              {sortableHeader('print-payments', 'title', 'Title', 'jps-col-title')}
               {sortableHeader('print-payments', 'date', 'Date', 'jps-col-date')}
               <div className="jps-col-method">Payment type</div>
               {sortableHeader('print-payments', 'price', 'Amount', 'jps-col-amount')}
@@ -2121,7 +2191,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
           const allowanceVarianceSum = allowanceVariances.reduce((s, g) => s + g.variance, 0);
           // Slice 4 includes bill variances in the rolled-up adjustment (per Kendall's brief — bills/line items
           // are an assumed contributor pending the spike). Other slices keep the legacy adjustment.
-          const priceAdjustment = changeOrdersTotal + approvedSelectionsTotal + billVarianceTotal;
+          const priceAdjustment = changeOrdersTotal + approvedSelectionsTotal + JCB_OWNER_PRICE_DELTA;
           const revisedPriceS4 = originalContractPrice + priceAdjustment + totalTax;
 
 
@@ -2162,7 +2232,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                       </div>
                       <div className="jps-breakdown-line jps-breakdown-nested">
                         <span>Bills</span>
-                        <span className={billVarianceTotal >= 0 ? 'jps-impact-up' : 'jps-impact-down'}>{fmt(billVarianceTotal)}</span>
+                        <span className={JCB_OWNER_PRICE_DELTA >= 0 ? 'jps-impact-up' : 'jps-impact-down'}>{fmt(JCB_OWNER_PRICE_DELTA)}</span>
                       </div>
                     </>
                   )}
@@ -2216,8 +2286,10 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                     <span>{fmt(changeOrdersTotal)}</span>
                   </div>
                   <div className="jps-breakdown-line jps-breakdown-nested">
-                    <button type="button" className="jps-s4-scroll-link" onClick={() => document.getElementById('jps-sec-budget-difference')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>Budget difference</button>
-                    <span className={panelVarianceTotal >= 0 ? 'jps-impact-up' : 'jps-impact-down'}>{fmt(panelVarianceTotal)}</span>
+                    {showBudgetDiff
+                      ? <button type="button" className="jps-s4-scroll-link" onClick={() => document.getElementById('jps-sec-budget-difference')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>Budget difference</button>
+                      : <span>Budget difference</span>}
+                    <span className={JCB_OWNER_PRICE_DELTA >= 0 ? 'jps-impact-up' : 'jps-impact-down'}>{fmt(JCB_OWNER_PRICE_DELTA)}</span>
                   </div>
                   <div className="jps-breakdown-line"><span>Tax</span><span>{fmt(totalTax)}</span></div>
                 </div>
@@ -2343,6 +2415,9 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
               </div>
 
               {/* ─── Two summary cards ─── */}
+              {/* The detailed breakdown header (incl. the budget difference line) shows for
+                  everyone — builder and client. The "Show to client" toggle only gates the
+                  detailed budget difference grid below, not this header. */}
               <div className="jps-panes-row">
                 {totalPriceCard}
                 {balanceDueCard}
@@ -2466,7 +2541,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                     </div>
                     <div className="jps-table">
                       <div className="jps-table-header jps-table-co">
-                        <div className="jps-col-title">Title</div>
+                        {sortableHeader('print-co-approved', 'title', 'Title', 'jps-col-title')}
                         {sortableHeader('print-co-approved', 'date', 'Approved date', 'jps-col-date')}
                         {sortableHeader('print-co-approved', 'price', 'Contract impact', 'jps-col-impact')}
                       </div>
@@ -2492,8 +2567,9 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
               {/* ─── End approved-changes group wrapper ─── */}
 
               {/* ─── Budget difference (v4/v41/v41notes/v411/v45) — table layout matching Change Orders ─── */}
-              {/* Client view only renders this section when the builder has opted to share it (shareBudgetDiff). */}
-              {(slice4Version === 'v4' || slice4Version === 'v41' || slice4Version === 'v41notes' || slice4Version === 'v411' || slice4Version === 'v45') && (!viewAsClient || effShareBudgetDiff) && (
+              {/* Builder always sees this section; the "Show to client" toggle controls
+                  whether the client sees it. Client view renders it only when shared. */}
+              {(slice4Version === 'v4' || slice4Version === 'v41' || slice4Version === 'v41notes' || slice4Version === 'v411' || slice4Version === 'v45') && showBudgetDiff && (
                 <div className="jps-breakdown-section" id="jps-sec-budget-difference">
                   <div className="jps-section-header jps-section-header-split">
                     <BdsText as="h2" size="heavy-lg" className="jps-section-title">Budget difference</BdsText>
@@ -2522,38 +2598,53 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                       : slice4Version === 'v411'
                       ? "The difference between revised and original budget cost for each cost category. The largest cost is the biggest single bill, PO, or time clock entry on the cost code that's over budget. Approved change orders and selection and allowance changes aren't included."
                       : slice4Version === 'v41' || slice4Version === 'v41notes'
-                      ? "The difference between the revised client price and the original client price for each cost category. Approved change orders and selection and allowance changes aren't included."
+                      ? "The difference between the original and revised client price for each cost category in the job costing budget. Change orders and selections aren't included."
                       : "The difference between revised and original budget cost for each cost category. Approved change orders and selection and allowance changes aren't included."}
                   </div>
                   <div className="jps-table">
                     {slice4Version === 'v411' ? (
                       <div className="jps-table-header jps-table-budget-cause">
-                        <div className="jps-col-title">Cost category</div>
+                        {sortableHeader('budget-diff', 'title', 'Cost category', 'jps-col-title')}
                         <div className="jps-col-cause">Largest cost</div>
-                        <div className="jps-col-impact">Budget difference</div>
+                        {sortableHeader('budget-diff', 'impact', 'Budget difference', 'jps-col-impact')}
                       </div>
                     ) : slice4Version === 'v41notes' ? (
                       <div className="jps-table-header jps-table-budget-notes">
-                        <div className="jps-col-title">Cost category</div>
-                        <div className="jps-col-impact">Budget difference</div>
+                        {sortableHeader('budget-diff', 'title', 'Cost category', 'jps-col-title')}
+                        {sortableHeader('budget-diff', 'impact', 'Budget difference', 'jps-col-impact')}
                         <div className="jps-col-notes">Notes</div>
                       </div>
                     ) : (
                       <div className="jps-table-header jps-table-budget">
-                        <div className="jps-col-title">{slice4Version === 'v45' ? 'Location' : 'Cost category'}</div>
-                        <div className="jps-col-impact">Budget difference</div>
+                        {sortableHeader('budget-diff', 'title', slice4Version === 'v45' ? 'Location' : 'Cost category', 'jps-col-title')}
+                        {sortableHeader('budget-diff', 'impact', 'Budget difference', 'jps-col-impact')}
                       </div>
                     )}
                     {(() => {
                       // $0 budget-difference lines are hidden across all versions.
-                      if (slice4Version === 'v45') return panelByLocation.filter(g => g.variance !== 0);
-                      if (slice4Version === 'v41notes') {
-                        // Only categories with a positive overall budget
-                        // difference. Underages and $0 categories are hidden
-                        // entirely — same reasoning at the row level below.
-                        return panelByCategoryV41Notes.filter(g => (g.revisedBudget - g.originalBudget) > 0);
-                      }
-                      return panelByCategory.filter(g => (g.revisedBudget - g.originalBudget) !== 0);
+                      const base: PanelCategory[] = slice4Version === 'v45'
+                        ? panelByLocation.filter(g => g.variance !== 0)
+                        : slice4Version === 'v41notes'
+                          // Only categories with a positive overall budget difference.
+                          // Underages and $0 categories are hidden entirely — same
+                          // reasoning at the row level below.
+                          ? panelByCategoryV41Notes.filter(g => (g.revisedBudget - g.originalBudget) > 0)
+                          : slice4Version === 'v41'
+                            // v4.1 (default) — budget difference is the JCB owner-price delta
+                            // per category (revised − original owner price), so it reconciles
+                            // with the revised client price. Shimmed into PanelCategory shape.
+                            ? jcbBudgetDiffByCategory.map(c => ({ category: c.category, originalBudget: 0, revisedBudget: c.delta, variance: c.delta, items: [] as PanelCategoryItem[] }))
+                            : panelByCategory.filter(g => (g.revisedBudget - g.originalBudget) !== 0);
+                      // Sort by the shared 'budget-diff' grid state. The value column uses the
+                      // variance shown per version (v45 = group variance; others = revised − original).
+                      const bdSort = getSort('budget-diff');
+                      if (bdSort.column !== 'title' && bdSort.column !== 'impact') return base;
+                      const sign = bdSort.direction === 'asc' ? 1 : -1;
+                      const bdValue = (g: { variance: number; revisedBudget: number; originalBudget: number }) =>
+                        slice4Version === 'v45' ? g.variance : (g.revisedBudget - g.originalBudget);
+                      return [...base].sort((a, b) => bdSort.column === 'title'
+                        ? sign * a.category.localeCompare(b.category)
+                        : sign * (bdValue(a) - bdValue(b)));
                     })().map((group, gi) => {
                       const isV45 = slice4Version === 'v45';
                       const isV41 = slice4Version === 'v41';
@@ -2577,7 +2668,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                                 <span className="jps-item-name">{group.category}</span>
                               </div>
                               <div className="jps-col-impact">
-                                <span className={group.variance >= 0 ? 'jps-impact-up' : 'jps-impact-down'}>{fmtSigned(group.variance)}</span>
+                                <span className={group.variance >= 0 ? 'jps-impact-up' : 'jps-impact-down'}>{fmt(group.variance)}</span>
                               </div>
                             </div>
                             {isOpen && group.items.filter(item => item.variance !== 0).map((item) => (
@@ -2587,7 +2678,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                                   <span className="jps-budget-nested-name">{item.name}</span>
                                 </div>
                                 <div className="jps-col-impact">
-                                  <span className={item.variance >= 0 ? 'jps-impact-up' : 'jps-impact-down'}>{fmtSigned(item.variance)}</span>
+                                  <span className={item.variance >= 0 ? 'jps-impact-up' : 'jps-impact-down'}>{fmt(item.variance)}</span>
                                 </div>
                               </div>
                             ))}
@@ -2601,7 +2692,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                           <div key={gi} className="jps-table-row jps-table-budget">
                             <div className="jps-col-title"><span className="jps-item-name">{group.category}</span></div>
                             <div className="jps-col-impact">
-                              <span className={groupPriceDiff >= 0 ? 'jps-impact-up' : 'jps-impact-down'}>{fmtSigned(groupPriceDiff)}</span>
+                              <span className={groupPriceDiff >= 0 ? 'jps-impact-up' : 'jps-impact-down'}>{fmt(groupPriceDiff)}</span>
                             </div>
                           </div>
                         );
@@ -2628,7 +2719,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                                 <span className="jps-item-name">{group.category}</span>
                               </div>
                               <div className="jps-col-impact">
-                                <span className={groupPriceDiff >= 0 ? 'jps-impact-up' : 'jps-impact-down'}>{fmtSigned(groupPriceDiff)}</span>
+                                <span className={groupPriceDiff >= 0 ? 'jps-impact-up' : 'jps-impact-down'}>{fmt(groupPriceDiff)}</span>
                               </div>
                               <div className="jps-col-notes" />
                             </div>
@@ -2641,7 +2732,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                                     <span className="jps-budget-nested-name">{item.name}</span>
                                   </div>
                                   <div className="jps-col-impact">
-                                    <span className={itemPriceDiff >= 0 ? 'jps-impact-up' : 'jps-impact-down'}>{fmtSigned(itemPriceDiff)}</span>
+                                    <span className={itemPriceDiff >= 0 ? 'jps-impact-up' : 'jps-impact-down'}>{fmt(itemPriceDiff)}</span>
                                   </div>
                                   <div className="jps-col-notes" onClick={(e) => e.stopPropagation()}>
                                     <textarea
@@ -2711,7 +2802,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                               )}
                             </div>
                             <div className="jps-col-impact">
-                              <span className={group.variance >= 0 ? 'jps-impact-up' : 'jps-impact-down'}>{fmtSigned(group.variance)}</span>
+                              <span className={group.variance >= 0 ? 'jps-impact-up' : 'jps-impact-down'}>{fmt(group.variance)}</span>
                               {group.originalBudget > 0 && group.variance !== 0 && (
                                 <span className="jps-impact-pct">
                                   {group.variance > 0 ? 'over' : 'under'} original amount of {fmt(group.originalBudget)}
@@ -2725,7 +2816,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                         <div key={gi} className="jps-table-row jps-table-budget">
                           <div className="jps-col-title"><span className="jps-item-name">{group.category}</span></div>
                           <div className="jps-col-impact">
-                            <span className={group.variance >= 0 ? 'jps-impact-up' : 'jps-impact-down'}>{fmtSigned(group.variance)}</span>
+                            <span className={group.variance >= 0 ? 'jps-impact-up' : 'jps-impact-down'}>{fmt(group.variance)}</span>
                           </div>
                         </div>
                       );
@@ -2734,23 +2825,23 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                       <div className="jps-table-row jps-table-budget-cause jps-row-total">
                         <div className="jps-col-title">Total</div>
                         <div className="jps-col-cause"></div>
-                        <div className="jps-col-impact">{fmtSigned(panelVarianceTotal)}</div>
+                        <div className="jps-col-impact">{fmt(panelVarianceTotal)}</div>
                       </div>
                     ) : slice4Version === 'v41notes' ? (
                       <div className="jps-table-row jps-table-budget-notes jps-row-total">
                         <div className="jps-col-title">Total</div>
-                        <div className="jps-col-impact">{fmtSigned(panelByCategoryV41Notes.reduce((s, g) => s + (g.revisedBudget - g.originalBudget), 0))}</div>
+                        <div className="jps-col-impact">{fmt(panelByCategoryV41Notes.reduce((s, g) => s + (g.revisedBudget - g.originalBudget), 0))}</div>
                         <div className="jps-col-notes"></div>
                       </div>
                     ) : slice4Version === 'v41' ? (
                       <div className="jps-table-row jps-table-budget jps-row-total">
                         <div className="jps-col-title">Total</div>
-                        <div className="jps-col-impact">{fmtSigned(panelByCategory.reduce((s, g) => s + (g.revisedBudget - g.originalBudget), 0))}</div>
+                        <div className="jps-col-impact">{fmt(JCB_OWNER_PRICE_DELTA)}</div>
                       </div>
                     ) : (
                       <div className="jps-table-row jps-table-budget jps-row-total">
                         <div className="jps-col-title">Total</div>
-                        <div className="jps-col-impact">{fmtSigned(panelVarianceTotal)}</div>
+                        <div className="jps-col-impact">{fmt(panelVarianceTotal)}</div>
                       </div>
                     )}
                   </div>
@@ -2764,7 +2855,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                 </div>
                 <div className="jps-table">
                   <div className="jps-table-header jps-table-payments">
-                    <div className="jps-col-title">Title</div>
+                    {sortableHeader('print-payments', 'title', 'Title', 'jps-col-title')}
                     {sortableHeader('print-payments', 'date', 'Date', 'jps-col-date')}
                     <div className="jps-col-method">Payment type</div>
                     {sortableHeader('print-payments', 'price', 'Amount', 'jps-col-amount')}

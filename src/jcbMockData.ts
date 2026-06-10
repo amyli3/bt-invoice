@@ -75,3 +75,21 @@ export const JCB_TOTALS = (() => {
   const customerImpact     = costSideDelta + markupOnDelta;
   return { revisedBudget, projectedCosts, builderVariance, actualCosts, originalOwnerPrice, revisedOwnerPrice, costSideDelta, markupOnDelta, customerImpact };
 })();
+
+// ─── Budget difference = client-price impact of cost overruns ───
+// = Σ(revised owner price − original owner price). This is the customer-payable cost
+// overrun (projected − builder variance) marked up, so it reconciles into the revised
+// client price on the JPS. It excludes change orders and selections (those don't move
+// owner price here) and the builder-absorbed variance. This — NOT the raw cost variance
+// (revised − original budget cost, which only reflects COs/selections) — is the correct
+// figure for a client-facing price summary.
+export const JCB_OWNER_PRICE_DELTA = JCB_TOTALS.revisedOwnerPrice - JCB_TOTALS.originalOwnerPrice;
+
+// Per-category owner-price delta, for the Budget difference grid. Non-zero categories only.
+export const jcbBudgetDiffByCategory = (() => {
+  const byCat = new Map<string, number>();
+  for (const r of JCB_ROWS) {
+    byCat.set(r.category, (byCat.get(r.category) ?? 0) + (r.revisedOwnerPrice - r.originalOwnerPrice));
+  }
+  return Array.from(byCat, ([category, delta]) => ({ category, delta })).filter(c => c.delta !== 0);
+})();

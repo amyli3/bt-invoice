@@ -384,6 +384,7 @@ export default function SelectionsPage({
   onInvoiceSelected,
 }: SelectionsPageProps) {
   const [moreActionsOpen, setMoreActionsOpen] = useState(false);
+  const [invoiceMenuOpen, setInvoiceMenuOpen] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>('allowance');
   const [viewLayout, setViewLayout] = useState<ViewLayout>('list');
   const [audience, setAudience] = useState<AudienceView>('builder');
@@ -779,6 +780,24 @@ export default function SelectionsPage({
               >
                 Client view
               </button>
+            </div>
+            <div className="od-split-btn" style={{ position: 'relative' }}>
+              <button className="od-split-main" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }} onClick={() => onInvoiceSelected?.(selectedIds, 'new')}>
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 2V12M2 7H12" stroke="white" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                Invoice
+              </button>
+              <button className="od-split-caret" onClick={() => setInvoiceMenuOpen(o => !o)} aria-label="Invoice options" aria-expanded={invoiceMenuOpen}>
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 3.5L5 6.5L8 3.5" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              </button>
+              {invoiceMenuOpen && (
+                <>
+                  <div className="sp-menu-backdrop" onClick={() => setInvoiceMenuOpen(false)} />
+                  <div className="sp-mass-action-dropdown" style={{ bottom: 'auto', top: 'calc(100% + 6px)' }}>
+                    <button type="button" className="sp-mass-action-dropdown-item" onClick={() => { setInvoiceMenuOpen(false); onInvoiceSelected?.(selectedIds, 'new'); }}>New invoice</button>
+                    <button type="button" className="sp-mass-action-dropdown-item" onClick={() => { setInvoiceMenuOpen(false); onInvoiceSelected?.(selectedIds, 'existing'); }}>Add to existing invoice</button>
+                  </div>
+                </>
+              )}
             </div>
             <button className="btn btn-p" style={{ gap: 4 }} onClick={() => onOpenOption?.()}>
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 2V12M2 7H12" stroke="white" strokeWidth="1.5" strokeLinecap="round"/></svg>

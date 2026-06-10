@@ -1,6 +1,5 @@
 import { useState } from 'react';
-import { BdsActionBar, BdsIcon } from '../bds';
-import { panelByCategory, panelVarianceTotal, fmtSignedUsd } from '../v4PanelData';
+import { JCB_OWNER_PRICE_DELTA } from '../jcbMockData';
 
 // Rebar and concrete work - worker installing rebar
 const imgSiteWork1 = 'https://www.fandr.com/wp-content/uploads/2025/07/Placement-and-Inspection-of-Rebar-CRSI.jpg';
@@ -151,8 +150,6 @@ export function ClientTopNav({ onNavigate }: { onNavigate?: (page: string) => vo
 }
 
 export default function ClientPortal({ onNavigate }: { onNavigate?: (page: string) => void }) {
-  const [finDrillOpen, setFinDrillOpen] = useState(false);
-  const [approvedChangesOpen, setApprovedChangesOpen] = useState(false);
 
   // Mock financials — synced with JPS / Openbook so totals match across surfaces.
   // Allowance variances are intentionally NOT a separate contributor: + variances are already
@@ -162,7 +159,7 @@ export default function ClientPortal({ onNavigate }: { onNavigate?: (page: strin
     contractPrice: 568100,
     changeOrders: 21000,         // sum of approved COs in JPS
     selectionsApprovedImpact: 4470, // sum of approved selection impacts in JPS
-    billVariance: panelVarianceTotal, // sum of cost-code variances from V4 panel (drill-through source)
+    billVariance: JCB_OWNER_PRICE_DELTA, // budget difference = JCB owner-price delta (reconciles with revised client price)
     tax: 368.78,                 // approvedSelectionsTotal * 0.0825
     paymentsReceived: 405000,    // sum of payments in JPS
     creditMemos: 1500,           // credit memo entry in JPS
@@ -289,28 +286,24 @@ export default function ClientPortal({ onNavigate }: { onNavigate?: (page: strin
                     <span>{fmtUsd(fin.contractPrice)}</span>
                   </div>
                   <div className="jps-breakdown-line jps-breakdown-parent">
-                    <button type="button" className="cp-fin-toggle-label" onClick={() => setApprovedChangesOpen(v => !v)} aria-expanded={approvedChangesOpen}>
-                      <span>Approved changes</span>
-                      <BdsIcon name={approvedChangesOpen ? 'chevron-down' : 'chevron-right'} size={12} />
-                    </button>
+                    <span>Approved changes</span>
                     <span>{fmtUsd(approvedChanges)}</span>
                   </div>
-                  {approvedChangesOpen && (
-                    <>
-                      <div className="jps-breakdown-line jps-breakdown-nested">
-                        <span>Selection and allowance change</span>
-                        <span>{fmtUsd(fin.selectionsApprovedImpact)}</span>
-                      </div>
-                      <div className="jps-breakdown-line jps-breakdown-nested">
-                        <span>Change orders</span>
-                        <span>{fmtUsd(fin.changeOrders)}</span>
-                      </div>
-                      <div className="jps-breakdown-line jps-breakdown-nested">
-                        <button type="button" className="cp-fin-link-label" onClick={() => setFinDrillOpen(true)}>Budget difference</button>
-                        <span className={fin.billVariance >= 0 ? 'cp-fin-budget-up' : 'cp-fin-budget-down'}>{fmtSignedUsd(fin.billVariance)}</span>
-                      </div>
-                    </>
-                  )}
+                  <div className="jps-breakdown-line jps-breakdown-nested">
+                    <span>Selection and allowance change</span>
+                    <span>{fmtUsd(fin.selectionsApprovedImpact)}</span>
+                  </div>
+                  <div className="jps-breakdown-line jps-breakdown-nested">
+                    <span>Change orders</span>
+                    <span>{fmtUsd(fin.changeOrders)}</span>
+                  </div>
+                  <div className="jps-breakdown-line jps-breakdown-nested">
+                    <span className="jps-term">
+                      <span className="jps-term-label" tabIndex={0}>Budget difference</span>
+                      <span className="jps-term-tip" role="tooltip">Cost overages, excluding change orders and selections.</span>
+                    </span>
+                    <span className={fin.billVariance >= 0 ? 'cp-fin-budget-up' : 'cp-fin-budget-down'}>{fmtUsd(fin.billVariance)}</span>
+                  </div>
                   <div className="jps-breakdown-line">
                     <span>Tax</span>
                     <span>{fmtUsd(fin.tax)}</span>
@@ -323,14 +316,13 @@ export default function ClientPortal({ onNavigate }: { onNavigate?: (page: strin
               </div>
 
 
-              {/* Total paid / remaining card — synced with JPS payments + credits */}
-              <div className="cp-fin-card cp-fin-stacked">
-                <div>
+              {/* Total paid + Remaining to pay — separate containers, stacked in one column */}
+              <div className="cp-fin-col">
+                <div className="cp-fin-card cp-fin-metric">
                   <BdsText size="heavy-sm">{fmtUsd(fin.paymentsReceived)}</BdsText>
                   <BdsText size="normal-sm" className="cp-fin-label">Total paid</BdsText>
                 </div>
-                <div className="cp-fin-divider" />
-                <div>
+                <div className="cp-fin-card cp-fin-metric">
                   <BdsText size="heavy-sm">{fmtUsd(remainingToPay)}</BdsText>
                   <BdsText size="normal-sm" className="cp-fin-label">Remaining to pay</BdsText>
                 </div>
@@ -345,44 +337,6 @@ export default function ClientPortal({ onNavigate }: { onNavigate?: (page: strin
               </div>
             </div>
           </BdsSection>
-
-          {/* Budget difference drill-through — exact replica of JPS v4 cost-category side panel */}
-          {finDrillOpen && (
-            <div className="jps-s4-side-panel-scrim" onClick={() => setFinDrillOpen(false)}>
-              <aside className="jps-s4-side-panel" onClick={(e) => e.stopPropagation()}>
-                <BdsActionBar align="space-between" className="jps-s4-modal-bar">
-                  <div className="jps-s4-side-panel-titleblock">
-                    <BdsText size="heavy-lg">Budget difference</BdsText>
-                  </div>
-                  <button type="button" className="cp-fin-panel-close" aria-label="Close" onClick={() => setFinDrillOpen(false)}>
-                    <BdsIcon name="x" size={14} />
-                  </button>
-                </BdsActionBar>
-
-                <div className="jps-s4-side-panel-body">
-                  <div className="jps-s4-side-panel-note">
-                    The difference between revised and original budget cost for each cost category. Approved change orders and selection and allowance changes aren't included.
-                  </div>
-
-                  {panelByCategory.map((group) => (
-                    <div key={group.category} className="jps-s4-category-block">
-                      <div className="jps-s4-category-header jps-s4-category-header-flat">
-                        <div className="jps-s4-category-header-row">
-                          <div className="jps-s4-category-name">{group.category}</div>
-                          <span className={group.variance >= 0 ? 'jps-s4-category-revision' : 'jps-impact-down'}>{fmtSignedUsd(group.variance)}</span>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-
-                  <div className="jps-s4-side-panel-summary jps-s4-side-panel-summary-bottom">
-                    <span>Budget difference</span>
-                    <span className={panelVarianceTotal >= 0 ? 'jps-impact-up' : 'jps-impact-down'}>{fmtSignedUsd(panelVarianceTotal)}</span>
-                  </div>
-                </div>
-              </aside>
-            </div>
-          )}
 
           {/* Project Updates */}
           <BdsSection title="Project updates" slot={<BdsButton text="View more" displayType="secondary" />}>

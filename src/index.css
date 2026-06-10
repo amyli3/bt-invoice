@@ -1339,7 +1339,7 @@ table { width: 100%; border-collapse: collapse; }
 /* Allowance list sort control (shares state with the print allowances table) */
 .jps-allowance-sort { position: relative; margin-left: auto; margin-right: 8px; }
 .jps-sort-pop {
-  position: absolute; right: 0; top: calc(100% + 6px); z-index: 30; min-width: 180px;
+  position: absolute; right: 0; top: calc(100% + 6px); z-index: 30; min-width: 210px;
   background: #fff; border: 1px solid var(--g200); border-radius: 10px;
   box-shadow: 0 8px 24px rgba(0,0,0,0.12); padding: 4px;
 }
@@ -1432,22 +1432,7 @@ table { width: 100%; border-collapse: collapse; }
 }
 .jps-version-exit:hover { background: #004FD6; color: #fff; }
 
-/* Share history timeline */
-.jps-history-list { list-style: none; margin: 0; padding: 4px 0; display: flex; flex-direction: column; }
-.jps-history-item { position: relative; display: flex; gap: 12px; padding: 0 0 18px 4px; }
-.jps-history-item:last-child { padding-bottom: 0; }
-.jps-history-dot { position: relative; flex-shrink: 0; width: 10px; height: 10px; border-radius: 50%; background: #004FD6; margin-top: 4px; }
-.jps-history-item:not(:last-child) .jps-history-dot::after {
-  content: ''; position: absolute; left: 50%; top: 14px; transform: translateX(-50%);
-  width: 1px; height: calc(100% + 14px); background: var(--g200);
-}
-.jps-history-item:not(:first-child) .jps-history-dot { background: var(--g300); }
-.jps-history-content { flex: 1 0 0; min-width: 0; }
-.jps-history-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.jps-history-date { font-size: 14px; font-weight: 400; color: var(--g800); }
-.jps-history-meta { font-size: 13px; color: var(--g500); margin-top: 2px; }
-
-/* ── "Show to client" switch — builder opt-in to share budget difference ── */
+/* ── Budget difference "Show to client" toggle ── */
 .jps-client-switch {
   display: inline-flex; align-items: center; gap: 8px; flex-shrink: 0;
   background: none; border: none; padding: 4px; cursor: pointer; font-family: inherit;
@@ -1464,6 +1449,50 @@ table { width: 100%; border-collapse: collapse; }
 .jps-client-switch.on .jps-client-switch-thumb { transform: translateX(16px); }
 .jps-client-switch-label { font-size: 13px; font-weight: 500; color: var(--g700); white-space: nowrap; }
 .jps-client-switch:focus-visible { outline: 2px solid #004FD6; outline-offset: 2px; border-radius: 6px; }
+
+/* ── Dotted-underline term + hover/focus tooltip (e.g. "Budget difference") ── */
+.jps-term { position: relative; display: inline-flex; align-items: center; }
+.jps-term-label { border-bottom: 1px dotted currentColor; cursor: help; }
+button.jps-term-label { cursor: pointer; }
+/* BDS tooltip styling (Figma BdsTooltip): white fill, light border, secondary-gray
+   14px text, 8px radius. */
+.jps-term-tip {
+  position: absolute; left: 0; top: calc(100% + 6px); z-index: 60;
+  width: max-content; max-width: 280px; padding: 4px 8px; border-radius: 8px;
+  background: #fff; color: var(--fg-secondary, #4e555f);
+  border: 1px solid var(--border-default, #d3dbe2);
+  font-size: 14px; line-height: 20px; font-weight: 400; text-align: left;
+  opacity: 0; visibility: hidden; transition: opacity 0.12s ease;
+  pointer-events: none; box-shadow: 0 4px 12px rgba(16,24,40,0.10);
+}
+.jps-term:hover .jps-term-tip,
+.jps-term:focus-within .jps-term-tip { opacity: 1; visibility: visible; }
+
+/* Feedback modal body */
+.jps-feedback-input {
+  width: 100%; box-sizing: border-box; resize: vertical; min-height: 96px;
+  font-family: inherit; font-size: 14px; line-height: 20px; color: var(--g800);
+  border: 1px solid var(--g200); border-radius: 8px; padding: 10px 12px;
+}
+.jps-feedback-input:focus-visible { outline: 2px solid #004FD6; outline-offset: 1px; border-color: #004FD6; }
+.jps-feedback-thanks { font-size: 14px; color: var(--g700); padding: 8px 0; }
+
+/* Share history timeline */
+.jps-history-list { list-style: none; margin: 0; padding: 4px 0; display: flex; flex-direction: column; }
+.jps-history-item { position: relative; display: flex; gap: 12px; padding: 0 0 18px 4px; }
+.jps-history-item:last-child { padding-bottom: 0; }
+.jps-history-dot { position: relative; flex-shrink: 0; width: 10px; height: 10px; border-radius: 50%; background: #004FD6; margin-top: 4px; }
+.jps-history-item:not(:last-child) .jps-history-dot::after {
+  content: ''; position: absolute; left: 50%; top: 14px; transform: translateX(-50%);
+  width: 1px; height: calc(100% + 14px); background: var(--g200);
+}
+.jps-history-item:not(:first-child) .jps-history-dot { background: var(--g300); }
+.jps-history-content { flex: 1 0 0; min-width: 0; }
+.jps-history-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.jps-history-date { font-size: 14px; font-weight: 400; color: var(--g800); }
+.jps-history-meta { font-size: 13px; color: var(--g500); margin-top: 2px; }
+
+/* ── "Show to client" switch — builder opt-in to share budget difference ── */
 
 /* ── Per-job share control: Use default / Show / Hide + company default ── */
 .jps-share-control { display: inline-flex; align-items: center; gap: 10px; flex-shrink: 0; }
@@ -3061,8 +3090,14 @@ table { width: 100%; border-collapse: collapse; }
 .cp-circle-btn:hover { background: #F7F9FC; }
 
 /* Financials grid */
-.cp-financials-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+/* Columns stretch to the tall breakdown pane so the 2nd/3rd column bottoms line up
+   with it. The metric column spreads its two cards (top + bottom) to fill the height. */
+.cp-financials-grid { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 16px; align-items: stretch; }
 .cp-fin-card { border: 1px solid #EAEEF5; border-radius: 12px; padding: 20px; background: #fff; }
+/* Total paid / Remaining to pay — separate cards that grow to fill the column height
+   (equal halves), so they line up with the breakdown pane on the left. */
+.cp-fin-col { display: flex; flex-direction: column; gap: 16px; }
+.cp-fin-metric { flex: 1; padding: 20px; display: flex; flex-direction: column; justify-content: center; }
 .cp-fin-row { display: flex; align-items: baseline; padding: 4px 0; gap: 4px; }
 .cp-dots { flex: 1; border-bottom: 1px dotted #DEE3EB; margin: 0 8px; min-width: 16px; }
 .cp-fin-total { margin-top: 4px; }
@@ -3077,6 +3112,9 @@ table { width: 100%; border-collapse: collapse; }
 /* JPS openbook demo pane embedded in client portal financials grid */
 .cp-fin-jps-pane { border: 1px solid #EAEEF5; border-radius: 12px; padding: 20px; background: #fff; }
 .cp-fin-jps-pane .jps-pane-big { font-size: 24px; }
+/* Breakdown is the first thing in this pane — drop the default top margin so
+   "Original client price" sits tight to the top padding. */
+.cp-fin-jps-pane .jps-pane-breakdown { margin-top: 0; }
 .cp-fin-total-line { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--g200); font-weight: 600; }
 .cp-fin-total-line span:last-child { font-weight: 600; color: var(--bt-midnight); }
 
