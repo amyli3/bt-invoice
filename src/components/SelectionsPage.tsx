@@ -126,20 +126,6 @@ const INVOICE_REF_SEED: Record<string, InvoiceRef> = {
   'ms-17': { subject: 'Draft 1' }, // Cabinet install (still a draft)
 };
 
-// Fake % invoiced per allowance for the prototype. In production this is
-// invoicedAmount / approvedPrice. Seeded here so every allowance row shows a
-// bar with realistic variety (some fully billed, some partial, some untouched).
-const PCT_INVOICED_MAP: Record<string, number> = {
-  'ma-5': 0,
-  'ma-6': 35,
-  'ma-8': 100,
-  'ma-1': 60,
-  'ma-2': 80,
-  'ma-7': 25,
-  'ma-9': 45,
-  'ma-10': 15,
-};
-
 function rollupInvoiceRef(refs: InvoiceRef[]): InvoiceRef | undefined {
   if (refs.length === 0) return undefined;
   const allSame = refs.every(r => r.subject === refs[0].subject);
@@ -315,21 +301,6 @@ const InvoicedCell = ({ amount, invoiceRef, onOpen }: { amount: number; invoiceR
   );
 };
 
-const PctInvoicedCell = ({ pct }: { pct: number }) => {
-  const clamped = Math.min(100, Math.max(0, pct));
-  return (
-    <div className="sp-pct-bar-row">
-      <div className="sp-pct-bar">
-        <div
-          className={`sp-pct-bar-fill${clamped >= 100 ? ' sp-pct-bar-fill-full' : ''}`}
-          style={{ width: `${clamped}%` }}
-        />
-      </div>
-      <span className="sp-pct-value">{Math.round(clamped)}%</span>
-    </div>
-  );
-};
-
 const AllowanceIcon = () => (
   <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0 }}>
     <path fillRule="evenodd" clipRule="evenodd" d="M2.25928 3.20305C1.32316 3.6243 0.5 4.30937 0.5 5.25V7.75C0.5 8.69103 1.32264 9.37614 2.25891 9.79738C2.88695 10.0799 3.6538 10.2883 4.5 10.4019V10.75C4.5 11.691 5.32264 12.3761 6.25891 12.7974C7.24189 13.2396 8.56489 13.5 10 13.5C11.4351 13.5 12.7581 13.2396 13.7411 12.7974C14.6774 12.3761 15.5 11.691 15.5 10.75V8.25655L15.5 8.24998C15.5 7.42295 14.8571 6.79464 14.0945 6.37957C13.4062 6.00494 12.5055 5.7344 11.5 5.59774V5.25C11.5 4.30937 10.6768 3.6243 9.74072 3.20305C8.75766 2.76067 7.43467 2.5 6 2.5C4.56533 2.5 3.24234 2.76067 2.25928 3.20305ZM2.66965 4.11497C1.79613 4.50806 1.5 4.94799 1.5 5.25C1.5 5.55201 1.79613 5.99194 2.66965 6.38503C3.06609 6.56343 3.54313 6.71216 4.07865 6.81865C4.09098 6.8206 4.10317 6.823 4.11519 6.82583C4.68689 6.93692 5.32401 7 6 7C6.67599 7 7.31311 6.93692 7.88481 6.82583C7.89683 6.823 7.90902 6.8206 7.92135 6.81865C8.45687 6.71216 8.93391 6.56343 9.33035 6.38503C10.2039 5.99194 10.5 5.55201 10.5 5.25C10.5 4.94799 10.2039 4.50806 9.33035 4.11497C8.50376 3.74301 7.32675 3.5 6 3.5C4.67325 3.5 3.49624 3.74301 2.66965 4.11497ZM7.5 7.90171C7.02174 7.966 6.51815 8 6 8C5.48185 8 4.97826 7.966 4.5 7.90171V9.39193C4.9678 9.46159 5.472 9.5 6 9.5C6.528 9.5 7.0322 9.46159 7.5 9.39193V7.90171ZM8.5 9.18152V7.71464C8.95353 7.60388 9.37115 7.46326 9.74072 7.29695C10.0086 7.1764 10.2673 7.03424 10.5 6.87067V7.75C10.5 8.05272 10.2039 8.49261 9.33079 8.88543C9.08347 8.9967 8.80475 9.09642 8.5 9.18152ZM7.5 10.7151C7.21945 10.6471 6.95296 10.5679 6.70349 10.4789C6.47276 10.4928 6.23792 10.5 6 10.5C5.83167 10.5 5.66488 10.4964 5.5 10.4894V10.75C5.5 11.0527 5.79611 11.4926 6.66921 11.8854C6.91653 11.9967 7.19525 12.0964 7.5 12.1815V10.7151ZM8.5 12.3919V10.9015C8.97789 10.9657 9.48154 11 10 11C10.5182 11 11.0218 10.966 11.5 10.9018V12.3919C11.0322 12.4616 10.528 12.5 10 12.5C9.472 12.5 8.9678 12.4616 8.5 12.3919ZM3.5 7.71464C3.04647 7.60388 2.62885 7.46326 2.25928 7.29695C1.99139 7.1764 1.73275 7.03424 1.5 6.87067V7.75C1.5 8.05272 1.79611 8.49261 2.66921 8.88543C2.91653 8.9967 3.19525 9.09642 3.5 9.18152V7.71464ZM14.5 8.24743L14.5 8.25V8.25351C14.4977 8.55611 14.2005 8.99412 13.3308 9.38542C12.9356 9.56321 12.4603 9.7115 11.9266 9.81784C11.9108 9.82018 11.8952 9.82325 11.8798 9.82704C11.3095 9.93737 10.6741 9.99998 10 9.99998C9.76049 9.99998 9.52556 9.99199 9.29648 9.9767C9.45127 9.92085 9.59969 9.861 9.74109 9.79738C10.6774 9.37614 11.5 8.69103 11.5 7.75V6.60791C12.3571 6.73703 13.0865 6.96946 13.6165 7.2579C14.2813 7.61977 14.4986 7.98712 14.5 8.24743ZM12.5 10.715V12.1815C12.8048 12.0964 13.0835 11.9967 13.3308 11.8854C14.2039 11.4926 14.5 11.0527 14.5 10.75V9.87134C14.2674 10.0348 14.0089 10.1769 13.7411 10.2974C13.3714 10.4637 12.9537 10.6043 12.5 10.715Z" fill="currentColor"/>
@@ -370,7 +341,7 @@ interface SelectionsPageProps {
   onOpenInvoice?: () => void;
   onOpenReallocation?: () => void;
   onInvoiceSelected?: (ids: string[], target: 'new' | 'existing') => void;
-  onOpenInvoiceWizard?: () => void;
+  onOpenInvoiceWizard?: (preselectIds?: string[]) => void;
 }
 
 export default function SelectionsPage({
@@ -537,7 +508,6 @@ export default function SelectionsPage({
           <div className={`sp-col-remaining sp-section-remaining${groupRemaining < 0 ? ' sp-section-remaining-over' : ''}`}>
             {fmt(groupRemaining)}
           </div>
-          <div className="sp-col-pct"></div>
           <div className="sp-col-status"></div>
           <div className="sp-col-category"></div>
           <div className="sp-col-location"></div>
@@ -584,9 +554,6 @@ export default function SelectionsPage({
           <div className={`sp-col-remaining sp-remaining-amount${overBudget ? ' sp-remaining-over' : ''}`}>
             {fmt(allowanceRemaining)}
           </div>
-          <div className="sp-col-pct">
-            <PctInvoicedCell pct={PCT_INVOICED_MAP[row.id] ?? 0} />
-          </div>
           <div className="sp-col-status">
             {completedIds.has(row.id) && <StatusBadge status="Completed" />}
           </div>
@@ -618,7 +585,6 @@ export default function SelectionsPage({
                 <div className="sp-col-price">{fmt(opt.clientPrice)}</div>
                 <div className="sp-col-approved">{opt.approvedPrice !== null ? fmt(opt.approvedPrice) : ''}</div>
                 <div className="sp-col-remaining"></div>
-                <div className="sp-col-pct"></div>
                 <div className="sp-col-status"><StatusBadge status={audience === 'builder' ? deriveBuilderStatus(opt.status) : deriveRowStatus(opt.status, opt.dueDate)} /></div>
                 <div className="sp-col-category">{opt.category}</div>
                 <div className="sp-col-location">{opt.location}</div>
@@ -721,7 +687,6 @@ export default function SelectionsPage({
       <div className="sp-col-price">{fmt(row.clientPrice)}</div>
       <div className="sp-col-approved">{row.approvedPrice !== null ? fmt(row.approvedPrice) : ''}</div>
       <div className="sp-col-remaining"></div>
-      <div className="sp-col-pct"></div>
       <div className="sp-col-status"><StatusBadge status={audience === 'builder' ? deriveBuilderStatus(row.status) : deriveRowStatus(row.status, row.dueDate)} /></div>
       <div className="sp-col-category">{row.category}</div>
       <div className="sp-col-location">{row.location}</div>
@@ -928,7 +893,6 @@ export default function SelectionsPage({
               <div className="sp-col-price">Budget</div>
               <div className="sp-col-approved">Spent</div>
               <div className="sp-col-remaining">Remaining</div>
-              <div className="sp-col-pct">% invoiced</div>
               <div className="sp-col-status">Status</div>
               <div className="sp-col-category">Category</div>
               <div className="sp-col-location">Location</div>
@@ -965,7 +929,6 @@ export default function SelectionsPage({
               <div className="sp-col-price"><strong>{fmt(totalsClientPrice)}</strong></div>
               <div className="sp-col-approved"></div>
               <div className="sp-col-remaining"></div>
-              <div className="sp-col-pct"></div>
               <div className="sp-col-status"></div>
               <div className="sp-col-category"></div>
               <div className="sp-col-location"></div>
@@ -1250,7 +1213,7 @@ export default function SelectionsPage({
                   <button
                     type="button"
                     className="sp-mass-action-dropdown-item"
-                    onClick={() => { setMoreActionsOpen(false); onInvoiceSelected?.(selectedIds, 'new'); }}
+                    onClick={() => { setMoreActionsOpen(false); onOpenInvoiceWizard?.(selectedIds); }}
                   >
                     New Invoice
                   </button>

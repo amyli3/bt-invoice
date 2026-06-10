@@ -96,9 +96,12 @@ interface Props {
   onAdd: (items: SelectionGroup[]) => void;
   data: SelectionGroup[];
   addedChildIds?: string[];
+  // Row IDs (allowance group ids, allowance-child ids, or standalone ids) to
+  // pre-check when the wizard opens — e.g. the rows selected in the grid.
+  initialCheckedIds?: string[];
 }
 
-export default function SelectionsModalV2({ open, onClose, onAdd, data, addedChildIds = [] }: Props) {
+export default function SelectionsModalV2({ open, onClose, onAdd, data, addedChildIds = [], initialCheckedIds }: Props) {
   const addedChildSet = new Set(addedChildIds);
   const isAlreadyAdded = (c: SelectionChild) => addedChildSet.has(c.id);
   // Keep already-added children visible so the user sees what's billed here,
@@ -202,7 +205,21 @@ export default function SelectionsModalV2({ open, onClose, onAdd, data, addedChi
     if (!open) return;
     const e: Record<string, boolean> = {};
     availableData.forEach(g => { e[g.id] = true; });
-    setChecked({});
+    // Pre-check the rows passed in (e.g. the grid's selected rows). A selected
+    // allowance group checks all its billable selection children; selected
+    // child/standalone ids check the matching wizard child.
+    const init: Record<string, boolean> = {};
+    if (initialCheckedIds && initialCheckedIds.length > 0) {
+      const idSet = new Set(initialCheckedIds);
+      availableData.forEach(g => {
+        const groupSelected = idSet.has(g.id);
+        g.children.forEach(c => {
+          if (c.selection === 'Allowance' || c.newInvoiceAmt === null) return;
+          if (groupSelected || idSet.has(c.id)) init[c.id] = true;
+        });
+      });
+    }
+    setChecked(init);
     setExpanded(e);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);

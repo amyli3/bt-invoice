@@ -393,7 +393,10 @@ function getCostCodeViewGroups(addedIds: string[], completedIds: Set<string> = n
     isFromSelection: addedDrywallCO.length > 0,
   } as SOVLine, ...drywallSelectionLines];
 
-  // Plumbing: never previously invoiced, same cost code — invoice full selection amounts
+  // Plumbing: never previously invoiced, same cost code — invoice full selection amounts.
+  // Nothing was billed before, so This period = budget + approved-change overage (= the full
+  // approved selection total, e.g. $4,000 + $700 = $4,700). Matches the estimate view and the
+  // wizard's "Invoice amount"; cost-code view previously hard-coded This period to $0 (bug).
   const addedPlumbingCO = ESTIMATE_LINES.plumbing.filter(i => addedIds.includes(i.selId));
   const plumbingCOAdj = addedPlumbingCO.reduce((s, i) => s + (i.approved - i.estimate), 0);
   est.plumbing.lines = [{
@@ -402,7 +405,7 @@ function getCostCodeViewGroups(addedIds: string[], completedIds: Set<string> = n
     budget: 4000,
     coAdjustment: plumbingCOAdj,
     previousInvoice: 0,
-    thisInvoice: 0,
+    thisInvoice: addedPlumbingCO.length > 0 ? 4000 + plumbingCOAdj : 0,
     storedMaterials: 0,
     retainage: 0,
     isAllowance: addedPlumbingCO.length === 0,

@@ -2451,7 +2451,6 @@ button.jps-term-label { cursor: pointer; }
     minmax(0, 1fr)
     minmax(0, 1fr)
     minmax(0, 1fr)
-    minmax(0, 1.3fr)
     minmax(0, 0.9fr)
     minmax(0, 0.9fr)
     minmax(0, 0.9fr)
@@ -6717,3 +6716,49 @@ button.jps-term-label { cursor: pointer; }
 .selv2-credit-left { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
 .selv2-credit-icon { display: inline-flex; color: var(--g500); }
 .selv2-credit-name { font-size: 14px; font-weight: 600; color: var(--bt-midnight); }
+
+/* ── Inline text link (e.g. "Client tab under Job details" in the budget difference note) ── */
+.jps-inline-link {
+  background: none; border: none; padding: 0; margin: 0; font: inherit; cursor: pointer;
+  color: #004FD6; text-decoration: underline; text-underline-offset: 2px;
+}
+.jps-inline-link:hover { color: #003db0; }
+
+/* ── Job details → Clients permissions page (focused prototype) ── */
+.jdc-page { max-width: 1100px; margin: 0 auto; padding: 24px 32px 48px; }
+.jdc-hdr { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.jdc-hdr-title-row { display: flex; align-items: center; gap: 12px; }
+.jdc-hdr-title { font-size: 26px; font-weight: 800; color: var(--bt-midnight); margin: 0; }
+.jdc-status { font-size: 12px; font-weight: 600; color: #057E4B; background: #E6F6EE; border-radius: 999px; padding: 2px 10px; }
+.jdc-back { background: none; border: none; padding: 0; margin-top: 6px; font: inherit; font-size: 14px; color: #004FD6; cursor: pointer; }
+.jdc-hdr-actions { display: flex; gap: 8px; flex-shrink: 0; }
+.jdc-tabs { display: flex; gap: 8px; border-bottom: 1px solid var(--g200); margin: 16px 0 24px; flex-wrap: wrap; }
+.jdc-tab {
+  background: none; border: 1px solid transparent; border-bottom: none; padding: 8px 14px; font: inherit;
+  font-size: 14px; color: var(--g600); cursor: pointer; border-radius: 8px 8px 0 0; margin-bottom: -1px;
+}
+.jdc-tab.on { color: #004FD6; font-weight: 600; border-color: var(--g200); background: #fff; }
+.jdc-card { border: 1px solid var(--g200); border-radius: 12px; padding: 24px; background: #fff; }
+.jdc-card-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
+.jdc-card-title { font-size: 18px; font-weight: 700; color: var(--bt-midnight); margin: 0; }
+.jdc-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; align-items: start; }
+.jdc-col-title { font-size: 15px; font-weight: 700; color: var(--bt-midnight); margin: 0 0 12px; }
+.jdc-subhead { font-size: 13px; font-weight: 600; color: var(--g600); margin-bottom: 8px; }
+.jdc-check-row { display: flex; align-items: flex-start; gap: 10px; width: 100%; background: none; border: none; padding: 6px 0; font: inherit; text-align: left; cursor: pointer; }
+.jdc-check {
+  flex-shrink: 0; width: 18px; height: 18px; border-radius: 4px; border: 1.5px solid var(--g300);
+  display: flex; align-items: center; justify-content: center; margin-top: 1px; background: #fff;
+}
+.jdc-check.on { background: #004FD6; border-color: #004FD6; }
+.jdc-check-text { display: flex; flex-direction: column; gap: 2px; }
+.jdc-check-label { font-size: 14px; color: var(--bt-midnight); }
+.jdc-check-hint { font-size: 12px; color: var(--g500); }
+.jdc-indent { margin-left: 28px; }
+.jdc-timeframe { margin-top: 4px; margin-bottom: 4px; }
+.jdc-select { display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--g200); border-radius: 8px; padding: 7px 12px; font-size: 14px; color: var(--bt-midnight); }
+.jdc-select-caret { color: var(--g500); }
+.jdc-radio { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--bt-midnight); padding: 4px 0; }
+.jdc-chips { display: flex; flex-wrap: wrap; gap: 6px; border: 1px solid var(--g200); border-radius: 8px; padding: 10px; margin-top: 4px; }
+.jdc-chip { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--g700); background: var(--g50); border: 1px solid var(--g200); border-radius: 6px; padding: 3px 8px; }
+.jdc-chip-x { color: var(--g400); }
+@media (max-width: 760px) { .jdc-cols { grid-template-columns: 1fr; gap: 28px; } }

@@ -313,7 +313,7 @@ const ActivityKindIcon = ({ kind }: { kind: string }) => {
 
 /* ── Component ── */
 
-export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection, onBack, isClient = false, shareBudgetDiff = false, onShareBudgetDiffChange }: { jobOpen?: boolean; onToggleJob?: () => void; onOpenSelection?: (sel: { name: string; category: string; price: number; allowanceName?: string; status: string }) => void; onBack?: () => void; onOpenJCB?: () => void; isClient?: boolean; shareBudgetDiff?: boolean; onShareBudgetDiffChange?: (v: boolean) => void }) {
+export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection, onBack, isClient = false, shareBudgetDiff = false, onShareBudgetDiffChange, onOpenClientPermissions }: { jobOpen?: boolean; onToggleJob?: () => void; onOpenSelection?: (sel: { name: string; category: string; price: number; allowanceName?: string; status: string }) => void; onBack?: () => void; onOpenJCB?: () => void; isClient?: boolean; shareBudgetDiff?: boolean; onShareBudgetDiffChange?: (v: boolean) => void; onOpenClientPermissions?: () => void }) {
   // '__s4-v1-adj__' seeded open so "Approved changes" shows its breakdown by default.
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({ '__s4-v1-adj__': true });
   // v41 (cost category) budget difference: free-form notes the builder types to
@@ -2618,7 +2618,11 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                       : slice4Version === 'v411'
                       ? "The difference between revised and original budget cost for each cost category. The largest cost is the biggest single bill, PO, or time clock entry on the cost code that's over budget. Approved change orders and selection and allowance changes aren't included."
                       : slice4Version === 'v41' || slice4Version === 'v41notes'
-                      ? "The difference between the original and revised client price for each cost category in the job costing budget. Change orders and selections aren't included. To let your client see it, turn it on in the Client tab under Job details."
+                      ? (
+                        <>
+                          The difference between the original and revised client price for each cost category in the job costing budget. Change orders and selections aren't included.{!viewAsClient && <> Clients don't see the budget difference unless you turn it on in <button type="button" className="jps-inline-link" onClick={() => onOpenClientPermissions?.()}>Client permissions</button>.</>}
+                        </>
+                      )
                       : "The difference between revised and original budget cost for each cost category. Approved change orders and selection and allowance changes aren't included."}
                   </div>
                   <div className="jps-table">

@@ -17,6 +17,7 @@ import SelectionsModal from './components/SelectionsModal';
 import SelectionsModalV2 from './components/SelectionsModalV2';
 import SelectionsModalV3 from './components/SelectionsModalV3';
 import JobPriceSummary from './components/JobPriceSummary';
+import JobDetailsClients from './components/JobDetailsClients';
 import SelectionsPage from './components/SelectionsPage';
 import OptionDetailPage from './components/OptionDetailPage';
 import AIAPayApp, { type OverageInfo } from './components/AIAPayApp';
@@ -34,9 +35,9 @@ import UnderageFlows from './components/UnderageFlows';
 import { JOBS } from './mockData';
 import { getNextId } from './mockData';
 
-type PageType = 'invoice' | 'invoice-2' | 'invoice-3' | 'job-price-summary' | 'selections' | 'option-detail' | 'progress-invoice' | 'change-order' | 'change-order-list' | 'client-portal' | 'client-jps' | 'estimate' | 'client-selections' | 'client-selections-2' | 'client-selections-3' | 'mobile-budget' | 'job-costing-budget' | 'underage-flows';
+type PageType = 'invoice' | 'invoice-2' | 'invoice-3' | 'job-price-summary' | 'selections' | 'option-detail' | 'progress-invoice' | 'change-order' | 'change-order-list' | 'client-portal' | 'client-jps' | 'estimate' | 'client-selections' | 'client-selections-2' | 'client-selections-3' | 'mobile-budget' | 'job-costing-budget' | 'underage-flows' | 'job-details-clients';
 
-const validPages: PageType[] = ['invoice', 'invoice-2', 'invoice-3', 'job-price-summary', 'selections', 'option-detail', 'progress-invoice', 'change-order', 'change-order-list', 'client-portal', 'client-jps', 'estimate', 'client-selections', 'client-selections-2', 'client-selections-3', 'mobile-budget', 'job-costing-budget', 'underage-flows'];
+const validPages: PageType[] = ['invoice', 'invoice-2', 'invoice-3', 'job-price-summary', 'selections', 'option-detail', 'progress-invoice', 'change-order', 'change-order-list', 'client-portal', 'client-jps', 'estimate', 'client-selections', 'client-selections-2', 'client-selections-3', 'mobile-budget', 'job-costing-budget', 'underage-flows', 'job-details-clients'];
 
 function getInitialPage(): PageType {
   // Support ?page=X query param (used when hash is occupied by Figma capture)
@@ -98,6 +99,7 @@ export default function App() {
   const [selModalOpen, setSelModalOpen] = useState(false);
   const [selV2ModalOpen, setSelV2ModalOpen] = useState(false);
   const [selectionsWizardOpen, setSelectionsWizardOpen] = useState(false);
+  const [wizardPreselectIds, setWizardPreselectIds] = useState<string[]>([]);
   const [completedAllowanceIds, setCompletedAllowanceIds] = useState<Set<string>>(new Set());
   const toggleAllowanceComplete = (id: string) => {
     setCompletedAllowanceIds(prev => {
@@ -510,7 +512,7 @@ export default function App() {
               onToggleAllowanceComplete={toggleAllowanceComplete}
               onOpenInvoice={() => setActivePage('invoice')}
               onOpenReallocation={() => { setActivePage('invoice-2'); setSelModalOpen(true); }}
-              onOpenInvoiceWizard={() => { setInvoice(defaultInvoice); setSelectionsWizardOpen(true); }}
+              onOpenInvoiceWizard={(ids) => { setInvoice(defaultInvoice); setWizardPreselectIds(ids ?? []); setSelectionsWizardOpen(true); }}
               onInvoiceSelected={(ids, _target) => {
                 // Map selected row IDs from the grid to invoice line items.
                 // Allowance rows match by group.id; selection/standalone rows
@@ -560,6 +562,7 @@ export default function App() {
             setActivePage('invoice-2');
           }}
           data={selectionsModalData}
+          initialCheckedIds={wizardPreselectIds}
         />
       </div>
     );
@@ -597,6 +600,20 @@ export default function App() {
     );
   }
 
+  if (activePage === 'job-details-clients') {
+    return (
+      <div style={{display: 'flex', flexDirection: 'column', height: '100vh'}}>
+        <TopNav onNavigate={(page) => setActivePage(page as PageType)} />
+        <div style={{display: 'flex', flex: 1, minHeight: 0}}>
+          <JobSidebar open={jobOpen} onToggle={() => setJobOpen(false)} selectedJob={selectedJob} onSelectJob={(id) => { setSelectedJob(id); if (isNarrow) setJobOpen(false); }} onHomeClick={() => setActivePage('client-portal')} />
+          <div className="content-area" style={{overflowY: 'auto'}}>
+            <JobDetailsClients shareBudgetDiff={shareBudgetDiff} onShareBudgetDiffChange={setShareBudgetDiff} onBack={() => setActivePage('job-price-summary')} />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (activePage === 'job-price-summary') {
     return (
       <div style={{display: 'flex', flexDirection: 'column', height: '100vh'}}>
@@ -604,7 +621,7 @@ export default function App() {
         <div style={{display: 'flex', flex: 1, minHeight: 0}}>
           <JobSidebar open={jobOpen} onToggle={() => setJobOpen(false)} selectedJob={selectedJob} onSelectJob={(id) => { setSelectedJob(id); if (isNarrow) setJobOpen(false); }} onHomeClick={() => setActivePage('client-portal')} />
           <div className="content-area">
-            <JobPriceSummary jobOpen={jobOpen} onToggleJob={() => setJobOpen(true)} shareBudgetDiff={shareBudgetDiff} onShareBudgetDiffChange={setShareBudgetDiff} onOpenSelection={(sel) => { setSelectedOption(sel); setOptionOpenedFrom('job-price-summary'); setActivePage('option-detail'); }} onOpenJCB={() => setActivePage('job-costing-budget')} />
+            <JobPriceSummary jobOpen={jobOpen} onToggleJob={() => setJobOpen(true)} shareBudgetDiff={shareBudgetDiff} onShareBudgetDiffChange={setShareBudgetDiff} onOpenSelection={(sel) => { setSelectedOption(sel); setOptionOpenedFrom('job-price-summary'); setActivePage('option-detail'); }} onOpenJCB={() => setActivePage('job-costing-budget')} onOpenClientPermissions={() => setActivePage('job-details-clients')} />
           </div>
         </div>
       </div>
