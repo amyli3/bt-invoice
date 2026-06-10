@@ -336,6 +336,9 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
   const [slice4Version, setSlice4Version] = useState<'v1' | 'v2' | 'v3' | 'v4' | 'v41' | 'v41notes' | 'v411' | 'v45' | 'v5'>('v1');
   const [slice4DrillOpen, setSlice4DrillOpen] = useState(false);
   const [showPrint, setShowPrint] = useState(false);
+  // Customize popover — builder chooses what the client sees (budget difference, COs, payments).
+  // Iteration of the in-section "Show to client" toggle, using the BDS Customize pattern.
+  const [customizeOpen, setCustomizeOpen] = useState(false);
   // Send job price summary to client — channel preferences, default both on.
   const [showSend, setShowSend] = useState(false);
   const [sendEmail, setSendEmail] = useState(true);
@@ -1086,6 +1089,35 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                 onClick={() => { setFeedbackSent(false); setFeedbackOpen(true); }}
                 icon={<svg width="14" height="18" viewBox="0 0 22.0009 28.0001" fill="none" aria-hidden="true"><path fillRule="evenodd" clipRule="evenodd" d="M21.3524 7.28088C19.7502 2.82144 15.4723 -0.110852 10.7351 0.00321325C4.77283 0.143546 -0.0324698 5.09533 0.000165251 11.062C0.0164467 14.4243 1.57236 17.5946 4.22274 19.6646C4.71245 20.0458 4.99875 20.6297 5.00029 21.2487L5.0003 22.0001L5.00579 22.1494C5.08217 23.1842 5.94595 24.0001 7.0003 24.0001H15.0003L15.1496 23.9946C16.1844 23.9183 17.0003 23.0545 17.0003 22.0001L17.0003 21.2471L17.0084 21.079C17.0586 20.5222 17.3399 20.0038 17.7893 19.6556C21.5211 16.7247 22.9546 11.7403 21.3524 7.28088ZM17.0003 27.0001C17.0003 26.4478 16.5526 26.0001 16.0003 26.0001H6.00032L5.8837 26.0068C5.38636 26.0646 5.00032 26.4872 5.00032 27.0001C5.00032 27.5524 5.44803 28.0001 6.00032 28.0001H16.0003L16.1169 27.9934C16.6143 27.9356 17.0003 27.5129 17.0003 27.0001ZM11.0589 2.0002L10.7827 2.00265C5.91054 2.11732 1.97349 6.17438 2.00017 11.0517C2.013 13.7005 3.19354 16.203 5.21553 17.8957L5.63039 18.2342C6.43786 18.9408 6.92888 19.9423 6.9931 21.0153L7.00029 21.2462L7.0003 22.0001H15.0003L15.0004 21.2411C15.0073 20.0789 15.5146 18.9801 16.3812 18.225L16.7844 17.8959C19.6653 15.4803 20.7484 11.5146 19.4702 7.95714C18.1905 4.39535 14.8246 2.02426 11.0589 2.0002ZM12.1832 4.11223L12.0671 4.09931C11.5671 4.07292 11.1157 4.42492 11.0297 4.93051C10.9372 5.47498 11.3036 5.99139 11.848 6.08394C13.9363 6.43891 15.573 8.07357 15.9305 10.1614C16.0238 10.7058 16.5406 11.0715 17.085 10.9783C17.6293 10.8851 17.9951 10.3682 17.9018 9.82385C17.401 6.89923 15.1084 4.60945 12.1832 4.11223Z" fill="currentColor" /></svg>}
               />
+            )}
+            {!viewAsClient && (
+              <div className="jps-customize" style={{ position: 'relative' }}>
+                <BdsButton
+                  displayType="secondary"
+                  text="Customize"
+                  onClick={() => setCustomizeOpen(o => !o)}
+                  icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/><circle cx="9" cy="6" r="2" fill="var(--bds-color-gray-0,#fff)"/><circle cx="15" cy="12" r="2" fill="var(--bds-color-gray-0,#fff)"/><circle cx="9" cy="18" r="2" fill="var(--bds-color-gray-0,#fff)"/></svg>}
+                />
+                {customizeOpen && (
+                  <>
+                    <div className="col-vis-backdrop" onClick={() => setCustomizeOpen(false)} />
+                    <div className="col-vis-pop" style={{ zIndex: 30, right: 0, left: 'auto' }}>
+                      <div className="col-vis-pop-header">Show to client</div>
+                      {activeSlice === 'slice5' && (
+                        <div className="col-vis-item" onClick={() => onShareBudgetDiffChange?.(!shareBudgetDiff)}>
+                          <div className={"col-vis-check" + (shareBudgetDiff ? " on" : "")} /><span>Budget difference</span>
+                        </div>
+                      )}
+                      <div className="col-vis-item" onClick={() => setPrintOptions(p => ({ ...p, changeOrders: !p.changeOrders }))}>
+                        <div className={"col-vis-check" + (printOptions.changeOrders ? " on" : "")} /><span>Change orders</span>
+                      </div>
+                      <div className="col-vis-item" onClick={() => setPrintOptions(p => ({ ...p, payments: !p.payments }))}>
+                        <div className={"col-vis-check" + (printOptions.payments ? " on" : "")} /><span>Payments</span>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
             )}
             {activeSlice === 'slice5' && slice4Version === 'v41notes' ? (
               <BdsButton
@@ -2571,20 +2603,8 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                   whether the client sees it. Client view renders it only when shared. */}
               {(slice4Version === 'v4' || slice4Version === 'v41' || slice4Version === 'v41notes' || slice4Version === 'v411' || slice4Version === 'v45') && showBudgetDiff && (
                 <div className="jps-breakdown-section" id="jps-sec-budget-difference">
-                  <div className="jps-section-header jps-section-header-split">
+                  <div className="jps-section-header">
                     <BdsText as="h2" size="heavy-lg" className="jps-section-title">Budget difference</BdsText>
-                    {!viewAsClient && (
-                      <button
-                        type="button"
-                        role="switch"
-                        aria-checked={shareBudgetDiff}
-                        className={`jps-client-switch${shareBudgetDiff ? ' on' : ''}`}
-                        onClick={() => onShareBudgetDiffChange?.(!shareBudgetDiff)}
-                      >
-                        <span className="jps-client-switch-track"><span className="jps-client-switch-thumb" /></span>
-                        <span className="jps-client-switch-label">Show to client</span>
-                      </button>
-                    )}
                   </div>
                   {slice4Version === 'v41notes' && notesSavedAt && !notesDirty && (
                     <div className="jps-notes-saved-banner" role="status">
@@ -2598,7 +2618,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                       : slice4Version === 'v411'
                       ? "The difference between revised and original budget cost for each cost category. The largest cost is the biggest single bill, PO, or time clock entry on the cost code that's over budget. Approved change orders and selection and allowance changes aren't included."
                       : slice4Version === 'v41' || slice4Version === 'v41notes'
-                      ? "The difference between the original and revised client price for each cost category in the job costing budget. Change orders and selections aren't included."
+                      ? "The difference between the original and revised client price for each cost category in the job costing budget. Change orders and selections aren't included. To let your client see it, turn it on in the Client tab under Job details."
                       : "The difference between revised and original budget cost for each cost category. Approved change orders and selection and allowance changes aren't included."}
                   </div>
                   <div className="jps-table">

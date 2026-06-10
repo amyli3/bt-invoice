@@ -97,6 +97,7 @@ export default function App() {
   const [estModalOpen, setEstModalOpen] = useState(false);
   const [selModalOpen, setSelModalOpen] = useState(false);
   const [selV2ModalOpen, setSelV2ModalOpen] = useState(false);
+  const [selectionsWizardOpen, setSelectionsWizardOpen] = useState(false);
   const [completedAllowanceIds, setCompletedAllowanceIds] = useState<Set<string>>(new Set());
   const toggleAllowanceComplete = (id: string) => {
     setCompletedAllowanceIds(prev => {
@@ -509,6 +510,7 @@ export default function App() {
               onToggleAllowanceComplete={toggleAllowanceComplete}
               onOpenInvoice={() => setActivePage('invoice')}
               onOpenReallocation={() => { setActivePage('invoice-2'); setSelModalOpen(true); }}
+              onOpenInvoiceWizard={() => { setInvoice(defaultInvoice); setSelectionsWizardOpen(true); }}
               onInvoiceSelected={(ids, _target) => {
                 // Map selected row IDs from the grid to invoice line items.
                 // Allowance rows match by group.id; selection/standalone rows
@@ -549,6 +551,16 @@ export default function App() {
             />
           </div>
         </div>
+        <SelectionsModalV2
+          open={selectionsWizardOpen}
+          onClose={() => setSelectionsWizardOpen(false)}
+          onAdd={(items) => {
+            handleAddFromSelections(items);
+            setSelectionsWizardOpen(false);
+            setActivePage('invoice-2');
+          }}
+          data={selectionsModalData}
+        />
       </div>
     );
   }

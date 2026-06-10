@@ -370,6 +370,7 @@ interface SelectionsPageProps {
   onOpenInvoice?: () => void;
   onOpenReallocation?: () => void;
   onInvoiceSelected?: (ids: string[], target: 'new' | 'existing') => void;
+  onOpenInvoiceWizard?: () => void;
 }
 
 export default function SelectionsPage({
@@ -382,9 +383,10 @@ export default function SelectionsPage({
   onOpenInvoice,
   onOpenReallocation,
   onInvoiceSelected,
+  onOpenInvoiceWizard,
 }: SelectionsPageProps) {
   const [moreActionsOpen, setMoreActionsOpen] = useState(false);
-  const [invoiceMenuOpen, setInvoiceMenuOpen] = useState(false);
+  const [optionMenuOpen, setOptionMenuOpen] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>('allowance');
   const [viewLayout, setViewLayout] = useState<ViewLayout>('list');
   const [audience, setAudience] = useState<AudienceView>('builder');
@@ -781,28 +783,28 @@ export default function SelectionsPage({
                 Client view
               </button>
             </div>
+            <button className="btn btn-s" style={{ gap: 4 }} onClick={() => onOpenInvoiceWizard?.()}>
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 2V12M2 7H12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+              Invoice
+            </button>
             <div className="od-split-btn" style={{ position: 'relative' }}>
-              <button className="od-split-main" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }} onClick={() => onInvoiceSelected?.(selectedIds, 'new')}>
+              <button className="od-split-main" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }} onClick={() => onOpenOption?.()}>
                 <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 2V12M2 7H12" stroke="white" strokeWidth="1.5" strokeLinecap="round"/></svg>
-                Invoice
+                Option
               </button>
-              <button className="od-split-caret" onClick={() => setInvoiceMenuOpen(o => !o)} aria-label="Invoice options" aria-expanded={invoiceMenuOpen}>
+              <button className="od-split-caret" onClick={() => setOptionMenuOpen(o => !o)} aria-label="Option types" aria-expanded={optionMenuOpen}>
                 <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 3.5L5 6.5L8 3.5" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
               </button>
-              {invoiceMenuOpen && (
+              {optionMenuOpen && (
                 <>
-                  <div className="sp-menu-backdrop" onClick={() => setInvoiceMenuOpen(false)} />
+                  <div className="sp-menu-backdrop" onClick={() => setOptionMenuOpen(false)} />
                   <div className="sp-mass-action-dropdown" style={{ bottom: 'auto', top: 'calc(100% + 6px)' }}>
-                    <button type="button" className="sp-mass-action-dropdown-item" onClick={() => { setInvoiceMenuOpen(false); onInvoiceSelected?.(selectedIds, 'new'); }}>New invoice</button>
-                    <button type="button" className="sp-mass-action-dropdown-item" onClick={() => { setInvoiceMenuOpen(false); onInvoiceSelected?.(selectedIds, 'existing'); }}>Add to existing invoice</button>
+                    <button type="button" className="sp-mass-action-dropdown-item" onClick={() => { setOptionMenuOpen(false); onOpenOption?.(); }}>Single selection</button>
+                    <button type="button" className="sp-mass-action-dropdown-item" onClick={() => { setOptionMenuOpen(false); onOpenOption?.(); }}>Allowance</button>
                   </div>
                 </>
               )}
             </div>
-            <button className="btn btn-p" style={{ gap: 4 }} onClick={() => onOpenOption?.()}>
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 2V12M2 7H12" stroke="white" strokeWidth="1.5" strokeLinecap="round"/></svg>
-              Option
-            </button>
           </div>
         </div>
       </div>
