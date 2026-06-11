@@ -2275,7 +2275,7 @@ button.jps-term-label { cursor: pointer; }
 /* ══════════════ SELECTIONS PAGE ══════════════ */
 
 .sp-body { flex: 1; overflow-y: auto; padding: 24px 32px; background: white; }
-.sp-table { max-width: 1100px; margin: 0 auto; border: 1px solid var(--g200); border-radius: 10px; overflow-x: auto; overflow-y: hidden; }
+.sp-table { max-width: 1340px; margin: 0 auto; border: 1px solid var(--g200); border-radius: 10px; overflow-x: auto; overflow-y: hidden; }
 
 /* Allowance rollup strip — surfaces held underages + overages for the whole project */
 .sp-rollup {
@@ -2341,7 +2341,7 @@ button.jps-term-label { cursor: pointer; }
 /* Toolbar: search + organize by + view toggle */
 .sp-toolbar {
   display: flex; align-items: center; gap: 16px; margin-bottom: 16px;
-  max-width: 1100px; margin-left: auto; margin-right: auto;
+  max-width: 1340px; margin-left: auto; margin-right: auto;
   flex-wrap: wrap;
 }
 .sp-toolbar-organize { display: flex; align-items: center; gap: 8px; }
@@ -2458,7 +2458,7 @@ button.jps-term-label { cursor: pointer; }
     minmax(0, 1.2fr)
     minmax(0, 0.9fr);
   align-items: center; border-bottom: 1px solid var(--g100);
-  min-width: 1440px;
+  min-width: 1300px;
   background: white;
 }
 .sp-col-remaining { text-align: right; color: var(--g700); }
