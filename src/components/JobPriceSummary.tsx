@@ -333,7 +333,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
   // v1 inline expandable, v2 always-on list, v3 drill-through, v4 grouped sections,
   // v5 visual contribution bar — iteration of v2 that swaps three nested rows for a stacked
   // bar + decision callout (Sarah review, May 2026).
-  const [slice4Version, setSlice4Version] = useState<'v1' | 'v2' | 'v3' | 'v4' | 'v41' | 'v41notes' | 'v411' | 'v45' | 'v5'>('v1');
+  const [slice4Version, setSlice4Version] = useState<'v1' | 'v2' | 'v3' | 'v4' | 'v41' | 'v41notes' | 'v411' | 'v45' | 'v44' | 'v5'>('v1');
   const [slice4DrillOpen, setSlice4DrillOpen] = useState(false);
   const [showPrint, setShowPrint] = useState(false);
   // Customize popover — builder chooses what the client sees (budget difference, COs, payments).
@@ -1307,11 +1307,11 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
             <div className="jps-panes-row">
               {/* Card 1: Total price */}
               <div className="jps-pane">
-                <div className="jps-pane-label">Total price</div>
+                <div className="jps-pane-label">Total revised price</div>
                 <div className="jps-pane-big" style={{ marginTop: 4 }}>{fmt(revisedClientPrice)}</div>
                 <div className="jps-pane-breakdown" style={{ marginTop: 16 }}>
                   <div className="jps-breakdown-line">
-                    <span>Original client price</span>
+                    <span>Original price</span>
                     <span>{fmt(originalContractPrice)}</span>
                   </div>
                   <div className="jps-breakdown-line jps-breakdown-parent">
@@ -1537,11 +1537,11 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
             {/* Summary cards — same 3-card row as Slice 2 */}
             <div className="jps-panes-row">
               <div className="jps-pane">
-                <div className="jps-pane-label">Total price</div>
+                <div className="jps-pane-label">Total revised price</div>
                 <div className="jps-pane-big" style={{ marginTop: 4 }}>{fmt(revisedClientPrice)}</div>
                 <div className="jps-pane-breakdown" style={{ marginTop: 16 }}>
                   <div className="jps-breakdown-line">
-                    <span>Original client price</span>
+                    <span>Original price</span>
                     <span>{fmt(originalContractPrice)}</span>
                   </div>
                   <div className="jps-breakdown-line jps-breakdown-parent">
@@ -1886,11 +1886,11 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
         <div className="jps-panes-row">
           {/* Card 1: Total price — original layout */}
           <div className="jps-pane">
-            <div className="jps-pane-label">Total price</div>
+            <div className="jps-pane-label">Total revised price</div>
             <div className="jps-pane-big" style={{ marginTop: 4 }}>{fmt(revisedClientPrice)}</div>
             <div className="jps-pane-breakdown" style={{ marginTop: 16 }}>
               <div className="jps-breakdown-line">
-                <span>Original client price</span>
+                <span>Original price</span>
                 <span>{fmt(originalContractPrice)}</span>
               </div>
               <div className="jps-breakdown-line jps-breakdown-parent">
@@ -2234,11 +2234,11 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
             // Inline expandable: "Approved changes" parent row is clickable to reveal the nested rows.
             totalPriceCard = (
               <div className="jps-pane">
-                <div className="jps-pane-label">Total price</div>
+                <div className="jps-pane-label">Total revised price</div>
                 <div className="jps-pane-big" style={{ marginTop: 4 }}>{fmt(revisedPriceS4)}</div>
                 <div className="jps-pane-breakdown" style={{ marginTop: 16 }}>
                   <div className="jps-breakdown-line">
-                    <span>Original client price</span>
+                    <span>Original price</span>
                     <span>{fmt(originalContractPrice)}</span>
                   </div>
                   <button
@@ -2276,11 +2276,11 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
             // Drill-through: rollup only — "Approved changes" label is a hyperlink that opens a modal with the breakdown.
             totalPriceCard = (
               <div className="jps-pane">
-                <div className="jps-pane-label">Total price</div>
+                <div className="jps-pane-label">Total revised price</div>
                 <div className="jps-pane-big" style={{ marginTop: 4 }}>{fmt(revisedPriceS4)}</div>
                 <div className="jps-pane-breakdown" style={{ marginTop: 16 }}>
                   <div className="jps-breakdown-line">
-                    <span>Original client price</span>
+                    <span>Original price</span>
                     <span>{fmt(originalContractPrice)}</span>
                   </div>
                   <div className="jps-breakdown-line jps-breakdown-parent">
@@ -2291,18 +2291,15 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                 </div>
               </div>
             );
-          } else if (slice4Version === 'v4' || slice4Version === 'v41' || slice4Version === 'v41notes' || slice4Version === 'v411' || slice4Version === 'v45') {
-            // v4 / v4.1 / v4.5: v2-style always-on breakdown with a clickable Budget difference
-            // row that opens a side panel. v4 = Cost code drill with bills, v4.1 = category totals,
-            // v4.1.1 = category totals expandable to bill/PO/time-clock activity,
-            // v4.5 = drill grouped by Estimate (location).
+          } else if (slice4Version === 'v44') {
+            // v4.4 = v4 (cost category) behavior everywhere, but the Total revised price
+            // card uses the client-portal card layout: a single breakdown list with the
+            // total as a bottom line (no large headline number).
             totalPriceCard = (
-              <div className="jps-pane">
-                <div className="jps-pane-label">Total price</div>
-                <div className="jps-pane-big" style={{ marginTop: 4 }}>{fmt(revisedPriceS4)}</div>
-                <div className="jps-pane-breakdown" style={{ marginTop: 16 }}>
+              <div className="jps-pane cp-fin-jps-pane">
+                <div className="jps-pane-breakdown">
                   <div className="jps-breakdown-line">
-                    <span>Original client price</span>
+                    <span>Original price</span>
                     <span>{fmt(originalContractPrice)}</span>
                   </div>
                   <div className="jps-breakdown-line jps-breakdown-parent">
@@ -2320,7 +2317,53 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                   <div className="jps-breakdown-line jps-breakdown-nested">
                     {showBudgetDiff
                       ? <button type="button" className="jps-s4-scroll-link" onClick={() => document.getElementById('jps-sec-budget-difference')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>Budget difference</button>
-                      : <span>Budget difference</span>}
+                      : <span className="jps-term">
+                          <span className="jps-term-label" tabIndex={0}>Budget difference</span>
+                          <span className="jps-term-tip" role="tooltip">Cost overages from the original job budget, excluding Selections and Change Orders</span>
+                        </span>}
+                    <span className={JCB_OWNER_PRICE_DELTA >= 0 ? 'jps-impact-up' : 'jps-impact-down'}>{fmt(JCB_OWNER_PRICE_DELTA)}</span>
+                  </div>
+                  <div className="jps-breakdown-line"><span>Tax</span><span>{fmt(totalTax)}</span></div>
+                  <div className="jps-breakdown-line cp-fin-total-line">
+                    <span>Total revised price</span>
+                    <span>{fmt(revisedPriceS4)}</span>
+                  </div>
+                </div>
+              </div>
+            );
+          } else if (slice4Version === 'v4' || slice4Version === 'v41' || slice4Version === 'v41notes' || slice4Version === 'v411' || slice4Version === 'v45') {
+            // v4 / v4.1 / v4.5: v2-style always-on breakdown with a clickable Budget difference
+            // row that opens a side panel. v4 = Cost code drill with bills, v4.1 = category totals,
+            // v4.1.1 = category totals expandable to bill/PO/time-clock activity,
+            // v4.5 = drill grouped by Estimate (location).
+            totalPriceCard = (
+              <div className="jps-pane">
+                <div className="jps-pane-label">Total revised price</div>
+                <div className="jps-pane-big" style={{ marginTop: 4 }}>{fmt(revisedPriceS4)}</div>
+                <div className="jps-pane-breakdown" style={{ marginTop: 16 }}>
+                  <div className="jps-breakdown-line">
+                    <span>Original price</span>
+                    <span>{fmt(originalContractPrice)}</span>
+                  </div>
+                  <div className="jps-breakdown-line jps-breakdown-parent">
+                    <span>Approved changes</span>
+                    <span>{fmt(priceAdjustment)}</span>
+                  </div>
+                  <div className="jps-breakdown-line jps-breakdown-nested">
+                    <button type="button" className="jps-s4-scroll-link" onClick={() => document.getElementById('jps-sec-allowances')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>Selection and allowance changes</button>
+                    <span>{fmt(approvedSelectionsTotal)}</span>
+                  </div>
+                  <div className="jps-breakdown-line jps-breakdown-nested">
+                    <button type="button" className="jps-s4-scroll-link" onClick={() => document.getElementById('jps-sec-change-orders')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>Change Orders</button>
+                    <span>{fmt(changeOrdersTotal)}</span>
+                  </div>
+                  <div className="jps-breakdown-line jps-breakdown-nested">
+                    {showBudgetDiff
+                      ? <button type="button" className="jps-s4-scroll-link" onClick={() => document.getElementById('jps-sec-budget-difference')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>Budget difference</button>
+                      : <span className="jps-term">
+                          <span className="jps-term-label" tabIndex={0}>Budget difference</span>
+                          <span className="jps-term-tip" role="tooltip">Cost overages from the original job budget, excluding Selections and Change Orders</span>
+                        </span>}
                     <span className={JCB_OWNER_PRICE_DELTA >= 0 ? 'jps-impact-up' : 'jps-impact-down'}>{fmt(JCB_OWNER_PRICE_DELTA)}</span>
                   </div>
                   <div className="jps-breakdown-line"><span>Tax</span><span>{fmt(totalTax)}</span></div>
@@ -2339,11 +2382,11 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
 
             totalPriceCard = (
               <div className="jps-pane">
-                <div className="jps-pane-label">Total price</div>
+                <div className="jps-pane-label">Total revised price</div>
                 <div className="jps-pane-big" style={{ marginTop: 4 }}>{fmt(revisedPriceV5)}</div>
                 <div className="jps-pane-breakdown" style={{ marginTop: 16 }}>
                   <div className="jps-breakdown-line">
-                    <span>Original client price</span>
+                    <span>Original price</span>
                     <span>{fmt(originalContractPrice)}</span>
                   </div>
                   <div className="jps-breakdown-line jps-breakdown-parent">
@@ -2372,11 +2415,11 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
             // v2: full always-on breakdown including bill variances.
             totalPriceCard = (
               <div className="jps-pane">
-                <div className="jps-pane-label">Total price</div>
+                <div className="jps-pane-label">Total revised price</div>
                 <div className="jps-pane-big" style={{ marginTop: 4 }}>{fmt(revisedPriceS4)}</div>
                 <div className="jps-pane-breakdown" style={{ marginTop: 16 }}>
                   <div className="jps-breakdown-line">
-                    <span>Original client price</span>
+                    <span>Original price</span>
                     <span>{fmt(originalContractPrice)}</span>
                   </div>
                   <div className="jps-breakdown-line jps-breakdown-parent">
@@ -2432,12 +2475,13 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                 <BdsTabs
                   ariaLabel="Direction"
                   activeKey={slice4Version}
-                  onChange={(k) => setSlice4Version(k as 'v1' | 'v2' | 'v3' | 'v4' | 'v41' | 'v41notes' | 'v411' | 'v45')}
+                  onChange={(k) => setSlice4Version(k as 'v1' | 'v2' | 'v3' | 'v4' | 'v41' | 'v41notes' | 'v411' | 'v45' | 'v44')}
                   tabs={activeSlice === 'slice5' ? [
                     { key: 'v41', label: 'v4 · Cost category' },
                     { key: 'v41notes', label: 'v4.1 · Notes' },
                     { key: 'v411', label: 'v4.2 · Largest cost' },
                     { key: 'v45', label: 'v4.3 · Drill down (estimate)' },
+                    { key: 'v44', label: 'v4.4 · Client card' },
                   ] : [
                     { key: 'v1', label: 'v1 · Inline expandable' },
                     { key: 'v2', label: 'v2 · Always-on list' },
@@ -2601,7 +2645,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
               {/* ─── Budget difference (v4/v41/v41notes/v411/v45) — table layout matching Change Orders ─── */}
               {/* Builder always sees this section; the "Show to client" toggle controls
                   whether the client sees it. Client view renders it only when shared. */}
-              {(slice4Version === 'v4' || slice4Version === 'v41' || slice4Version === 'v41notes' || slice4Version === 'v411' || slice4Version === 'v45') && showBudgetDiff && (
+              {(slice4Version === 'v4' || slice4Version === 'v41' || slice4Version === 'v44' || slice4Version === 'v41notes' || slice4Version === 'v411' || slice4Version === 'v45') && showBudgetDiff && (
                 <div className="jps-breakdown-section" id="jps-sec-budget-difference">
                   <div className="jps-section-header">
                     <BdsText as="h2" size="heavy-lg" className="jps-section-title">Budget difference</BdsText>
@@ -2617,7 +2661,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                       ? "The difference between revised and original budget cost for each location. Approved change orders and selection and allowance changes aren't included."
                       : slice4Version === 'v411'
                       ? "The difference between revised and original budget cost for each cost category. The largest cost is the biggest single bill, PO, or time clock entry on the cost code that's over budget. Approved change orders and selection and allowance changes aren't included."
-                      : slice4Version === 'v41' || slice4Version === 'v41notes'
+                      : slice4Version === 'v41' || slice4Version === 'v41notes' || slice4Version === 'v44'
                       ? (
                         <>
                           Shows the difference between the original and revised client price for each cost category in the job costing budget. Change orders and selections aren't included.{!viewAsClient && (shareBudgetDiff
@@ -2655,7 +2699,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                           // Underages and $0 categories are hidden entirely — same
                           // reasoning at the row level below.
                           ? panelByCategoryV41Notes.filter(g => (g.revisedBudget - g.originalBudget) > 0)
-                          : slice4Version === 'v41'
+                          : slice4Version === 'v41' || slice4Version === 'v44'
                             // v4.1 (default) — budget difference is the JCB owner-price delta
                             // per category (revised − original owner price), so it reconciles
                             // with the revised client price. Shimmed into PanelCategory shape.
@@ -2673,7 +2717,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                         : sign * (bdValue(a) - bdValue(b)));
                     })().map((group, gi) => {
                       const isV45 = slice4Version === 'v45';
-                      const isV41 = slice4Version === 'v41';
+                      const isV41 = slice4Version === 'v41' || slice4Version === 'v44';
                       const isV41Notes = slice4Version === 'v41notes';
                       const isV411 = slice4Version === 'v411';
                       const groupKey = `bd-loc-${group.category}`;
@@ -2859,7 +2903,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                         <div className="jps-col-impact">{fmt(panelByCategoryV41Notes.reduce((s, g) => s + (g.revisedBudget - g.originalBudget), 0))}</div>
                         <div className="jps-col-notes"></div>
                       </div>
-                    ) : slice4Version === 'v41' ? (
+                    ) : slice4Version === 'v41' || slice4Version === 'v44' ? (
                       <div className="jps-table-row jps-table-budget jps-row-total">
                         <div className="jps-col-title">Total</div>
                         <div className="jps-col-impact">{fmt(JCB_OWNER_PRICE_DELTA)}</div>

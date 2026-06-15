@@ -151,6 +151,11 @@ export function ClientTopNav({ onNavigate }: { onNavigate?: (page: string) => vo
 
 export default function ClientPortal({ onNavigate }: { onNavigate?: (page: string) => void }) {
 
+  // Fixed-price view hides the budget difference (cost overage) row. In a fixed-price
+  // contract the client price doesn't move with overages, so the row is removed AND
+  // excluded from the rollup so the breakdown still reconciles with the total.
+  const [fixedPrice, setFixedPrice] = useState(false);
+
   // Mock financials — synced with JPS / Openbook so totals match across surfaces.
   // Allowance variances are intentionally NOT a separate contributor: + variances are already
   // captured inside selection impacts, and unused (− variance) allowance budget doesn't refund the client.
@@ -165,7 +170,8 @@ export default function ClientPortal({ onNavigate }: { onNavigate?: (page: strin
     creditMemos: 1500,           // credit memo entry in JPS
     nextPayment: 20000,
   };
-  const approvedChanges = fin.changeOrders + fin.selectionsApprovedImpact + fin.billVariance;
+  const billVariance = fixedPrice ? 0 : fin.billVariance; // dropped from the rollup in fixed-price view
+  const approvedChanges = fin.changeOrders + fin.selectionsApprovedImpact + billVariance;
   const currentPrice = fin.contractPrice + approvedChanges + fin.tax;
   const remainingToPay = currentPrice - fin.paymentsReceived - fin.creditMemos;
   const fmtUsd = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 });
@@ -275,14 +281,24 @@ export default function ClientPortal({ onNavigate }: { onNavigate?: (page: strin
         <div className="cp-main">
           {/* Project Financials — JPS openbook demo layout */}
           <BdsSection title="Project financials" slot={
-            <BdsButton text="Job price summary" displayType="secondary" onClick={() => onNavigate?.('client-jps')} />
+            <>
+              <button
+                type="button"
+                className={`smart-toggle${fixedPrice ? ' on' : ''}`}
+                aria-pressed={fixedPrice}
+                onClick={() => setFixedPrice(v => !v)}
+              >
+                Fixed price view
+              </button>
+              <BdsButton text="Job price summary" displayType="secondary" onClick={() => onNavigate?.('client-jps')} />
+            </>
           }>
             <div className="cp-financials-grid">
               {/* Total price card — mirrors the JPS openbook demo (v4) */}
               <div className="jps-pane cp-fin-jps-pane">
                 <div className="jps-pane-breakdown">
                   <div className="jps-breakdown-line">
-                    <span>Original client price</span>
+                    <span>Original price</span>
                     <span>{fmtUsd(fin.contractPrice)}</span>
                   </div>
                   <div className="jps-breakdown-line jps-breakdown-parent">
@@ -297,19 +313,21 @@ export default function ClientPortal({ onNavigate }: { onNavigate?: (page: strin
                     <span>Change orders</span>
                     <span>{fmtUsd(fin.changeOrders)}</span>
                   </div>
-                  <div className="jps-breakdown-line jps-breakdown-nested">
-                    <span className="jps-term">
-                      <span className="jps-term-label" tabIndex={0}>Budget difference</span>
-                      <span className="jps-term-tip" role="tooltip">Cost overages, excluding change orders and selections.</span>
-                    </span>
-                    <span className={fin.billVariance >= 0 ? 'cp-fin-budget-up' : 'cp-fin-budget-down'}>{fmtUsd(fin.billVariance)}</span>
-                  </div>
+                  {!fixedPrice && (
+                    <div className="jps-breakdown-line jps-breakdown-nested">
+                      <span className="jps-term">
+                        <span className="jps-term-label" tabIndex={0}>Budget difference</span>
+                        <span className="jps-term-tip" role="tooltip">Cost overages from the original job budget, excluding Selections and Change Orders</span>
+                      </span>
+                      <span className={fin.billVariance >= 0 ? 'cp-fin-budget-up' : 'cp-fin-budget-down'}>{fmtUsd(fin.billVariance)}</span>
+                    </div>
+                  )}
                   <div className="jps-breakdown-line">
                     <span>Tax</span>
                     <span>{fmtUsd(fin.tax)}</span>
                   </div>
                   <div className="jps-breakdown-line cp-fin-total-line">
-                    <span>Total price</span>
+                    <span>Total revised price</span>
                     <span>{fmtUsd(currentPrice)}</span>
                   </div>
                 </div>
