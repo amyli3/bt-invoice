@@ -3092,6 +3092,7 @@ button.jps-term-label { cursor: pointer; }
 /* Columns stretch to the tall breakdown pane so the 2nd/3rd column bottoms line up
    with it. The metric column spreads its two cards (top + bottom) to fill the height. */
 .cp-financials-grid { display: grid; grid-template-columns: auto 1fr 1fr; gap: 16px; align-items: stretch; }
+.cp-fin-tabs { margin-bottom: 16px; }
 .cp-fin-card { border: 1px solid #EAEEF5; border-radius: 12px; padding: 20px; background: #fff; }
 /* Total paid / Remaining to pay — separate cards that grow to fill the column height
    (equal halves), so they line up with the breakdown pane on the left. */
@@ -3110,7 +3111,7 @@ button.jps-term-label { cursor: pointer; }
 
 /* JPS openbook demo pane embedded in client portal financials grid */
 .cp-fin-jps-pane { border: 1px solid #EAEEF5; border-radius: 12px; padding: 20px; background: #fff; }
-.cp-fin-jps-pane .jps-pane-big { font-size: 24px; }
+.cp-fin-jps-pane .jps-pane-big { font-size: 24px; font-weight: 700; line-height: 32px; margin-bottom: 12px; }
 /* Breakdown is the first thing in this pane — drop the default top margin so
    "Original client price" sits tight to the top padding. */
 .cp-fin-jps-pane .jps-pane-breakdown { margin-top: 0; width: 430px; max-width: 100%; }

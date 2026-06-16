@@ -93,3 +93,9 @@ export const jcbBudgetDiffByCategory = (() => {
   }
   return Array.from(byCat, ([category, delta]) => ({ category, delta })).filter(c => c.delta !== 0);
 })();
+
+// Per-cost-code owner-price delta, for the Budget difference grid shown by cost code.
+// Non-zero codes only; sums to JCB_OWNER_PRICE_DELTA.
+export const jcbBudgetDiffByCostCode = JCB_ROWS
+  .map(r => ({ code: r.code, name: r.name, category: r.category, delta: r.revisedOwnerPrice - r.originalOwnerPrice }))
+  .filter(c => c.delta !== 0);

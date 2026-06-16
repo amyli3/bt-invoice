@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { BdsTabs } from '../bds';
 import { JCB_OWNER_PRICE_DELTA } from '../jcbMockData';
 
 // Rebar and concrete work - worker installing rebar
@@ -156,6 +157,10 @@ export default function ClientPortal({ onNavigate }: { onNavigate?: (page: strin
   // excluded from the rollup so the breakdown still reconciles with the total.
   const [fixedPrice, setFixedPrice] = useState(false);
 
+  // Card layout: big "Total revised price" headline number on top, vs. the list
+  // layout with the total as a bottom line.
+  const [bigNumber, setBigNumber] = useState(true);
+
   // Mock financials — synced with JPS / Openbook so totals match across surfaces.
   // Allowance variances are intentionally NOT a separate contributor: + variances are already
   // captured inside selection impacts, and unused (− variance) allowance budget doesn't refund the client.
@@ -284,18 +289,35 @@ export default function ClientPortal({ onNavigate }: { onNavigate?: (page: strin
             <>
               <button
                 type="button"
-                className={`smart-toggle${fixedPrice ? ' on' : ''}`}
-                aria-pressed={fixedPrice}
-                onClick={() => setFixedPrice(v => !v)}
+                className={`smart-toggle${bigNumber ? ' on' : ''}`}
+                aria-pressed={bigNumber}
+                onClick={() => setBigNumber(v => !v)}
               >
-                Fixed price view
+                Big number
               </button>
               <BdsButton text="Job price summary" displayType="secondary" onClick={() => onNavigate?.('client-jps')} />
             </>
           }>
+            <div className="cp-fin-tabs">
+              <BdsTabs
+                ariaLabel="Pricing view"
+                activeKey={fixedPrice ? 'fixed' : 'openbook'}
+                onChange={(k) => setFixedPrice(k === 'fixed')}
+                tabs={[
+                  { key: 'fixed', label: 'Fixed price' },
+                  { key: 'openbook', label: 'Openbook' },
+                ]}
+              />
+            </div>
             <div className="cp-financials-grid">
-              {/* Total price card — mirrors the JPS openbook demo (v4) */}
+              {/* Total price card — big-number layout or list layout (total at bottom) */}
               <div className="jps-pane cp-fin-jps-pane">
+                {bigNumber && (
+                  <>
+                    <div className="jps-pane-label">Total revised price</div>
+                    <div className="jps-pane-big">{fmtUsd(currentPrice)}</div>
+                  </>
+                )}
                 <div className="jps-pane-breakdown">
                   <div className="jps-breakdown-line">
                     <span>Original price</span>
@@ -306,11 +328,11 @@ export default function ClientPortal({ onNavigate }: { onNavigate?: (page: strin
                     <span>{fmtUsd(approvedChanges)}</span>
                   </div>
                   <div className="jps-breakdown-line jps-breakdown-nested">
-                    <span>Selection and allowance change</span>
+                    <span>Selection and allowance changes</span>
                     <span>{fmtUsd(fin.selectionsApprovedImpact)}</span>
                   </div>
                   <div className="jps-breakdown-line jps-breakdown-nested">
-                    <span>Change orders</span>
+                    <span>Change Orders</span>
                     <span>{fmtUsd(fin.changeOrders)}</span>
                   </div>
                   {!fixedPrice && (
@@ -326,10 +348,12 @@ export default function ClientPortal({ onNavigate }: { onNavigate?: (page: strin
                     <span>Tax</span>
                     <span>{fmtUsd(fin.tax)}</span>
                   </div>
-                  <div className="jps-breakdown-line cp-fin-total-line">
-                    <span>Total revised price</span>
-                    <span>{fmtUsd(currentPrice)}</span>
-                  </div>
+                  {!bigNumber && (
+                    <div className="jps-breakdown-line cp-fin-total-line">
+                      <span>Total revised price</span>
+                      <span>{fmtUsd(currentPrice)}</span>
+                    </div>
+                  )}
                 </div>
               </div>
 

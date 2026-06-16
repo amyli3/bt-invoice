@@ -1,7 +1,7 @@
 import { useState, Fragment } from 'react';
 import '../bds-tokens.css';
 import { BdsActionBar, BdsBadge, BdsButton, BdsIcon, BdsSection, BdsTabs, BdsText } from '../bds';
-import { JCB_TOTALS, JCB_ROWS, MARKUP_PCT, JCB_OWNER_PRICE_DELTA, jcbBudgetDiffByCategory } from '../jcbMockData';
+import { JCB_TOTALS, JCB_ROWS, MARKUP_PCT, JCB_OWNER_PRICE_DELTA, jcbBudgetDiffByCategory, jcbBudgetDiffByCostCode } from '../jcbMockData';
 import {
   panelByCategory,
   panelByCategoryV41Notes,
@@ -2664,7 +2664,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                       : slice4Version === 'v41' || slice4Version === 'v41notes' || slice4Version === 'v44'
                       ? (
                         <>
-                          Shows the difference between the original and revised client price for each cost category in the job costing budget. Change orders and selections aren't included.{!viewAsClient && (shareBudgetDiff
+                          Shows the difference between the original and revised client price for each {slice4Version === 'v41notes' ? 'cost category' : 'cost code'} in the job costing budget. Change orders and selections aren't included.{!viewAsClient && (shareBudgetDiff
                             ? <> Your client can currently see the budget difference. Manage it in this job's <button type="button" className="jps-inline-link" onClick={() => onOpenClientPermissions?.()}>client permissions</button>.</>
                             : <> Clients don't see the budget difference unless you turn it on in this job's <button type="button" className="jps-inline-link" onClick={() => onOpenClientPermissions?.()}>client permissions</button>.</>)}
                         </>
@@ -2686,7 +2686,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                       </div>
                     ) : (
                       <div className="jps-table-header jps-table-budget">
-                        {sortableHeader('budget-diff', 'title', slice4Version === 'v45' ? 'Location' : 'Cost category', 'jps-col-title')}
+                        {sortableHeader('budget-diff', 'title', slice4Version === 'v45' ? 'Location' : 'Cost code', 'jps-col-title')}
                         {sortableHeader('budget-diff', 'impact', 'Budget difference', 'jps-col-impact')}
                       </div>
                     )}
@@ -2700,10 +2700,10 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                           // reasoning at the row level below.
                           ? panelByCategoryV41Notes.filter(g => (g.revisedBudget - g.originalBudget) > 0)
                           : slice4Version === 'v41' || slice4Version === 'v44'
-                            // v4.1 (default) — budget difference is the JCB owner-price delta
-                            // per category (revised − original owner price), so it reconciles
-                            // with the revised client price. Shimmed into PanelCategory shape.
-                            ? jcbBudgetDiffByCategory.map(c => ({ category: c.category, originalBudget: 0, revisedBudget: c.delta, variance: c.delta, items: [] as PanelCategoryItem[] }))
+                            // v4.1 (default) — budget difference by cost code, owner-price
+                            // delta per code (revised − original owner price), so it
+                            // reconciles with the revised client price. Shimmed into PanelCategory shape.
+                            ? jcbBudgetDiffByCostCode.map(c => ({ category: `${c.code} ${c.name}`, originalBudget: 0, revisedBudget: c.delta, variance: c.delta, items: [] as PanelCategoryItem[] }))
                             : panelByCategory.filter(g => (g.revisedBudget - g.originalBudget) !== 0);
                       // Sort by the shared 'budget-diff' grid state. The value column uses the
                       // variance shown per version (v45 = group variance; others = revised − original).
