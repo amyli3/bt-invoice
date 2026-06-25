@@ -307,6 +307,24 @@ const AllowanceIcon = () => (
   </svg>
 );
 
+// Status column header — dotted-underline term with a tooltip explaining the
+// approval states (hover/focus).
+const StatusHeader = () => (
+  <span className="jps-term sp-status-head">
+    <span className="jps-term-label" tabIndex={0}>Status</span>
+    <span className="jps-term-tip sp-status-tip" role="tooltip">
+      <strong className="sp-status-tip-title">Approval state of this selection option.</strong>
+      <span className="sp-status-tip-list">
+        <span><strong>Pending:</strong> awaiting client approval</span>
+        <span><strong>Approved:</strong> selection option is confirmed</span>
+        <span><strong>Declined:</strong> option has been rejected</span>
+        <span><strong>Due soon:</strong> option is due within 7 days</span>
+        <span><strong>Overdue:</strong> option is past due</span>
+      </span>
+    </span>
+  </span>
+);
+
 const SelectionIcon = () => (
   <svg width="13" height="13" viewBox="0 0 13 13" fill="none" style={{ flexShrink: 0 }}>
     <path fillRule="evenodd" clipRule="evenodd" d="M1.55443 0.826519C1.64598 0.307348 2.12272 -0.0471547 2.63892 0.00510098L2.71289 0.0153593L6.15972 0.623128C6.67889 0.714673 7.03339 1.19141 6.98113 1.70761L6.97088 1.78158L6.278 5.708L10.025 4.34428C10.5192 4.16438 11.0633 4.39852 11.2771 4.86954L11.3067 4.94195L12.5038 8.23088C12.5877 8.46141 12.5837 8.71404 12.4939 8.94088L12.4932 11.6711C12.4932 12.1983 12.0853 12.6302 11.5679 12.6684L11.4932 12.6711H2.74322C2.60006 12.6711 2.45964 12.6602 2.31842 12.6381C0.836606 12.406 -0.176726 10.9928 0.025735 9.50854L0.0427299 9.39982L1.55443 0.826519ZM11.493 9.663L5.975 11.671L11.4932 11.6711L11.493 9.663ZM1.02754 9.57347L2.53924 1.00017L5.98607 1.60794L4.46664 10.225L4.44771 10.3178C4.24197 11.2051 3.38338 11.7924 2.47301 11.6501C1.51423 11.4999 0.855115 10.5513 1.02754 9.57347ZM10.367 5.28397L6.0775 6.845L5.45145 10.3987C5.42454 10.5513 5.38551 10.6987 5.33552 10.8402L11.5641 8.5729L10.367 5.28397ZM3.49324 9.92112C3.49324 9.50691 3.15745 9.17112 2.74324 9.17112C2.32902 9.17112 1.99324 9.50691 1.99324 9.92112C1.99324 10.3353 2.32902 10.6711 2.74324 10.6711C3.15745 10.6711 3.49324 10.3353 3.49324 9.92112Z" fill="currentColor"/>
@@ -893,7 +911,7 @@ export default function SelectionsPage({
               <div className="sp-col-price">Budget</div>
               <div className="sp-col-approved">Spent</div>
               <div className="sp-col-remaining">Remaining</div>
-              <div className="sp-col-status">Status</div>
+              <div className="sp-col-status"><StatusHeader /></div>
               <div className="sp-col-category">Category</div>
               <div className="sp-col-location">Location</div>
               <div className="sp-col-deadline">Due date</div>

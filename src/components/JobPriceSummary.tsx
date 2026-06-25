@@ -131,6 +131,9 @@ const changeOrders: ChangeOrder[] = [
 // total tax amount, and the grid line items below display tax-inclusive prices.
 const TAX_RATE = 0.0825;
 const withTax = (n: number) => n * (1 + TAX_RATE);
+// Tax portion of an ex-tax amount — used by the per-row Tax column in the
+// selections and change-order tables (prices shown ex-tax, tax broken out).
+const taxOf = (n: number) => n * TAX_RATE;
 
 // Totals derived from mock data so the top cards stay in sync with the tables below
 const changeOrdersTotal = changeOrders
@@ -192,7 +195,10 @@ const standaloneApprovedSelectionsImpact = allSelections
   .filter(s => s.status === 'approved' && !s.allowanceName)
   .reduce((sum, s) => sum + s.impact, 0);
 const approvedSelectionsTotal = completedAllowanceTotals.contractImpact + standaloneApprovedSelectionsImpact;
-const totalTax = approvedSelectionsTotal * TAX_RATE;
+// Tax is broken out as its own line/column. Both approved selection changes and
+// approved change orders are taxable, so the headline tax sums the per-row tax
+// shown in the Selections and Change Orders tables.
+const totalTax = (approvedSelectionsTotal + changeOrdersTotal) * TAX_RATE;
 const revisedClientPrice = originalContractPrice + changeOrdersTotal + approvedSelectionsTotal + totalTax;
 
 // Bills grouped by cost code — open book / cost-plus contracts realize price adjustments
@@ -556,17 +562,25 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
     const approvedRows = mergedRows.filter(r => r.status === 'approved');
     const pendingRows = mergedRows.filter(r => r.status === 'pending');
     const orderedRows = [...approvedRows, ...pendingRows];
-    const totalOriginal = mergedRows.reduce((sum, r) => sum + withTax(r.originalPrice), 0);
-    const totalRevised = mergedRows.reduce((sum, r) => sum + withTax(r.revisedPrice), 0);
-    const totalImpact = mergedRows.reduce((sum, r) => sum + withTax(r.contractImpact), 0);
+    // Each row reads Original price + Tax = Total price, all computed off the
+    // same base. For pre-contract items the base is the price baked into the
+    // contract; for new post-contract selections it's the new selection's price.
+    // Contract impact stays the signed delta the change makes to the contract
+    // (e.g. only the over-allowance / post-contract portion).
+    const rowBase = (r: { originalPrice: number; revisedPrice: number }) => (r.originalPrice > 0 ? r.originalPrice : r.revisedPrice);
+    const totalOrigDisplayed = mergedRows.reduce((sum, r) => sum + rowBase(r), 0);
+    const totalTaxCol = mergedRows.reduce((sum, r) => sum + taxOf(rowBase(r)), 0);
+    const totalTotalPrice = mergedRows.reduce((sum, r) => sum + withTax(rowBase(r)), 0);
+    const totalImpact = mergedRows.reduce((sum, r) => sum + r.contractImpact, 0);
     return (
       <div className="jps-table">
         <div className="jps-table-header jps-table-sel-standalone">
           {sortableHeader('sel-standalone', 'title', 'Title', 'jps-col-title')}
           {sortableHeader('sel-standalone', 'date', 'Date', 'jps-col-date')}
-          {sortableHeader('sel-standalone', 'origPrice', 'Initial price', 'jps-col-price-orig')}
-          {sortableHeader('sel-standalone', 'price', 'Approved price', 'jps-col-price-revised')}
-          {sortableHeader('sel-standalone', 'impact', 'Contract impact', 'jps-col-impact')}
+          {sortableHeader('sel-standalone', 'origPrice', 'Subtotal', 'jps-col-price-orig')}
+          <div className="jps-col-tax">Tax</div>
+          <div className="jps-col-total">Total price</div>
+          {sortableHeader('sel-standalone', 'impact', 'Contract impact (excl. tax)', 'jps-col-impact')}
         </div>
         {sortItems('sel-standalone', orderedRows.map(r => ({ ...r, price: r.revisedPrice, _impact: r.contractImpact }))).map((item, i) => (
           <div key={i} className={`jps-table-row jps-table-sel-standalone${item.status === 'pending' ? ' jps-row-pending' : ''}`}>
@@ -577,15 +591,12 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
               </div>
             </div>
             <div className="jps-col-date">{item.date || '—'}</div>
-            <div className="jps-col-price-orig">
-              {item.originalPrice > 0
-                ? fmt(withTax(item.originalPrice))
-                : <span className="jps-impact-neutral">—</span>}
-            </div>
-            <div className="jps-col-price-revised">{fmt(withTax(item.revisedPrice))}</div>
+            <div className="jps-col-price-orig">{fmt(rowBase(item))}</div>
+            <div className="jps-col-tax">{fmt(taxOf(rowBase(item)))}</div>
+            <div className="jps-col-total">{fmt(withTax(rowBase(item)))}</div>
             <div className="jps-col-impact">
               {item.contractImpact !== 0
-                ? <span className="jps-impact-up">{fmtSigned(withTax(item.contractImpact))}</span>
+                ? <span className="jps-impact-up">{fmtSigned(item.contractImpact)}</span>
                 : <span className="jps-impact-neutral">—</span>}
             </div>
           </div>
@@ -593,8 +604,9 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
         <div className="jps-table-row jps-table-sel-standalone jps-row-total">
           <div className="jps-col-title">Total</div>
           <div className="jps-col-date"></div>
-          <div className="jps-col-price-orig">{fmt(totalOriginal)}</div>
-          <div className="jps-col-price-revised">{fmt(totalRevised)}</div>
+          <div className="jps-col-price-orig">{fmt(totalOrigDisplayed)}</div>
+          <div className="jps-col-tax">{fmt(totalTaxCol)}</div>
+          <div className="jps-col-total">{fmt(totalTotalPrice)}</div>
           <div className="jps-col-impact">
             {totalImpact > 0
               ? <span className="jps-impact-up">{fmtSigned(totalImpact)}</span>
@@ -628,6 +640,15 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
   const remainingBalance = revisedClientPrice - paymentsReceived - creditMemos;
   const paidPct = (paymentsReceived / revisedClientPrice * 100);
   const creditPct = (creditMemos / revisedClientPrice * 100);
+
+  // "Tax" label for the header summary cards, with a tooltip explaining what the
+  // figure rolls up. Reused across every slice's breakdown card.
+  const taxTermLabel = (
+    <span className="jps-term">
+      <span className="jps-term-label" tabIndex={0}>Tax</span>
+      <span className="jps-term-tip" role="tooltip">Tax from original price and approved changes</span>
+    </span>
+  );
 
   // ── Print preview ──────────────────────────────────────────────
   if (showPrint) {
@@ -820,9 +841,11 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                   contractImpact: s.impact,
                 };
               });
-            const totalOriginal = rows.reduce((sum, r) => sum + withTax(r.originalPrice), 0);
-            const totalRevised = rows.reduce((sum, r) => sum + withTax(r.revisedPrice), 0);
-            const totalImpact = rows.reduce((sum, r) => sum + withTax(r.contractImpact), 0);
+            const rowBase = (r: { originalPrice: number; revisedPrice: number }) => (r.originalPrice > 0 ? r.originalPrice : r.revisedPrice);
+            const totalOrigDisplayed = rows.reduce((sum, r) => sum + rowBase(r), 0);
+            const totalTaxCol = rows.reduce((sum, r) => sum + taxOf(rowBase(r)), 0);
+            const totalTotalPrice = rows.reduce((sum, r) => sum + withTax(rowBase(r)), 0);
+            const totalImpact = rows.reduce((sum, r) => sum + r.contractImpact, 0);
             return (
               <section className="jps-print-section">
                 <h3 className="jps-print-section-title">Selections</h3>
@@ -831,9 +854,10 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                     <tr>
                       <th>Title</th>
                       <th className="jps-print-th-date">Date</th>
-                      <th className="jps-print-th-right">Initial price</th>
-                      <th className="jps-print-th-right">Approved price</th>
-                      <th className="jps-print-th-right">Contract impact</th>
+                      <th className="jps-print-th-right">Subtotal</th>
+                      <th className="jps-print-th-right">Tax</th>
+                      <th className="jps-print-th-right">Total price</th>
+                      <th className="jps-print-th-right">Contract impact (excl. tax)</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -841,15 +865,17 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                       <tr key={i}>
                         <td>{r.name}</td>
                         <td className="jps-print-td-date">{r.date || '—'}</td>
-                        <td className="jps-print-td-right">{r.originalPrice === 0 ? '—' : fmt(withTax(r.originalPrice))}</td>
-                        <td className="jps-print-td-right">{fmt(withTax(r.revisedPrice))}</td>
-                        <td className="jps-print-td-right">{r.contractImpact === 0 ? fmt(0) : fmtSigned(withTax(r.contractImpact))}</td>
+                        <td className="jps-print-td-right">{fmt(rowBase(r))}</td>
+                        <td className="jps-print-td-right">{fmt(taxOf(rowBase(r)))}</td>
+                        <td className="jps-print-td-right">{fmt(withTax(rowBase(r)))}</td>
+                        <td className="jps-print-td-right">{r.contractImpact === 0 ? fmt(0) : fmtSigned(r.contractImpact)}</td>
                       </tr>
                     ))}
                     <tr className="jps-print-total-row">
                       <td colSpan={2}><strong>Total</strong></td>
-                      <td className="jps-print-td-right"><strong>{fmt(totalOriginal)}</strong></td>
-                      <td className="jps-print-td-right"><strong>{fmt(totalRevised)}</strong></td>
+                      <td className="jps-print-td-right"><strong>{fmt(totalOrigDisplayed)}</strong></td>
+                      <td className="jps-print-td-right"><strong>{fmt(totalTaxCol)}</strong></td>
+                      <td className="jps-print-td-right"><strong>{fmt(totalTotalPrice)}</strong></td>
                       <td className="jps-print-td-right"><strong>{fmtSigned(totalImpact)}</strong></td>
                     </tr>
                   </tbody>
@@ -896,7 +922,9 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                   <tr>
                     {printSortableHeader('print-co-approved', 'title', 'Title')}
                     {printSortableHeader('print-co-approved', 'date', 'Date', 'jps-print-th-date')}
-                    {printSortableHeader('print-co-approved', 'price', 'Amount', 'jps-print-th-right')}
+                    {printSortableHeader('print-co-approved', 'price', 'Subtotal', 'jps-print-th-right')}
+                    <th className="jps-print-th-right">Tax</th>
+                    <th className="jps-print-th-right">Amount</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -905,11 +933,15 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                       <td>{co.name}</td>
                       <td className="jps-print-td-date">{co.date || '—'}</td>
                       <td className="jps-print-td-right">{fmt(co.price)}</td>
+                      <td className="jps-print-td-right">{fmt(taxOf(co.price))}</td>
+                      <td className="jps-print-td-right">{fmt(withTax(co.price))}</td>
                     </tr>
                   ))}
                   <tr className="jps-print-total-row">
                     <td colSpan={2}><strong>Total</strong></td>
                     <td className="jps-print-td-right"><strong>{fmt(approvedChangeOrdersTotal)}</strong></td>
+                    <td className="jps-print-td-right"><strong>{fmt(taxOf(approvedChangeOrdersTotal))}</strong></td>
+                    <td className="jps-print-td-right"><strong>{fmt(withTax(approvedChangeOrdersTotal))}</strong></td>
                   </tr>
                 </tbody>
               </table>
@@ -1073,7 +1105,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
           <div className="pg-hdr-right">
             {!viewAsClient && shareLog.length > 0 && (
               <div className="jps-last-shared">
-                <span className="jps-last-shared-text">Last shared {shareLog[0].at.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</span>
+                <span className="jps-last-shared-text">Last sent {shareLog[0].at.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</span>
                 <BdsButton
                   displayType="secondary"
                   ariaLabel="View activity log"
@@ -1327,7 +1359,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                     <span>{fmt(approvedSelectionsTotal)}</span>
                   </div>
                   <div className="jps-breakdown-line">
-                    <span>Tax</span>
+                    {taxTermLabel}
                     <span>{fmt(totalTax)}</span>
                   </div>
                 </div>
@@ -1408,7 +1440,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
 
                     {isOpen && hasItems && (() => {
                       const approvedTotal = approvedItems.reduce((s, i) => s + i.price, 0);
-                      const gridClass = 'jps-table-allowance-dated-no-impact';
+                      const gridClass = 'jps-table-allowance-dated';
                       const gridId = `s1-al-${group.name}`;
                       const displayItems = sortItems(gridId, approvedItems);
                       return (
@@ -1416,8 +1448,10 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                         <div className="jps-table">
                           <div className={`jps-table-header ${gridClass}`}>
                             {sortableHeader(gridId, 'title', 'Title', 'jps-col-title')}
-                            {sortableHeader(gridId, 'date', 'Date', 'jps-col-date')}
-                            {sortableHeader(gridId, 'price', 'Price (incl. tax)', 'jps-col-price')}
+                            {sortableHeader(gridId, 'date', 'Approved date', 'jps-col-date')}
+                            {sortableHeader(gridId, 'price', 'Subtotal', 'jps-col-price')}
+                            <div className="jps-col-tax">Tax</div>
+                            <div className="jps-col-total">Total price</div>
                           </div>
 
                           {displayItems.map((item, i) => (
@@ -1426,7 +1460,9 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                                 <div><span className="jps-item-name" onClick={() => onOpenSelection?.({ name: item.name, category: item.category, price: item.price, allowanceName: item.allowanceName, status: item.status })}>{item.name}</span></div>
                               </div>
                               <div className="jps-col-date">{item.date || '—'}</div>
-                              <div className="jps-col-price">{fmt(withTax(item.price))}</div>
+                              <div className="jps-col-price">{fmt(item.price)}</div>
+                              <div className="jps-col-tax">{fmt(taxOf(item.price))}</div>
+                              <div className="jps-col-total">{fmt(withTax(item.price))}</div>
                             </div>
                           ))}
 
@@ -1435,7 +1471,9 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                               <span className="jps-item-name">Total</span>
                             </div>
                             <div className="jps-col-date"></div>
-                            <div className="jps-col-price">{fmt(withTax(approvedTotal))}</div>
+                            <div className="jps-col-price">{fmt(approvedTotal)}</div>
+                            <div className="jps-col-tax">{fmt(taxOf(approvedTotal))}</div>
+                            <div className="jps-col-total">{fmt(withTax(approvedTotal))}</div>
                           </div>
                         </div>
                       </div>
@@ -1475,7 +1513,9 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                     <div className="jps-table-header jps-table-co">
                       {sortableHeader('print-co-approved', 'title', 'Title', 'jps-col-title')}
                       {sortableHeader('print-co-approved', 'date', 'Approved date', 'jps-col-date')}
-                      {sortableHeader('print-co-approved', 'price', 'Contract impact', 'jps-col-impact')}
+                      {sortableHeader('print-co-approved', 'price', 'Subtotal', 'jps-col-price-revised')}
+                      <div className="jps-col-tax">Tax</div>
+                      <div className="jps-col-impact">Total price</div>
                     </div>
                     {coApproved.map((co, i) => (
                       <div key={i} className="jps-table-row jps-table-co">
@@ -1485,15 +1525,19 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                           </div>
                         </div>
                         <div className="jps-col-date">{co.date || '—'}</div>
+                        <div className="jps-col-price-revised">{fmt(co.price)}</div>
+                        <div className="jps-col-tax">{fmt(taxOf(co.price))}</div>
                         <div className="jps-col-impact">
-                          <span className={co.price > 0 ? 'jps-impact-up' : 'jps-impact-down'}>{fmtSigned(co.price)}</span>
+                          <span className={co.price > 0 ? 'jps-impact-up' : 'jps-impact-down'}>{fmt(withTax(co.price))}</span>
                         </div>
                       </div>
                     ))}
                     <div className="jps-table-row jps-table-co jps-row-total">
                       <div className="jps-col-title">Total</div>
                       <div className="jps-col-date"></div>
-                      <div className="jps-col-impact">{fmtSigned(coApproved.reduce((s, c) => s + c.price, 0))}</div>
+                      <div className="jps-col-price-revised">{fmt(coApproved.reduce((s, c) => s + c.price, 0))}</div>
+                      <div className="jps-col-tax">{fmt(taxOf(coApproved.reduce((s, c) => s + c.price, 0)))}</div>
+                      <div className="jps-col-impact">{fmt(withTax(coApproved.reduce((s, c) => s + c.price, 0)))}</div>
                     </div>
                   </div>
                 </div>
@@ -1557,7 +1601,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                     <span>{fmt(approvedSelectionsTotal)}</span>
                   </div>
                   <div className="jps-breakdown-line">
-                    <span>Tax</span>
+                    {taxTermLabel}
                     <span>{fmt(totalTax)}</span>
                   </div>
                 </div>
@@ -1664,7 +1708,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
 
                     {isOpen && hasItems && (() => {
                       const approvedTotal = approvedItems.reduce((s, i) => s + i.price, 0);
-                      const gridClass = 'jps-table-allowance-dated-no-impact';
+                      const gridClass = 'jps-table-allowance-dated';
                       const gridId = `s3-al-${group.name}`;
                       const gridSort = getSort(gridId);
                       const sortedFlat = sortItems(gridId, approvedItems);
@@ -1673,8 +1717,10 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                         <div className="jps-table">
                           <div className={`jps-table-header ${gridClass}`}>
                             {sortableHeader(gridId, 'title', 'Title', 'jps-col-title')}
-                            {sortableHeader(gridId, 'date', 'Date', 'jps-col-date')}
-                            {sortableHeader(gridId, 'price', 'Price', 'jps-col-price')}
+                            {sortableHeader(gridId, 'date', 'Approved date', 'jps-col-date')}
+                            {sortableHeader(gridId, 'price', 'Subtotal', 'jps-col-price')}
+                            <div className="jps-col-tax">Tax</div>
+                            <div className="jps-col-total">Total price</div>
                           </div>
 
                           {/* Approved items — grouped by location if allowance spans multiple AND user hasn't re-sorted away from default */}
@@ -1685,6 +1731,8 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                                   <div className="jps-col-title"><span className="jps-subgroup-label">{loc}</span></div>
                                   <div className="jps-col-date"></div>
                                   <div className="jps-col-price"></div>
+                                  <div className="jps-col-tax"></div>
+                                  <div className="jps-col-total"></div>
                                 </div>
                                 {items.map((item, i) => (
                                   <div key={i} className={`jps-table-row ${gridClass}`}>
@@ -1693,6 +1741,8 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                                     </div>
                                     <div className="jps-col-date">{item.date || '—'}</div>
                                     <div className="jps-col-price">{fmt(item.price)}</div>
+                                    <div className="jps-col-tax">{fmt(taxOf(item.price))}</div>
+                                    <div className="jps-col-total">{fmt(withTax(item.price))}</div>
                                   </div>
                                 ))}
                               </Fragment>
@@ -1705,6 +1755,8 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                                 </div>
                                 <div className="jps-col-date">{item.date || '—'}</div>
                                 <div className="jps-col-price">{fmt(item.price)}</div>
+                                <div className="jps-col-tax">{fmt(taxOf(item.price))}</div>
+                                <div className="jps-col-total">{fmt(withTax(item.price))}</div>
                               </div>
                             ))
                           )}
@@ -1713,6 +1765,8 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                             <div className="jps-col-title"><span className="jps-item-name">Total</span></div>
                             <div className="jps-col-date"></div>
                             <div className="jps-col-price">{fmt(approvedTotal)}</div>
+                            <div className="jps-col-tax">{fmt(taxOf(approvedTotal))}</div>
+                            <div className="jps-col-total">{fmt(withTax(approvedTotal))}</div>
                           </div>
                         </div>
 
@@ -1783,7 +1837,9 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                     <div className="jps-table-header jps-table-co">
                       {sortableHeader('print-co-approved', 'title', 'Title', 'jps-col-title')}
                       {sortableHeader('print-co-approved', 'date', 'Approved date', 'jps-col-date')}
-                      {sortableHeader('print-co-approved', 'price', 'Contract impact', 'jps-col-impact')}
+                      {sortableHeader('print-co-approved', 'price', 'Subtotal', 'jps-col-price-revised')}
+                      <div className="jps-col-tax">Tax</div>
+                      <div className="jps-col-impact">Total price</div>
                     </div>
                     {coApproved.map((co, i) => (
                       <div key={i} className="jps-table-row jps-table-co">
@@ -1808,15 +1864,19 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                           </div>
                         </div>
                         <div className="jps-col-date">{co.date || '—'}</div>
+                        <div className="jps-col-price-revised">{fmt(co.price)}</div>
+                        <div className="jps-col-tax">{fmt(taxOf(co.price))}</div>
                         <div className="jps-col-impact">
-                          <span className={co.price > 0 ? 'jps-impact-up' : 'jps-impact-down'}>{fmtSigned(co.price)}</span>
+                          <span className={co.price > 0 ? 'jps-impact-up' : 'jps-impact-down'}>{fmt(withTax(co.price))}</span>
                         </div>
                       </div>
                     ))}
                     <div className="jps-table-row jps-table-co jps-row-total">
                       <div className="jps-col-title">Total</div>
                       <div className="jps-col-date"></div>
-                      <div className="jps-col-impact">{fmtSigned(coApproved.reduce((s, c) => s + c.price, 0))}</div>
+                      <div className="jps-col-price-revised">{fmt(coApproved.reduce((s, c) => s + c.price, 0))}</div>
+                      <div className="jps-col-tax">{fmt(taxOf(coApproved.reduce((s, c) => s + c.price, 0)))}</div>
+                      <div className="jps-col-impact">{fmt(withTax(coApproved.reduce((s, c) => s + c.price, 0)))}</div>
                     </div>
                   </div>
 
@@ -1906,7 +1966,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                 <span>{fmt(approvedSelectionsTotal)}</span>
               </div>
               <div className="jps-breakdown-line">
-                <span>Tax</span>
+                {taxTermLabel}
                 <span>{fmt(totalTax)}</span>
               </div>
             </div>
@@ -2008,7 +2068,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
 
                 {isOpen && group.items.length > 0 && (() => {
                   const approvedTotal = approvedItems.reduce((s, i) => s + i.price, 0);
-                  const gridClass = 'jps-table-allowance-dated-no-impact';
+                  const gridClass = 'jps-table-allowance-dated';
                   const gridId = `s2-al-${group.name}`;
                   const displayItems = sortItems(gridId, approvedItems);
                   return (
@@ -2016,8 +2076,10 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                     <div className="jps-table">
                       <div className={`jps-table-header ${gridClass}`}>
                         {sortableHeader(gridId, 'title', 'Title', 'jps-col-title')}
-                        {sortableHeader(gridId, 'date', 'Date', 'jps-col-date')}
-                        {sortableHeader(gridId, 'price', 'Price', 'jps-col-price')}
+                        {sortableHeader(gridId, 'date', 'Approved date', 'jps-col-date')}
+                        {sortableHeader(gridId, 'price', 'Subtotal', 'jps-col-price')}
+                        <div className="jps-col-tax">Tax</div>
+                        <div className="jps-col-total">Total price</div>
                       </div>
 
                       {/* Approved rows */}
@@ -2028,6 +2090,8 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                           </div>
                           <div className="jps-col-date">{item.date || '—'}</div>
                           <div className="jps-col-price">{fmt(item.price)}</div>
+                          <div className="jps-col-tax">{fmt(taxOf(item.price))}</div>
+                          <div className="jps-col-total">{fmt(withTax(item.price))}</div>
                         </div>
                       ))}
 
@@ -2038,6 +2102,8 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                         </div>
                         <div className="jps-col-date"></div>
                         <div className="jps-col-price">{fmt(approvedTotal)}</div>
+                        <div className="jps-col-tax">{fmt(taxOf(approvedTotal))}</div>
+                        <div className="jps-col-total">{fmt(withTax(approvedTotal))}</div>
                       </div>
 
                     </div>
@@ -2116,9 +2182,11 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                   {withBadge && co.status === 'declined' && <BdsBadge text="Declined" displayType="default" />}
                 </div>
                 <div className="jps-col-date">{co.date || '—'}</div>
+                <div className="jps-col-price-revised">{fmt(co.price)}</div>
+                <div className="jps-col-tax">{fmt(taxOf(co.price))}</div>
                 <div className="jps-col-impact">
                   <span className={co.price > 0 ? 'jps-impact-up' : 'jps-impact-down'}>
-                    {fmtSigned(co.price)}
+                    {fmt(withTax(co.price))}
                   </span>
                 </div>
               </div>
@@ -2129,7 +2197,9 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                   <div className="jps-table-header jps-table-co">
                     {sortableHeader('print-co-approved', 'title', 'Title', 'jps-col-title')}
                     {sortableHeader('print-co-approved', 'date', 'Approved date', 'jps-col-date')}
-                    {sortableHeader('print-co-approved', 'price', 'Contract impact', 'jps-col-impact')}
+                    {sortableHeader('print-co-approved', 'price', 'Subtotal', 'jps-col-price-revised')}
+                    <div className="jps-col-tax">Tax</div>
+                    <div className="jps-col-impact">Total price</div>
                   </div>
 
                   {coApproved.map((co, i) => renderCoRow(co, i))}
@@ -2138,7 +2208,9 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                   <div className="jps-table-row jps-table-co jps-row-total">
                     <div className="jps-col-title">Total</div>
                     <div className="jps-col-date"></div>
-                    <div className="jps-col-impact">{fmtSigned(coApproved.reduce((s, c) => s + c.price, 0))}</div>
+                    <div className="jps-col-price-revised">{fmt(coApproved.reduce((s, c) => s + c.price, 0))}</div>
+                    <div className="jps-col-tax">{fmt(taxOf(coApproved.reduce((s, c) => s + c.price, 0)))}</div>
+                    <div className="jps-col-impact">{fmt(withTax(coApproved.reduce((s, c) => s + c.price, 0)))}</div>
                   </div>
                 </div>
 
@@ -2268,7 +2340,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                       </div>
                     </>
                   )}
-                  <div className="jps-breakdown-line"><span>Tax</span><span>{fmt(totalTax)}</span></div>
+                  <div className="jps-breakdown-line">{taxTermLabel}<span>{fmt(totalTax)}</span></div>
                 </div>
               </div>
             );
@@ -2287,7 +2359,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                     <button type="button" className="jps-s4-link-label" onClick={() => setSlice4DrillOpen(true)}>Approved changes</button>
                     <span>{fmt(priceAdjustment)}</span>
                   </div>
-                  <div className="jps-breakdown-line"><span>Tax</span><span>{fmt(totalTax)}</span></div>
+                  <div className="jps-breakdown-line">{taxTermLabel}<span>{fmt(totalTax)}</span></div>
                 </div>
               </div>
             );
@@ -2323,7 +2395,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                         </span>}
                     <span className={JCB_OWNER_PRICE_DELTA >= 0 ? 'jps-impact-up' : 'jps-impact-down'}>{fmt(JCB_OWNER_PRICE_DELTA)}</span>
                   </div>
-                  <div className="jps-breakdown-line"><span>Tax</span><span>{fmt(totalTax)}</span></div>
+                  <div className="jps-breakdown-line">{taxTermLabel}<span>{fmt(totalTax)}</span></div>
                   <div className="jps-breakdown-line cp-fin-total-line">
                     <span>Total revised price</span>
                     <span>{fmt(revisedPriceS4)}</span>
@@ -2366,7 +2438,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                         </span>}
                     <span className={JCB_OWNER_PRICE_DELTA >= 0 ? 'jps-impact-up' : 'jps-impact-down'}>{fmt(JCB_OWNER_PRICE_DELTA)}</span>
                   </div>
-                  <div className="jps-breakdown-line"><span>Tax</span><span>{fmt(totalTax)}</span></div>
+                  <div className="jps-breakdown-line">{taxTermLabel}<span>{fmt(totalTax)}</span></div>
                 </div>
               </div>
             );
@@ -2407,7 +2479,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                       <span className={isOver ? 'jps-impact-up' : 'jps-impact-down'}>{fmt(cv)}</span>
                     </div>
                   )}
-                  <div className="jps-breakdown-line"><span>Tax</span><span>{fmt(totalTax)}</span></div>
+                  <div className="jps-breakdown-line">{taxTermLabel}<span>{fmt(totalTax)}</span></div>
                 </div>
               </div>
             );
@@ -2438,7 +2510,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                     <span>Bills</span>
                     <span className={billVarianceTotal >= 0 ? 'jps-impact-up' : 'jps-impact-down'}>{fmt(billVarianceTotal)}</span>
                   </div>
-                  <div className="jps-breakdown-line"><span>Tax</span><span>{fmt(totalTax)}</span></div>
+                  <div className="jps-breakdown-line">{taxTermLabel}<span>{fmt(totalTax)}</span></div>
                 </div>
               </div>
             );
@@ -2556,7 +2628,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
 
                       {isOpen && expandable && (() => {
                         const approvedTotal = approvedItems.reduce((s, i) => s + i.price, 0);
-                        const gridClass = 'jps-table-allowance-dated-no-impact';
+                        const gridClass = 'jps-table-allowance-dated';
                         const gridId = `s4-al-${group.name}`;
                         const displayItems = sortItems(gridId, approvedItems);
                         return (
@@ -2564,8 +2636,10 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                             <div className="jps-table">
                               <div className={`jps-table-header ${gridClass}`}>
                                 {sortableHeader(gridId, 'title', 'Title', 'jps-col-title')}
-                                {sortableHeader(gridId, 'date', 'Date', 'jps-col-date')}
-                                {sortableHeader(gridId, 'price', 'Price (incl. tax)', 'jps-col-price')}
+                                {sortableHeader(gridId, 'date', 'Approved date', 'jps-col-date')}
+                                {sortableHeader(gridId, 'price', 'Subtotal', 'jps-col-price')}
+                                <div className="jps-col-tax">Tax</div>
+                                <div className="jps-col-total">Total price</div>
                               </div>
                               {displayItems.map((item, i) => (
                                 <div key={i} className={`jps-table-row ${gridClass}`}>
@@ -2573,13 +2647,17 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                                     <div><span className="jps-item-name" onClick={() => onOpenSelection?.({ name: item.name, category: item.category, price: item.price, allowanceName: item.allowanceName, status: item.status })}>{item.name}</span></div>
                                   </div>
                                   <div className="jps-col-date">{item.date || '—'}</div>
-                                  <div className="jps-col-price">{fmt(withTax(item.price))}</div>
+                                  <div className="jps-col-price">{fmt(item.price)}</div>
+                                  <div className="jps-col-tax">{fmt(taxOf(item.price))}</div>
+                                  <div className="jps-col-total">{fmt(withTax(item.price))}</div>
                                 </div>
                               ))}
                               <div className={`jps-table-row ${gridClass} jps-row-allowance-summary`}>
                                 <div className="jps-col-title"><span className="jps-item-name">Total</span></div>
                                 <div className="jps-col-date"></div>
-                                <div className="jps-col-price">{fmt(withTax(approvedTotal))}</div>
+                                <div className="jps-col-price">{fmt(approvedTotal)}</div>
+                                <div className="jps-col-tax">{fmt(taxOf(approvedTotal))}</div>
+                                <div className="jps-col-total">{fmt(withTax(approvedTotal))}</div>
                               </div>
                             </div>
                           </div>
@@ -2619,21 +2697,27 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                       <div className="jps-table-header jps-table-co">
                         {sortableHeader('print-co-approved', 'title', 'Title', 'jps-col-title')}
                         {sortableHeader('print-co-approved', 'date', 'Approved date', 'jps-col-date')}
-                        {sortableHeader('print-co-approved', 'price', 'Contract impact', 'jps-col-impact')}
+                        {sortableHeader('print-co-approved', 'price', 'Subtotal', 'jps-col-price-revised')}
+                        <div className="jps-col-tax">Tax</div>
+                        <div className="jps-col-impact">Total price</div>
                       </div>
                       {coApproved.map((co, i) => (
                         <div key={i} className="jps-table-row jps-table-co">
                           <div className="jps-col-title"><div><span className="jps-item-name">{co.name}</span></div></div>
                           <div className="jps-col-date">{co.date || '—'}</div>
+                          <div className="jps-col-price-revised">{fmt(co.price)}</div>
+                          <div className="jps-col-tax">{fmt(taxOf(co.price))}</div>
                           <div className="jps-col-impact">
-                            <span className={co.price > 0 ? 'jps-impact-up' : 'jps-impact-down'}>{fmtSigned(co.price)}</span>
+                            <span className={co.price > 0 ? 'jps-impact-up' : 'jps-impact-down'}>{fmt(withTax(co.price))}</span>
                           </div>
                         </div>
                       ))}
                       <div className="jps-table-row jps-table-co jps-row-total">
                         <div className="jps-col-title">Total</div>
                         <div className="jps-col-date"></div>
-                        <div className="jps-col-impact">{fmtSigned(coApproved.reduce((s, c) => s + c.price, 0))}</div>
+                        <div className="jps-col-price-revised">{fmt(coApproved.reduce((s, c) => s + c.price, 0))}</div>
+                        <div className="jps-col-tax">{fmt(taxOf(coApproved.reduce((s, c) => s + c.price, 0)))}</div>
+                        <div className="jps-col-impact">{fmt(withTax(coApproved.reduce((s, c) => s + c.price, 0)))}</div>
                       </div>
                     </div>
                   </div>
@@ -2664,7 +2748,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                       : slice4Version === 'v41' || slice4Version === 'v41notes' || slice4Version === 'v44'
                       ? (
                         <>
-                          Shows the difference between the original and revised client price for each {slice4Version === 'v41notes' ? 'cost category' : 'cost code'} in the job costing budget. Change orders and selections aren't included.{!viewAsClient && (shareBudgetDiff
+                          Shows the difference between the original and revised client price for each {slice4Version === 'v41notes' ? 'cost category' : 'cost code'} in the job costing budget. Approved change orders and selections aren't included.{!viewAsClient && (shareBudgetDiff
                             ? <> Your client can currently see the budget difference. Manage it in this job's <button type="button" className="jps-inline-link" onClick={() => onOpenClientPermissions?.()}>client permissions</button>.</>
                             : <> Clients don't see the budget difference unless you turn it on in this job's <button type="button" className="jps-inline-link" onClick={() => onOpenClientPermissions?.()}>client permissions</button>.</>)}
                         </>

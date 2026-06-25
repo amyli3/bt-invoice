@@ -1468,6 +1468,17 @@ button.jps-term-label { cursor: pointer; }
 .jps-term:hover .jps-term-tip,
 .jps-term:focus-within .jps-term-tip { opacity: 1; visibility: visible; }
 
+/* Status column header — dotted-underline term + richer tooltip */
+.sp-status-head { gap: 4px; }
+.sp-status-tip {
+  width: 280px; max-width: 280px; padding: 12px 14px;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.sp-status-tip-title { font-size: 14px; font-weight: 700; color: var(--g800); line-height: 20px; }
+.sp-status-tip-list { display: flex; flex-direction: column; gap: 4px; }
+.sp-status-tip-list > span { font-size: 14px; font-weight: 400; color: var(--fg-secondary, #4e555f); line-height: 20px; }
+.sp-status-tip-list strong { font-weight: 600; color: var(--g800); }
+
 /* Feedback modal body */
 .jps-feedback-input {
   width: 100%; box-sizing: border-box; resize: vertical; min-height: 96px;
@@ -1597,7 +1608,8 @@ button.jps-term-label { cursor: pointer; }
 /* 2-column variant — used when the allowance is fully under budget so the contract impact column is dropped */
 .jps-table-allowance-no-impact { display: grid; grid-template-columns: 3fr 0.7fr; }
 /* Slice 1 variants with explicit Date column for approved items */
-.jps-table-allowance-dated { display: grid; grid-template-columns: 2.6fr 0.9fr 0.7fr 1fr; }
+/* Nested allowance grid — title, approved date, price (pre-tax), tax, total price */
+.jps-table-allowance-dated { display: grid; grid-template-columns: 2.4fr 0.9fr 0.8fr 0.7fr 0.9fr; }
 .jps-table-allowance-dated-no-impact { display: grid; grid-template-columns: 2.6fr 0.9fr 0.7fr; }
 /* Sortable header cell */
 .jps-col-sortable { cursor: pointer; user-select: none; display: flex; align-items: center; gap: 4px; line-height: 1; }
@@ -1605,6 +1617,9 @@ button.jps-term-label { cursor: pointer; }
 .jps-col-sortable:hover { color: var(--bt-blue) !important; }
 /* Price / Contract impact headers stay right-aligned even with sort icon */
 .jps-col-price.jps-col-sortable,
+.jps-col-price-orig.jps-col-sortable,
+.jps-col-price-revised.jps-col-sortable,
+.jps-col-amount.jps-col-sortable,
 .jps-col-impact.jps-col-sortable { justify-content: flex-end; }
 /* Stacked carets — matches BDS Sort Arrows molecule */
 .jps-sort-arrows { display: inline-flex; flex-direction: column; align-items: center; gap: 1px; line-height: 0; }
@@ -1632,10 +1647,15 @@ button.jps-term-label { cursor: pointer; }
 /* 5-column layout (allowance approved view — with remaining + impact) */
 .jps-table-allowance-5col { display: grid; grid-template-columns: 2.2fr 0.7fr 0.7fr 1fr 0.8fr; }
 
-/* 5-column layout (standalone selections — title, date, original price, revised price, contract impact) */
-.jps-table-sel-standalone { display: grid; grid-template-columns: 2.4fr 0.9fr 1fr 1fr 1fr; }
+/* 6-column layout (standalone selections — title, date, original price, tax, total price, contract impact) */
+.jps-table-sel-standalone { display: grid; grid-template-columns: 2.4fr 0.9fr 1fr 0.8fr 1fr 1fr; }
 .jps-col-price-orig { text-align: right; }
 .jps-col-price-revised { text-align: right; }
+/* Tax + Total price columns — broken out from the line-item price, right-aligned like the money columns */
+.jps-col-tax { text-align: right; }
+.jps-col-total { text-align: right; }
+.bds-scope .jps-table-header > .jps-col-tax,
+.bds-scope .jps-table-header > .jps-col-total { padding: 10px 16px; font-size: 12px; font-weight: 600; color: var(--g500); text-align: right; }
 /* Post-contract: price == contract impact, so we hide price and show only the impact column */
 .jps-table-post-std { display: grid; grid-template-columns: 3fr 0.9fr 1fr; }
 /* Pre-contract: no contract impact (baked into base price), so we hide the impact column */
@@ -1655,8 +1675,8 @@ button.jps-term-label { cursor: pointer; }
 .jps-row-allowance-summary .jps-col-price { font-weight: 700; color: var(--bt-midnight); }
 .jps-summary-impact { font-size: 14px; font-weight: 700; color: var(--bt-midnight); }
 
-/* 3-column layout (change orders) */
-.jps-table-co { display: grid; grid-template-columns: 2.5fr 1fr 1fr; }
+/* 5-column layout (change orders — title, date, subtotal, tax, contract impact) */
+.jps-table-co { display: grid; grid-template-columns: 2.5fr 1fr 1fr 0.8fr 1fr; }
 
 /* 2-column layout (budget difference) */
 .jps-table-budget { display: grid; grid-template-columns: 2.5fr 1fr; }
@@ -2141,17 +2161,16 @@ button.jps-term-label { cursor: pointer; }
   .jps-col-amount { white-space: nowrap; }
   .jps-col-price-revised { white-space: nowrap; }
 
-  /* Selections table: 5 cols → 3 cols (drop Date + Initial price) */
-  .jps-table-sel-standalone { grid-template-columns: 2fr 1fr 1fr; }
-  .jps-table-sel-standalone .jps-col-date,
-  .jps-table-sel-standalone .jps-col-price-orig { display: none; }
+  /* Selections table: 6 cols → 5 cols (drop Date; keep Original price/Tax/Total price/Contract impact) */
+  .jps-table-sel-standalone { grid-template-columns: 1.8fr 1fr 0.8fr 1fr 1fr; }
+  .jps-table-sel-standalone .jps-col-date { display: none; }
 
   /* Payments table: 4 cols → 3 cols (drop Payment type) */
   .jps-table-payments { grid-template-columns: 2fr 1.1fr 1.1fr; }
   .jps-table-payments .jps-col-method { display: none; }
 
-  /* Change orders: wider date column so dates don't clip */
-  .jps-table-co { grid-template-columns: 2fr 1.2fr 1fr; }
+  /* Change orders: wider date column so dates don't clip; keep Subtotal/Tax/Impact */
+  .jps-table-co { grid-template-columns: 2fr 1.1fr 1fr 0.8fr 1fr; }
 
   /* ── Page header: title on its own line, actions wrap to a full-width row below ── */
   .jps-page .pg-hdr-sub { display: none; }
@@ -2169,8 +2188,8 @@ button.jps-term-label { cursor: pointer; }
 @media (max-width: 700px) {
   .jps-table { overflow-x: auto; -webkit-overflow-scrolling: touch; }
   /* Comfortable min-widths so columns keep their proportions; the table scrolls. */
-  .jps-table-sel-standalone { min-width: 680px; }
-  .jps-table-co { min-width: 460px; }
+  .jps-table-sel-standalone { min-width: 760px; }
+  .jps-table-co { min-width: 560px; }
   .jps-table-payments { min-width: 480px; }
 }
 
@@ -2871,7 +2890,8 @@ button.jps-term-label { cursor: pointer; }
 }
 .od-icon-btn:hover { background: var(--g50); }
 
-.od-two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; }
+.od-two-col { display: grid; grid-template-columns: 1.6fr 1fr; gap: 48px; }
+.od-two-col > * { min-width: 0; }
 .od-section { margin-bottom: 24px; }
 .od-section-title { font-size: 16px; font-weight: 700; color: var(--bt-midnight); margin-bottom: 16px; }
 .od-field { margin-bottom: 16px; }
@@ -2966,6 +2986,55 @@ button.jps-term-label { cursor: pointer; }
 .od-field-error { border-color: var(--red) !important; }
 .od-field-error:focus { box-shadow: 0 0 0 3px rgba(220,38,38,0.12) !important; }
 .od-error-msg { display: block; font-size: 11px; color: var(--red); margin-top: 3px; }
+
+/* Image layout switcher (prototype-only comparison control) */
+.od-layout-switch {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  margin-bottom: 24px; padding: 10px 14px;
+  background: var(--g50, #F5F6F8); border: 1px dashed var(--g200);
+  border-radius: var(--radius);
+}
+.od-layout-switch-label { font-size: 12px; font-weight: 700; color: var(--g600); text-transform: uppercase; letter-spacing: 0.04em; }
+
+/* Three-column layout variant */
+.od-three-col { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 40px; }
+@media (max-width: 1100px) { .od-three-col { grid-template-columns: 1fr; gap: 28px; } }
+
+/* Builder product image (ADO 277207) — single autofilled image + placeholder
+   + delete button (autofill create state only) */
+.od-gallery { margin-bottom: 8px; }
+.od-gallery-hero {
+  position: relative; width: 100%; max-width: 460px; aspect-ratio: 4 / 3;
+  background: #F1F4FA; background-size: cover; background-position: center;
+  border: 1px solid var(--g200); border-radius: 8px; overflow: hidden;
+}
+.od-gallery-delete {
+  position: absolute; top: 10px; right: 10px;
+  width: 32px; height: 32px; padding: 0; border-radius: 8px;
+  background: rgba(255,255,255,0.94); border: 1px solid var(--g200);
+  color: var(--g700); cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+}
+.od-gallery-delete:hover { color: var(--red); border-color: var(--red); }
+.od-gallery-hint { font-size: 12px; color: var(--g500); line-height: 1.5; margin: 10px 0 0; }
+
+/* Thumbnail strip — multiple images */
+.od-gallery-thumbs { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.od-gallery-thumb {
+  position: relative; flex-shrink: 0; width: 56px; height: 56px;
+  background-size: cover; background-position: center; background-color: #fff;
+  border: 1px solid #DEE3EB; border-radius: 6px; cursor: pointer;
+}
+.od-gallery-thumb-active { border: 2px solid var(--bt-blue); }
+.od-gallery-thumb-remove {
+  position: absolute; top: -6px; right: -6px;
+  width: 18px; height: 18px; padding: 0; border-radius: 999px;
+  background: var(--bt-midnight, #0B1F3A); border: none; color: #fff; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0; transition: opacity 0.12s;
+}
+.od-gallery-thumb:hover .od-gallery-thumb-remove { opacity: 1; }
 
 .od-price-toolbar { display: flex; justify-content: flex-end; gap: 8px; margin-bottom: 10px; }
 
@@ -6764,4 +6833,10 @@ button.jps-term-label { cursor: pointer; }
 .jdc-chips { display: flex; flex-wrap: wrap; gap: 6px; border: 1px solid var(--g200); border-radius: 8px; padding: 10px; margin-top: 4px; }
 .jdc-chip { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--g700); background: var(--g50); border: 1px solid var(--g200); border-radius: 6px; padding: 3px 8px; }
 .jdc-chip-x { color: var(--g400); }
+/* JPS hidden-from-portal state: builder shares point-in-time PDF copies manually */
+.jdc-jps-mode { margin: 6px 0 10px; padding: 12px 14px; background: var(--g50); border: 1px solid var(--g200); border-radius: 10px; display: flex; flex-direction: column; gap: 8px; }
+.jdc-mode-head { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: var(--g700); }
+.jdc-mode-hint { font-size: 12px; color: var(--g500); line-height: 1.45; margin: 0; }
+.jdc-mode-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 2px; }
+.jdc-mode-laststamp { font-size: 12px; color: var(--g500); }
 @media (max-width: 760px) { .jdc-cols { grid-template-columns: 1fr; gap: 28px; } }

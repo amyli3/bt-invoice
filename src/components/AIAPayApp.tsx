@@ -1869,7 +1869,7 @@ export default function AIAPayApp({ onNavigate, approvedCOIds, addedCostIds: ext
                       <th style={{ ...headerCellStyle, textAlign: 'left', minWidth: 240 }}>Description</th>
                       <th style={headerCellStyle}>{showCOCols ? 'Scheduled value' : 'Budget'}</th>
                       {showCOCols && <th style={{ ...headerCellStyle }}>Approved changes</th>}
-                      {showCOCols && <th style={{ ...headerCellStyle }}>Revised budget</th>}
+                      {showCOCols && <th style={{ ...headerCellStyle }}>Revised value</th>}
                       <th style={headerCellStyle}>Previous invoice</th>
                       <th style={headerCellStyle}>This invoice</th>
                       <th style={headerCellStyle}>Stored materials</th>
@@ -3059,7 +3059,7 @@ function ClientPreviewModal({ groups, totals, showCOCols, contractorCert, archit
               <thead>
                 <tr>
                   {(showCOCols
-                    ? ['Description', 'Scheduled value', 'Approved changes', 'Revised budget', 'Previous invoice', 'This invoice', 'Stored materials', 'Completed', '% complete', 'Balance to finish', 'Retainage']
+                    ? ['Description', 'Scheduled value', 'Approved changes', 'Revised value', 'Previous invoice', 'This invoice', 'Stored materials', 'Completed', '% complete', 'Balance to finish', 'Retainage']
                     : ['Description', 'Scheduled value', 'Previous invoice', 'This invoice', 'Stored materials', 'Completed', '% complete', 'Balance to finish', 'Retainage']
                   ).map((h, i) => (
                     <th key={h} style={{ textAlign: i === 0 ? 'left' : 'right', padding: showCOCols ? '8px 7px' : '8px 10px', fontSize: showCOCols ? 10 : 11, fontWeight: 600, color: '#64748b', background: '#f8fafc', borderBottom: '2px solid #e2e8f0', whiteSpace: 'nowrap' }}>

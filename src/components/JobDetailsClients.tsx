@@ -24,6 +24,10 @@ export default function JobDetailsClients({
   });
   const toggle = (k: string) => setVis(v => ({ ...v, [k]: !v[k] }));
 
+  // The "Job Price Summary" permission is the opt-in itself:
+  //   checked  → client sees the live JPS in their portal (default).
+  //   unchecked → JPS is hidden; builder shares point-in-time PDF copies manually.
+
   const Check = ({ checked, onClick, label, hint, indent }: { checked: boolean; onClick: () => void; label: string; hint?: string; indent?: boolean }) => (
     <button type="button" className={`jdc-check-row${indent ? ' jdc-indent' : ''}`} onClick={onClick} role="checkbox" aria-checked={checked}>
       <span className={`jdc-check${checked ? ' on' : ''}`} aria-hidden="true">
@@ -90,9 +94,14 @@ export default function JobDetailsClients({
           <div className="jdc-col">
             <h3 className="jdc-col-title">Financial</h3>
             <div className="jdc-subhead">Client can view:</div>
-            <Check checked={vis.jps} onClick={() => toggle('jps')} label="Job Price Summary" />
-            {/* Functional control — nested under Job Price Summary; drives client visibility of budget difference on the JPS */}
-            {vis.jps && (
+            <Check
+              checked={vis.jps}
+              onClick={() => toggle('jps')}
+              label="Job Price Summary"
+              hint={vis.jps ? 'Your client sees the live job price summary in their portal, kept up to date automatically.' : undefined}
+            />
+            {vis.jps ? (
+              /* Live in portal — budget difference is an optional add-on to what the client sees */
               <Check
                 checked={shareBudgetDiff}
                 onClick={() => onShareBudgetDiffChange?.(!shareBudgetDiff)}
@@ -100,6 +109,25 @@ export default function JobDetailsClients({
                 hint="Show the budget difference on the client's Job Price Summary."
                 indent
               />
+            ) : (
+              /* Hidden from portal — builder opts into sharing point-in-time copies manually */
+              <div className="jdc-indent jdc-jps-mode">
+                <div className="jdc-mode-head">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" /><line x1="1" y1="1" x2="23" y2="23" /></svg>
+                  <span>Hidden from the client portal</span>
+                </div>
+                <p className="jdc-mode-hint">
+                  Your client won’t see the job price summary on their own. Instead, send them a point-in-time copy whenever you’re ready — it goes out as a PDF snapshot of the summary exactly as it looks the moment you send it.
+                </p>
+                <div className="jdc-mode-actions">
+                  <BdsButton
+                    displayType="secondary"
+                    text="Send job price summary…"
+                    icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" /></svg>}
+                  />
+                  <span className="jdc-mode-laststamp">Last sent May 2026</span>
+                </div>
+              </div>
             )}
             <Check checked={vis.remainingBalance} onClick={() => toggle('remainingBalance')} label="Remaining Invoice Balance" />
             <Check checked={vis.pos} onClick={() => toggle('pos')} label="Purchase Orders/Bills" />
