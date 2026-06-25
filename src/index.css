@@ -1620,6 +1620,8 @@ button.jps-term-label { cursor: pointer; }
 .jps-col-price-orig.jps-col-sortable,
 .jps-col-price-revised.jps-col-sortable,
 .jps-col-amount.jps-col-sortable,
+.jps-col-tax.jps-col-sortable,
+.jps-col-total.jps-col-sortable,
 .jps-col-impact.jps-col-sortable { justify-content: flex-end; }
 /* Stacked carets — matches BDS Sort Arrows molecule */
 .jps-sort-arrows { display: inline-flex; flex-direction: column; align-items: center; gap: 1px; line-height: 0; }

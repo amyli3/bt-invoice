@@ -379,7 +379,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
     payments: true,
     expandAllowances: true,
   });
-  type SortColumn = 'title' | 'date' | 'price' | 'origPrice' | 'impact' | 'budget' | 'spent' | 'remaining' | 'status';
+  type SortColumn = 'title' | 'date' | 'price' | 'origPrice' | 'tax' | 'total' | 'impact' | 'budget' | 'spent' | 'remaining' | 'status';
   type SortDir = 'asc' | 'desc';
   type SortState = { column: SortColumn; direction: SortDir };
   const defaultSort: SortState = { column: 'date', direction: 'asc' };
@@ -413,6 +413,13 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
       if (column === 'title') return sign * a.name.localeCompare(b.name);
       if (column === 'price') return sign * (a.price - b.price);
       if (column === 'origPrice') return sign * ((a.originalPrice ?? 0) - (b.originalPrice ?? 0));
+      // Tax and Total price are both monotonic in the row's base amount
+      // (originalPrice when present, else price), so both sort by that base.
+      if (column === 'tax' || column === 'total') {
+        const baseA = a.originalPrice && a.originalPrice > 0 ? a.originalPrice : a.price;
+        const baseB = b.originalPrice && b.originalPrice > 0 ? b.originalPrice : b.price;
+        return sign * (baseA - baseB);
+      }
       if (column === 'impact') return sign * ((a._impact ?? a.impact ?? 0) - (b._impact ?? b.impact ?? 0));
       return sign * (dateToTs(a.date) - dateToTs(b.date));
     });
@@ -578,8 +585,8 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
           {sortableHeader('sel-standalone', 'title', 'Title', 'jps-col-title')}
           {sortableHeader('sel-standalone', 'date', 'Date', 'jps-col-date')}
           {sortableHeader('sel-standalone', 'origPrice', 'Subtotal', 'jps-col-price-orig')}
-          <div className="jps-col-tax">Tax</div>
-          <div className="jps-col-total">Total price</div>
+          {sortableHeader('sel-standalone', 'tax', 'Tax', 'jps-col-tax')}
+          {sortableHeader('sel-standalone', 'total', 'Total price', 'jps-col-total')}
           {sortableHeader('sel-standalone', 'impact', 'Contract impact (excl. tax)', 'jps-col-impact')}
         </div>
         {sortItems('sel-standalone', orderedRows.map(r => ({ ...r, price: r.revisedPrice, _impact: r.contractImpact }))).map((item, i) => (
@@ -1450,8 +1457,8 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                             {sortableHeader(gridId, 'title', 'Title', 'jps-col-title')}
                             {sortableHeader(gridId, 'date', 'Approved date', 'jps-col-date')}
                             {sortableHeader(gridId, 'price', 'Subtotal', 'jps-col-price')}
-                            <div className="jps-col-tax">Tax</div>
-                            <div className="jps-col-total">Total price</div>
+                            {sortableHeader(gridId, 'tax', 'Tax', 'jps-col-tax')}
+                            {sortableHeader(gridId, 'total', 'Total price', 'jps-col-total')}
                           </div>
 
                           {displayItems.map((item, i) => (
@@ -1514,8 +1521,8 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                       {sortableHeader('print-co-approved', 'title', 'Title', 'jps-col-title')}
                       {sortableHeader('print-co-approved', 'date', 'Approved date', 'jps-col-date')}
                       {sortableHeader('print-co-approved', 'price', 'Subtotal', 'jps-col-price-revised')}
-                      <div className="jps-col-tax">Tax</div>
-                      <div className="jps-col-impact">Total price</div>
+                      {sortableHeader('print-co-approved', 'tax', 'Tax', 'jps-col-tax')}
+                      {sortableHeader('print-co-approved', 'total', 'Total price', 'jps-col-impact')}
                     </div>
                     {coApproved.map((co, i) => (
                       <div key={i} className="jps-table-row jps-table-co">
@@ -1719,8 +1726,8 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                             {sortableHeader(gridId, 'title', 'Title', 'jps-col-title')}
                             {sortableHeader(gridId, 'date', 'Approved date', 'jps-col-date')}
                             {sortableHeader(gridId, 'price', 'Subtotal', 'jps-col-price')}
-                            <div className="jps-col-tax">Tax</div>
-                            <div className="jps-col-total">Total price</div>
+                            {sortableHeader(gridId, 'tax', 'Tax', 'jps-col-tax')}
+                            {sortableHeader(gridId, 'total', 'Total price', 'jps-col-total')}
                           </div>
 
                           {/* Approved items — grouped by location if allowance spans multiple AND user hasn't re-sorted away from default */}
@@ -1838,8 +1845,8 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                       {sortableHeader('print-co-approved', 'title', 'Title', 'jps-col-title')}
                       {sortableHeader('print-co-approved', 'date', 'Approved date', 'jps-col-date')}
                       {sortableHeader('print-co-approved', 'price', 'Subtotal', 'jps-col-price-revised')}
-                      <div className="jps-col-tax">Tax</div>
-                      <div className="jps-col-impact">Total price</div>
+                      {sortableHeader('print-co-approved', 'tax', 'Tax', 'jps-col-tax')}
+                      {sortableHeader('print-co-approved', 'total', 'Total price', 'jps-col-impact')}
                     </div>
                     {coApproved.map((co, i) => (
                       <div key={i} className="jps-table-row jps-table-co">
@@ -2078,8 +2085,8 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                         {sortableHeader(gridId, 'title', 'Title', 'jps-col-title')}
                         {sortableHeader(gridId, 'date', 'Approved date', 'jps-col-date')}
                         {sortableHeader(gridId, 'price', 'Subtotal', 'jps-col-price')}
-                        <div className="jps-col-tax">Tax</div>
-                        <div className="jps-col-total">Total price</div>
+                        {sortableHeader(gridId, 'tax', 'Tax', 'jps-col-tax')}
+                        {sortableHeader(gridId, 'total', 'Total price', 'jps-col-total')}
                       </div>
 
                       {/* Approved rows */}
@@ -2198,8 +2205,8 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                     {sortableHeader('print-co-approved', 'title', 'Title', 'jps-col-title')}
                     {sortableHeader('print-co-approved', 'date', 'Approved date', 'jps-col-date')}
                     {sortableHeader('print-co-approved', 'price', 'Subtotal', 'jps-col-price-revised')}
-                    <div className="jps-col-tax">Tax</div>
-                    <div className="jps-col-impact">Total price</div>
+                    {sortableHeader('print-co-approved', 'tax', 'Tax', 'jps-col-tax')}
+                    {sortableHeader('print-co-approved', 'total', 'Total price', 'jps-col-impact')}
                   </div>
 
                   {coApproved.map((co, i) => renderCoRow(co, i))}
@@ -2638,8 +2645,8 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                                 {sortableHeader(gridId, 'title', 'Title', 'jps-col-title')}
                                 {sortableHeader(gridId, 'date', 'Approved date', 'jps-col-date')}
                                 {sortableHeader(gridId, 'price', 'Subtotal', 'jps-col-price')}
-                                <div className="jps-col-tax">Tax</div>
-                                <div className="jps-col-total">Total price</div>
+                                {sortableHeader(gridId, 'tax', 'Tax', 'jps-col-tax')}
+                                {sortableHeader(gridId, 'total', 'Total price', 'jps-col-total')}
                               </div>
                               {displayItems.map((item, i) => (
                                 <div key={i} className={`jps-table-row ${gridClass}`}>
@@ -2698,8 +2705,8 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                         {sortableHeader('print-co-approved', 'title', 'Title', 'jps-col-title')}
                         {sortableHeader('print-co-approved', 'date', 'Approved date', 'jps-col-date')}
                         {sortableHeader('print-co-approved', 'price', 'Subtotal', 'jps-col-price-revised')}
-                        <div className="jps-col-tax">Tax</div>
-                        <div className="jps-col-impact">Total price</div>
+                        {sortableHeader('print-co-approved', 'tax', 'Tax', 'jps-col-tax')}
+                        {sortableHeader('print-co-approved', 'total', 'Total price', 'jps-col-impact')}
                       </div>
                       {coApproved.map((co, i) => (
                         <div key={i} className="jps-table-row jps-table-co">
