@@ -1586,6 +1586,7 @@ button.jps-term-label { cursor: pointer; }
   background: var(--g50); border-bottom: 1px solid var(--g200);
   font-size: 12px; font-weight: 600; color: var(--g500);
 }
+.jps-table-header { align-items: center; }
 .jps-table-header > div,
 .bds-scope .jps-table-header > .jps-col-title,
 .bds-scope .jps-table-header > .jps-col-date,
@@ -1649,10 +1650,20 @@ button.jps-term-label { cursor: pointer; }
 /* 5-column layout (allowance approved view — with remaining + impact) */
 .jps-table-allowance-5col { display: grid; grid-template-columns: 2.2fr 0.7fr 0.7fr 1fr 0.8fr; }
 
-/* 6-column layout (standalone selections — title, date, original price, tax, total price, contract impact) */
-.jps-table-sel-standalone { display: grid; grid-template-columns: 2.4fr 0.9fr 1fr 0.8fr 1fr 1fr; }
+/* 6-column layout (standalone selections — current: subtotal/tax/total price;
+   "Original + Tax" tab reuses the same 6 columns with different middle cells) */
+.jps-table-sel-standalone { display: grid; grid-template-columns: 2.2fr 0.85fr 0.95fr 0.75fr 0.95fr 1.5fr; }
+/* 7-column "Pre + after tax" variant — title · date · original (with tax) ·
+   revised price · revised tax · total revised · contract impact */
+.jps-table-sel-fulltax { display: grid; grid-template-columns: 1.9fr 0.8fr 1.05fr 0.95fr 0.85fr 1.05fr 1.5fr; }
 .jps-col-price-orig { text-align: right; }
 .jps-col-price-revised { text-align: right; }
+/* Tab toggle above the standalone selections grid (compare current vs Original + Tax layout) */
+.jps-sel-compare-tabs { margin-bottom: 10px; }
+/* Two-line "Approved changes / (excl. tax)" header — each line stays on one row,
+   stacked and right-aligned to sit beside the sort arrow. */
+.jps-impact-hdr { display: inline-flex; flex-direction: column; align-items: flex-end; line-height: 1.25; }
+.jps-impact-hdr > span { white-space: nowrap; }
 /* Tax + Total price columns — broken out from the line-item price, right-aligned like the money columns */
 .jps-col-tax { text-align: right; }
 .jps-col-total { text-align: right; }
@@ -2163,9 +2174,11 @@ button.jps-term-label { cursor: pointer; }
   .jps-col-amount { white-space: nowrap; }
   .jps-col-price-revised { white-space: nowrap; }
 
-  /* Selections table: 6 cols → 5 cols (drop Date; keep Original price/Tax/Total price/Contract impact) */
-  .jps-table-sel-standalone { grid-template-columns: 1.8fr 1fr 0.8fr 1fr 1fr; }
+  /* Selections table: 6 cols → 5 cols (drop Date; keep Subtotal/Tax/Total price/Contract impact) */
+  .jps-table-sel-standalone { grid-template-columns: 1.6fr 0.9fr 0.7fr 0.9fr 1.4fr; }
   .jps-table-sel-standalone .jps-col-date { display: none; }
+  /* "Pre + after tax" variant: drop Date on mobile, keep the rest (scrolls) */
+  .jps-table-sel-fulltax .jps-col-date { display: none; }
 
   /* Payments table: 4 cols → 3 cols (drop Payment type) */
   .jps-table-payments { grid-template-columns: 2fr 1.1fr 1.1fr; }
@@ -2190,7 +2203,8 @@ button.jps-term-label { cursor: pointer; }
 @media (max-width: 700px) {
   .jps-table { overflow-x: auto; -webkit-overflow-scrolling: touch; }
   /* Comfortable min-widths so columns keep their proportions; the table scrolls. */
-  .jps-table-sel-standalone { min-width: 760px; }
+  .jps-table-sel-standalone { min-width: 820px; }
+  .jps-table-sel-fulltax { min-width: 1060px; }
   .jps-table-co { min-width: 560px; }
   .jps-table-payments { min-width: 480px; }
 }
@@ -6577,6 +6591,14 @@ button.jps-term-label { cursor: pointer; }
 .selv2-pill-muted { background: var(--g100); color: var(--g500); }
 .selv2-pill-credit { background: #fdecec; color: var(--red, #c53030); }
 .selv2-pill-overage { background: #fff4e0; color: #b25800; }
+
+/* Deposit & true-up (V4): mark-complete action bar inside an expanded allowance */
+.selv2-markcomplete-bar {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  padding: 10px 14px; margin-top: 8px;
+  background: var(--g50); border: 1px dashed var(--g200); border-radius: 8px;
+}
+.selv2-markcomplete-text { font-size: 12px; color: var(--g600); }
 
 .est-check.disabled {
   opacity: 0.4; cursor: not-allowed; background: var(--g100); border-color: var(--g200);

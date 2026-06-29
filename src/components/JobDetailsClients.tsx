@@ -106,7 +106,7 @@ export default function JobDetailsClients({
                 checked={shareBudgetDiff}
                 onClick={() => onShareBudgetDiffChange?.(!shareBudgetDiff)}
                 label="Budget difference"
-                hint="Show the budget difference on the client's Job Price Summary."
+                hint="Show the budget difference table on the client's Job Price Summary."
                 indent
               />
             ) : (

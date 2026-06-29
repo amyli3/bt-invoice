@@ -16,6 +16,7 @@ import EstimateModal from './components/EstimateModal';
 import SelectionsModal from './components/SelectionsModal';
 import SelectionsModalV2 from './components/SelectionsModalV2';
 import SelectionsModalV3 from './components/SelectionsModalV3';
+import SelectionsModalV4 from './components/SelectionsModalV4';
 import JobPriceSummary from './components/JobPriceSummary';
 import JobDetailsClients from './components/JobDetailsClients';
 import SelectionsPage from './components/SelectionsPage';
@@ -98,6 +99,7 @@ export default function App() {
   const [estModalOpen, setEstModalOpen] = useState(false);
   const [selModalOpen, setSelModalOpen] = useState(false);
   const [selV2ModalOpen, setSelV2ModalOpen] = useState(false);
+  const [selV4ModalOpen, setSelV4ModalOpen] = useState(false);
   const [selectionsWizardOpen, setSelectionsWizardOpen] = useState(false);
   const [wizardPreselectIds, setWizardPreselectIds] = useState<string[]>([]);
   const [completedAllowanceIds, setCompletedAllowanceIds] = useState<Set<string>>(new Set());
@@ -653,7 +655,7 @@ export default function App() {
               <InvoiceInfo invoice={invoice} onChange={setInvoice} />
               <OwnerPrice invoice={invoice} onChange={setInvoice} />
               {invoice.mode === 'lineItems' && (isInvoiceV2Like
-                ? <LineItemsV2 invoice={invoice} onChange={setInvoice} vis={vis} onVisChange={setVis} onOpenEstimate={() => setEstModalOpen(true)} onOpenSelections={() => setSelV2ModalOpen(true)} />
+                ? <LineItemsV2 invoice={invoice} onChange={setInvoice} vis={vis} onVisChange={setVis} onOpenEstimate={() => setEstModalOpen(true)} onOpenSelections={() => setSelV2ModalOpen(true)} onOpenSelections2={() => setSelV4ModalOpen(true)} />
                 : <LineItems invoice={invoice} onChange={setInvoice} vis={vis} onVisChange={setVis} onOpenEstimate={() => setEstModalOpen(true)} onOpenSelections={() => setSelModalOpen(true)} />)}
               <Notes invoice={invoice} onChange={setInvoice} />
             </div>
@@ -739,6 +741,12 @@ export default function App() {
         onAdd={handleAddFromSelections}
         addedChildIds={invoice.lineItems.flatMap(li => li.relatedItem?.childIds ?? [])}
         data={selectionsModalData}
+      />
+      <SelectionsModalV4
+        open={selV4ModalOpen && activePage === 'invoice-3'}
+        onClose={() => setSelV4ModalOpen(false)}
+        onAdd={handleAddFromSelections}
+        addedChildIds={invoice.lineItems.flatMap(li => li.relatedItem?.childIds ?? [])}
       />
     </div>
   );

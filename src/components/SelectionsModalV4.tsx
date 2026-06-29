@@ -1,0 +1,381 @@
+import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
+import { fmt } from '../utils';
+import { DEPOSIT_TRUEUP_ALLOWANCES, type DepositTrueUpAllowance } from '../selectionsData';
+
+/* ─── Scenario note tooltip ─── */
+function ScenarioTooltip({ note }: { note: string }) {
+  const iconRef = useRef<HTMLSpanElement>(null);
+  const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
+
+  const show = () => {
+    if (!iconRef.current) return;
+    const r = iconRef.current.getBoundingClientRect();
+    setPos({ left: r.left + r.width / 2, top: r.top - 8 });
+  };
+  const hide = () => setPos(null);
+
+  return (
+    <span className="sel-scenario-tip" onClick={e => e.stopPropagation()} onMouseEnter={show} onMouseLeave={hide}>
+      <span ref={iconRef} className="sel-scenario-tip-icon">i</span>
+      {pos && createPortal(
+        <span className="sel-scenario-tip-bubble sel-scenario-tip-bubble-portal" style={{ left: pos.left, top: pos.top }}>
+          {note}
+        </span>,
+        document.body,
+      )}
+    </span>
+  );
+}
+
+const AllowanceIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0 }}>
+    <path fillRule="evenodd" clipRule="evenodd" d="M2.25928 3.20305C1.32316 3.6243 0.5 4.30937 0.5 5.25V7.75C0.5 8.69103 1.32264 9.37614 2.25891 9.79738C2.88695 10.0799 3.6538 10.2883 4.5 10.4019V10.75C4.5 11.691 5.32264 12.3761 6.25891 12.7974C7.24189 13.2396 8.56489 13.5 10 13.5C11.4351 13.5 12.7581 13.2396 13.7411 12.7974C14.6774 12.3761 15.5 11.691 15.5 10.75V8.25655L15.5 8.24998C15.5 7.42295 14.8571 6.79464 14.0945 6.37957C13.4062 6.00494 12.5055 5.7344 11.5 5.59774V5.25C11.5 4.30937 10.6768 3.6243 9.74072 3.20305C8.75766 2.76067 7.43467 2.5 6 2.5C4.56533 2.5 3.24234 2.76067 2.25928 3.20305ZM2.66965 4.11497C1.79613 4.50806 1.5 4.94799 1.5 5.25C1.5 5.55201 1.79613 5.99194 2.66965 6.38503C3.06609 6.56343 3.54313 6.71216 4.07865 6.81865C4.09098 6.8206 4.10317 6.823 4.11519 6.82583C4.68689 6.93692 5.32401 7 6 7C6.67599 7 7.31311 6.93692 7.88481 6.82583C7.89683 6.823 7.90902 6.8206 7.92135 6.81865C8.45687 6.71216 8.93391 6.56343 9.33035 6.38503C10.2039 5.99194 10.5 5.55201 10.5 5.25C10.5 4.94799 10.2039 4.50806 9.33035 4.11497C8.50376 3.74301 7.32675 3.5 6 3.5C4.67325 3.5 3.49624 3.74301 2.66965 4.11497ZM7.5 7.90171C7.02174 7.966 6.51815 8 6 8C5.48185 8 4.97826 7.966 4.5 7.90171V9.39193C4.9678 9.46159 5.472 9.5 6 9.5C6.528 9.5 7.0322 9.46159 7.5 9.39193V7.90171ZM8.5 9.18152V7.71464C8.95353 7.60388 9.37115 7.46326 9.74072 7.29695C10.0086 7.1764 10.2673 7.03424 10.5 6.87067V7.75C10.5 8.05272 10.2039 8.49261 9.33079 8.88543C9.08347 8.9967 8.80475 9.09642 8.5 9.18152ZM7.5 10.7151C7.21945 10.6471 6.95296 10.5679 6.70349 10.4789C6.47276 10.4928 6.23792 10.5 6 10.5C5.83167 10.5 5.66488 10.4964 5.5 10.4894V10.75C5.5 11.0527 5.79611 11.4926 6.66921 11.8854C6.91653 11.9967 7.19525 12.0964 7.5 12.1815V10.7151ZM8.5 12.3919V10.9015C8.97789 10.9657 9.48154 11 10 11C10.5182 11 11.0218 10.966 11.5 10.9018V12.3919C11.0322 12.4616 10.528 12.5 10 12.5C9.472 12.5 8.9678 12.4616 8.5 12.3919ZM3.5 7.71464C3.04647 7.60388 2.62885 7.46326 2.25928 7.29695C1.99139 7.1764 1.73275 7.03424 1.5 6.87067V7.75C1.5 8.05272 1.79611 8.49261 2.66921 8.88543C2.91653 8.9967 3.19525 9.09642 3.5 9.18152V7.71464ZM14.5 8.24743L14.5 8.25V8.25351C14.4977 8.55611 14.2005 8.99412 13.3308 9.38542C12.9356 9.56321 12.4603 9.7115 11.9266 9.81784C11.9108 9.82018 11.8952 9.82325 11.8798 9.82704C11.3095 9.93737 10.6741 9.99998 10 9.99998C9.76049 9.99998 9.52556 9.99199 9.29648 9.9767C9.45127 9.92085 9.59969 9.861 9.74109 9.79738C10.6774 9.37614 11.5 8.69103 11.5 7.75V6.60791C12.3571 6.73703 13.0865 6.96946 13.6165 7.2579C14.2813 7.61977 14.4986 7.98712 14.5 8.24743ZM12.5 10.715V12.1815C12.8048 12.0964 13.0835 11.9967 13.3308 11.8854C14.2039 11.4926 14.5 11.0527 14.5 10.75V9.87134C14.2674 10.0348 14.0089 10.1769 13.7411 10.2974C13.3714 10.4637 12.9537 10.6043 12.5 10.715Z" fill="currentColor"/>
+  </svg>
+);
+
+const SelectionIcon = () => (
+  <svg width="13" height="13" viewBox="0 0 13 13" fill="none" style={{ flexShrink: 0 }}>
+    <path fillRule="evenodd" clipRule="evenodd" d="M1.55443 0.826519C1.64598 0.307348 2.12272 -0.0471547 2.63892 0.00510098L2.71289 0.0153593L6.15972 0.623128C6.67889 0.714673 7.03339 1.19141 6.98113 1.70761L6.97088 1.78158L6.278 5.708L10.025 4.34428C10.5192 4.16438 11.0633 4.39852 11.2771 4.86954L11.3067 4.94195L12.5038 8.23088C12.5877 8.46141 12.5837 8.71404 12.4939 8.94088L12.4932 11.6711C12.4932 12.1983 12.0853 12.6302 11.5679 12.6684L11.4932 12.6711H2.74322C2.60006 12.6711 2.45964 12.6602 2.31842 12.6381C0.836606 12.406 -0.176726 10.9928 0.025735 9.50854L0.0427299 9.39982L1.55443 0.826519ZM11.493 9.663L5.975 11.671L11.4932 11.6711L11.493 9.663ZM1.02754 9.57347L2.53924 1.00017L5.98607 1.60794L4.46664 10.225L4.44771 10.3178C4.24197 11.2051 3.38338 11.7924 2.47301 11.6501C1.51423 11.4999 0.855115 10.5513 1.02754 9.57347ZM10.367 5.28397L6.0775 6.845L5.45145 10.3987C5.42454 10.5513 5.38551 10.6987 5.33552 10.8402L11.5641 8.5729L10.367 5.28397ZM3.49324 9.92112C3.49324 9.50691 3.15745 9.17112 2.74324 9.17112C2.32902 9.17112 1.99324 9.50691 1.99324 9.92112C1.99324 10.3353 2.32902 10.6711 2.74324 10.6711C3.15745 10.6711 3.49324 10.3353 3.49324 9.92112Z" fill="currentColor"/>
+  </svg>
+);
+
+function fmtCurrency(v: number) {
+  const abs = Math.abs(v);
+  const s = '$' + fmt(abs);
+  return v < 0 ? '-' + s : s;
+}
+
+/* ─── Outgoing payload shape (matches handleAddFromSelections in App.tsx) ─── */
+interface OutChild {
+  id: string;
+  lineItem: string;
+  costCode: string;
+  costType?: string;
+  selection: string;
+  newInvoiceAmt: number | null;
+  sourceChildIds?: string[];
+  rolledUp?: { name: string; amount: number; isAllowance?: boolean }[];
+}
+interface OutGroup {
+  id: string;
+  type: 'allowance' | 'selection';
+  name: string;
+  children: OutChild[];
+}
+
+interface Props {
+  open: boolean;
+  onClose: () => void;
+  onAdd: (items: OutGroup[]) => void;
+  /** Group ids already trued-up on this invoice (so re-open hides them). */
+  addedChildIds?: string[];
+}
+
+/* ─── Component ─── */
+export default function SelectionsModalV4({ open, onClose, onAdd, addedChildIds = [] }: Props) {
+  // Which allowances the builder has marked complete in this session. Marking
+  // complete is the hinge of the deposit/true-up model: it LOCKS the variance
+  // so the over/under can settle on this invoice.
+  const [completed, setCompleted] = useState<Record<string, boolean>>({});
+  // Which trued-up allowances the builder has checked to add to the invoice.
+  const [checked, setChecked] = useState<Record<string, boolean>>({});
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+
+  const addedSet = new Set(addedChildIds);
+  const data = DEPOSIT_TRUEUP_ALLOWANCES.filter(a => !addedSet.has(`${a.id}-trueup`));
+
+  useEffect(() => {
+    if (!open) return;
+    setCompleted({});
+    setChecked({});
+    const e: Record<string, boolean> = {};
+    data.forEach(a => { e[a.id] = true; });
+    setExpanded(e);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  if (!open) return null;
+
+  // Sum of finalized selections (pending ones don't count toward the lock).
+  const doneTotal = (a: DepositTrueUpAllowance) =>
+    a.selections.filter(s => s.status === 'done').reduce((sum, s) => sum + s.approvedPrice, 0);
+  const hasPending = (a: DepositTrueUpAllowance) => a.selections.some(s => s.status === 'pending');
+  // Locked variance = finalized selections − what was billed upfront.
+  // > 0 → overage to charge, < 0 → credit, 0 → nets out.
+  const variance = (a: DepositTrueUpAllowance) => doneTotal(a) - a.billedUpfront;
+  const isComplete = (a: DepositTrueUpAllowance) => !!completed[a.id];
+  // A fully-locked allowance with non-zero variance is the only thing that
+  // produces an invoice line.
+  const isTrueable = (a: DepositTrueUpAllowance) => isComplete(a) && !hasPending(a);
+
+  const toggleComplete = (a: DepositTrueUpAllowance) => {
+    if (hasPending(a)) return; // can't fully lock while a selection is still being chosen
+    setCompleted(s => {
+      const next = { ...s, [a.id]: !s[a.id] };
+      // Auto-check for invoicing when newly completed with a non-zero variance.
+      if (next[a.id] && variance(a) !== 0) setChecked(c => ({ ...c, [a.id]: true }));
+      if (!next[a.id]) setChecked(c => ({ ...c, [a.id]: false }));
+      return next;
+    });
+  };
+  const toggleCheck = (a: DepositTrueUpAllowance) => {
+    if (!isTrueable(a) || variance(a) === 0) return;
+    setChecked(c => ({ ...c, [a.id]: !c[a.id] }));
+  };
+  const toggleExpand = (id: string) => setExpanded(e => ({ ...e, [id]: !e[id] }));
+
+  // Build the outgoing payload: one true-up line per checked, locked, non-zero
+  // allowance. Overage → positive charge; underage → negative credit.
+  const outgoing: OutGroup[] = data
+    .filter(a => isTrueable(a) && variance(a) !== 0 && checked[a.id])
+    .map(a => {
+      const v = variance(a);
+      const ccName = (() => {
+        const i = a.costCode.indexOf(' - ');
+        return i >= 0 ? a.costCode.slice(i + 3).trim() : a.costCode;
+      })();
+      const isOver = v > 0;
+      return {
+        id: a.id,
+        type: 'allowance' as const,
+        name: a.name,
+        children: [{
+          id: `${a.id}-trueup`,
+          lineItem: isOver ? `${ccName} — allowance overage` : `${ccName} — allowance credit`,
+          costCode: a.costCode,
+          costType: 'Allowance',
+          selection: 'Allowance',
+          newInvoiceAmt: v,
+          sourceChildIds: [`${a.id}-trueup`],
+          rolledUp: [
+            { name: `${a.name} (billed upfront)`, amount: -a.billedUpfront, isAllowance: true },
+            ...a.selections.filter(s => s.status === 'done').map(s => ({ name: s.name, amount: s.approvedPrice })),
+          ],
+        }],
+      };
+    });
+
+  const invoiceSubtotal = outgoing.reduce(
+    (s, g) => s + g.children.reduce((cs, c) => cs + (c.newInvoiceAmt ?? 0), 0), 0);
+  const selectedCount = outgoing.length;
+
+  const handleCreate = () => {
+    if (outgoing.length > 0) onAdd(outgoing);
+    onClose();
+  };
+
+  const chevron = (isOpen: boolean) => (
+    <span className={"est-group-chevron" + (isOpen ? " open" : "")}>&#9654;</span>
+  );
+
+  const allExpanded = data.length > 0 && data.every(a => expanded[a.id]);
+  const toggleExpandAll = () => {
+    const next = !allExpanded;
+    setExpanded(e => { const v = { ...e }; data.forEach(a => { v[a.id] = next; }); return v; });
+  };
+
+  const renderAllowance = (a: DepositTrueUpAllowance) => {
+    const isOpen = !!expanded[a.id];
+    const v = variance(a);
+    const pending = hasPending(a);
+    const complete = isComplete(a);
+    const trueable = isTrueable(a);
+    const isOn = !!checked[a.id];
+    const lineAmt = trueable && v !== 0 ? v : 0;
+
+    // Status of the true-up: drives the right-side badge + amount color.
+    let statusPill: { label: string; cls: string } | null = null;
+    if (pending) statusPill = { label: 'Selections in progress', cls: 'selv2-pill-muted' };
+    else if (!complete) statusPill = { label: 'Ready to mark complete', cls: 'selv2-pill-approved' };
+    else if (v > 0) statusPill = { label: 'Overage to charge', cls: 'selv2-pill-overage' };
+    else if (v < 0) statusPill = { label: 'Credit to apply', cls: 'selv2-pill-credit' };
+    else statusPill = { label: 'Nets to $0', cls: 'selv2-pill-muted' };
+
+    return (
+      <div key={a.id} className="selv2-group">
+        <div className="selv2-group-header">
+          <div className="selv2-group-left">
+            <div
+              className={"est-check" + (isOn ? ' on' : '') + (!trueable || v === 0 ? ' disabled' : '')}
+              onClick={() => toggleCheck(a)}
+              title={
+                pending ? 'Finish all selections, then mark complete to lock the variance'
+                  : !complete ? 'Mark complete first to lock the variance'
+                    : v === 0 ? 'Nets to $0 — nothing to add'
+                      : isOn ? 'Will be added to this invoice' : 'Add this true-up to the invoice'
+              }
+            />
+            <button type="button" className="selv2-chev-btn" onClick={() => toggleExpand(a.id)}>
+              {chevron(isOpen)}
+            </button>
+            <span className="selv2-group-icon"><AllowanceIcon /></span>
+            <span className="selv2-group-name">{a.name}</span>
+            {complete && <span className="selv2-pill selv2-pill-complete">Marked complete</span>}
+            {statusPill && <span className={"selv2-pill " + statusPill.cls}>{statusPill.label}</span>}
+            <ScenarioTooltip note={a.scenarioNote} />
+          </div>
+          <div className="selv2-group-meta">
+            <div className="selv2-meta-item">
+              <div className="selv2-meta-label">Billed upfront</div>
+              <div className="selv2-meta-value">${fmt(a.billedUpfront)}</div>
+            </div>
+            <div className="selv2-meta-item">
+              <div className="selv2-meta-label">{trueable ? 'True-up amount' : 'Variance (unlocked)'}</div>
+              <div
+                className="selv2-meta-value selv2-meta-value-total"
+                style={{ color: !trueable ? 'var(--g400)' : v > 0 ? 'var(--bt-blue)' : v < 0 ? 'var(--red, #c53030)' : 'var(--g400)' }}
+              >
+                {lineAmt === 0 && !trueable ? `(${fmtCurrency(v)})` : fmtCurrency(lineAmt)}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {isOpen && (
+          <div className="selv2-children">
+            <table className="selv2-table">
+              <colgroup>
+                <col style={{ width: 40 }} />
+                <col />
+                <col style={{ width: 150 }} />
+                <col style={{ width: 110 }} />
+                <col style={{ width: 130 }} />
+              </colgroup>
+              <thead>
+                <tr>
+                  <th></th>
+                  <th>Line item</th>
+                  <th>Cost code</th>
+                  <th>Cost type</th>
+                  <th style={{ textAlign: 'right' }}>Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                {/* The deposit already billed — context, not billable again. */}
+                <tr className="selv2-row-disabled">
+                  <td></td>
+                  <td>
+                    <div className="selv2-cell-name">
+                      <span className="selv2-row-icon"><AllowanceIcon /></span>
+                      <span>{a.name} (billed upfront)</span>
+                      <span className="selv2-pill selv2-pill-muted">Deposit</span>
+                    </div>
+                  </td>
+                  <td className="selv2-cell-mono">{a.costCode}</td>
+                  <td className="selv2-cell-type">Allowance</td>
+                  <td style={{ textAlign: 'right', fontWeight: 500, color: 'var(--g400)' }}>${fmt(a.billedUpfront)}</td>
+                </tr>
+                {a.selections.map(s => (
+                  <tr key={s.id} className={s.status === 'pending' ? 'selv2-row-disabled' : ''}>
+                    <td></td>
+                    <td>
+                      <div className="selv2-cell-name">
+                        <span className="selv2-row-icon"><SelectionIcon /></span>
+                        <span>{s.name}</span>
+                        {s.status === 'pending'
+                          ? <span className="selv2-pill selv2-pill-muted">In progress</span>
+                          : <span className="selv2-pill selv2-pill-approved">Done</span>}
+                      </div>
+                    </td>
+                    <td className="selv2-cell-mono">{s.costCode}</td>
+                    <td className="selv2-cell-type">{s.costType}</td>
+                    <td style={{ textAlign: 'right', fontWeight: 500, color: s.status === 'pending' ? 'var(--g400)' : undefined }}>
+                      {s.status === 'pending' ? '—' : `$${fmt(s.approvedPrice)}`}
+                    </td>
+                  </tr>
+                ))}
+                {/* Locked variance summary row */}
+                <tr>
+                  <td></td>
+                  <td colSpan={3} style={{ fontWeight: 600, color: 'var(--bt-midnight)' }}>
+                    {trueable
+                      ? (v > 0 ? 'Overage — charge on this invoice' : v < 0 ? 'Credit — apply on this invoice' : 'Variance nets to $0')
+                      : pending ? 'Variance not yet locked (selection in progress)'
+                        : 'Variance locks when you mark complete'}
+                  </td>
+                  <td style={{ textAlign: 'right', fontWeight: 700, color: trueable && v > 0 ? 'var(--bt-blue)' : trueable && v < 0 ? 'var(--red, #c53030)' : 'var(--g400)' }}>
+                    {trueable ? fmtCurrency(v) : `(${fmtCurrency(v)})`}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+
+            {/* Mark-complete action — the hinge of the deposit/true-up flow */}
+            <div className="selv2-markcomplete-bar">
+              <div className="selv2-markcomplete-text">
+                {pending
+                  ? 'A selection is still being chosen. Finish it to lock the variance.'
+                  : complete
+                    ? 'Variance locked. Uncheck to reopen.'
+                    : 'Selections are finalized. Mark complete to lock the variance and settle the difference.'}
+              </div>
+              <button
+                type="button"
+                className={"btn btn-s" + (complete ? '' : ' btn-p')}
+                disabled={pending}
+                onClick={() => toggleComplete(a)}
+              >
+                {complete ? 'Reopen allowance' : 'Mark complete'}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  return createPortal(
+    <div className="modal-backdrop" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="est-modal selv2-modal" onClick={e => e.stopPropagation()}>
+        <div className="est-modal-hdr">
+          <div>
+            <h2 className="selv2-title">True up allowances (deposit &amp; true-up)</h2>
+          </div>
+          <button className="est-modal-close" onClick={onClose}>&times;</button>
+        </div>
+
+        <div className="est-modal-body selv2-body">
+          <div className="selv2-desc">
+            These allowances were billed upfront as part of the contract. When the selections drawing from an
+            allowance are finalized, mark it complete to lock the variance — the overage is charged or the
+            credit is applied on this invoice. The allowance itself is never billed again.
+          </div>
+
+          <div className="selv2-controls">
+            <div className="selv2-controls-spacer" />
+            <button type="button" className="est-expand-btn" onClick={toggleExpandAll}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M7 20l5-5 5 5" /><path d="M7 4l5 5 5-5" /></svg>
+              {allExpanded ? 'Collapse all' : 'Expand all'}
+            </button>
+          </div>
+
+          <div className="selv2-sections">
+            {data.length > 0 ? (
+              <>
+                <div className="selv2-section-label">Allowances billed upfront</div>
+                {data.map(renderAllowance)}
+              </>
+            ) : (
+              <div className="selv2-empty">No allowances to true up.</div>
+            )}
+          </div>
+        </div>
+
+        <div className="selv2-footer">
+          <div className="selv2-footer-summary">
+            <span className="selv2-footer-summary-label">Net added to invoice</span>
+            <span className="selv2-footer-summary-amount">{fmtCurrency(invoiceSubtotal)}</span>
+          </div>
+          <div className="selv2-footer-buttons">
+            <button className="btn btn-s" onClick={onClose}>Cancel</button>
+            <button className="btn btn-p" onClick={handleCreate} disabled={selectedCount === 0}>
+              Add true-up{selectedCount > 1 ? 's' : ''}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}

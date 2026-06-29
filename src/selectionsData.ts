@@ -103,6 +103,93 @@ export const INVOICE_SELECTION_SCENARIOS: InvoiceSelectionScenario[] = [
   },
 ];
 
+/* ─────────────────────────────────────────────────────────────────────────
+   Deposit & true-up model (Selection 2 / V4)
+   ---------------------------------------------------------------------------
+   The CCH pattern from the SRI planning doc: the allowance is part of the
+   contract price, so it's BILLED UPFRONT as a deposit. When the selection(s)
+   drawing from it are finalized, the builder marks the allowance complete,
+   which LOCKS the variance. The difference (over or under the deposit) then
+   settles on THIS invoice — a charge if over, a credit if under. The
+   allowance is never billed twice; only the variance moves.
+   ───────────────────────────────────────────────────────────────────────── */
+export type DepositSelection = {
+  id: string;
+  name: string;
+  costCode: string;
+  costType: string;
+  approvedPrice: number;
+  // 'done'    → selection is finalized and counts toward the locked variance
+  // 'pending' → still being chosen; blocks a clean full completion
+  status: 'done' | 'pending';
+};
+
+export type DepositTrueUpAllowance = {
+  id: string;
+  name: string;
+  costCode: string;
+  budgetAmount: number;     // contract allowance amount
+  billedUpfront: number;    // deposit already invoiced (typically = budgetAmount)
+  scenario: 'over' | 'under' | 'partial' | 'exact';
+  scenarioNote: string;
+  selections: DepositSelection[];
+};
+
+export const DEPOSIT_TRUEUP_ALLOWANCES: DepositTrueUpAllowance[] = [
+  {
+    id: 'dt-1',
+    name: 'Cabinets Allowance',
+    costCode: '9040 - Cabinets',
+    budgetAmount: 5000,
+    billedUpfront: 5000,
+    scenario: 'over',
+    scenarioNote: 'Allowance billed upfront ($5,000). Selections finalized at $6,200 — mark complete to lock the +$1,200 overage and charge it on this invoice.',
+    selections: [
+      { id: 'dt-1a', name: 'Custom shaker cabinets', costCode: '9040', costType: 'Material', approvedPrice: 4400, status: 'done' },
+      { id: 'dt-1b', name: 'Soft-close hardware', costCode: '9040', costType: 'Material', approvedPrice: 1800, status: 'done' },
+    ],
+  },
+  {
+    id: 'dt-2',
+    name: 'Lighting Allowance',
+    costCode: '8010 - Lighting',
+    budgetAmount: 3000,
+    billedUpfront: 3000,
+    scenario: 'under',
+    scenarioNote: 'Allowance billed upfront ($3,000). Selections finalized at $2,400 — mark complete to lock the -$600 credit and apply it on this invoice.',
+    selections: [
+      { id: 'dt-2a', name: 'Pendant fixtures', costCode: '8010', costType: 'Material', approvedPrice: 1500, status: 'done' },
+      { id: 'dt-2b', name: 'Recessed cans', costCode: '8010', costType: 'Material', approvedPrice: 900, status: 'done' },
+    ],
+  },
+  {
+    id: 'dt-3',
+    name: 'Plumbing Allowance',
+    costCode: '4010 - Plumbing',
+    budgetAmount: 4000,
+    billedUpfront: 4000,
+    scenario: 'partial',
+    scenarioNote: 'Allowance billed upfront ($4,000). Two selections are done ($1,800); the kitchen faucet is still being chosen. The variance can’t be fully locked until every selection is finalized.',
+    selections: [
+      { id: 'dt-3a', name: 'Shower valve set', costCode: '4010', costType: 'Material', approvedPrice: 1100, status: 'done' },
+      { id: 'dt-3b', name: 'Bathroom faucet set', costCode: '4010', costType: 'Material', approvedPrice: 700, status: 'done' },
+      { id: 'dt-3c', name: 'Kitchen faucet (in progress)', costCode: '4010', costType: 'Material', approvedPrice: 0, status: 'pending' },
+    ],
+  },
+  {
+    id: 'dt-4',
+    name: 'Paint Allowance',
+    costCode: '9050 - Paint',
+    budgetAmount: 2000,
+    billedUpfront: 2000,
+    scenario: 'exact',
+    scenarioNote: 'Allowance billed upfront ($2,000). Selection finalized at exactly $2,000 — mark complete and the variance nets to $0, so no line is added.',
+    selections: [
+      { id: 'dt-4a', name: 'Interior wall paint', costCode: '9050', costType: 'Material', approvedPrice: 2000, status: 'done' },
+    ],
+  },
+];
+
 export type StandaloneSelection = {
   id: string;
   name: string;

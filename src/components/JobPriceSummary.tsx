@@ -1,4 +1,4 @@
-import { useState, Fragment } from 'react';
+import { useState, Fragment, type ReactNode } from 'react';
 import '../bds-tokens.css';
 import { BdsActionBar, BdsBadge, BdsButton, BdsIcon, BdsSection, BdsTabs, BdsText } from '../bds';
 import { JCB_TOTALS, JCB_ROWS, MARKUP_PCT, JCB_OWNER_PRICE_DELTA, jcbBudgetDiffByCategory, jcbBudgetDiffByCostCode } from '../jcbMockData';
@@ -341,6 +341,12 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
   // bar + decision callout (Sarah review, May 2026).
   const [slice4Version, setSlice4Version] = useState<'v1' | 'v2' | 'v3' | 'v4' | 'v41' | 'v41notes' | 'v411' | 'v45' | 'v44' | 'v5'>('v1');
   const [slice4DrillOpen, setSlice4DrillOpen] = useState(false);
+  // Standalone Selections grid — compare the current tax layout (Subtotal/Tax/
+  // Total price) against the previous one that carried a separate Original price
+  // column (which shows "—" for post-contract selections that had no original).
+  // Settled on the "Original + Tax + impact" layout; tabs hidden (see `tabs` below).
+  // Keep setter via eslint-disable-style void so the comparison branches still compile.
+  const [selGridVersion] = useState<'current' | 'previous' | 'previmpact' | 'fulltax2'>('previmpact');
   const [showPrint, setShowPrint] = useState(false);
   // Customize popover — builder chooses what the client sees (budget difference, COs, payments).
   // Iteration of the in-section "Show to client" toggle, using the BDS Customize pattern.
@@ -449,7 +455,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
     );
   };
 
-  const sortableHeader = (gridId: string, column: SortColumn, label: string, className: string) => {
+  const sortableHeader = (gridId: string, column: SortColumn, label: ReactNode, className: string) => {
     const s = getSort(gridId);
     const state: 'asc' | 'desc' | 'none' = s.column !== column ? 'none' : s.direction;
     return (
@@ -579,7 +585,189 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
     const totalTaxCol = mergedRows.reduce((sum, r) => sum + taxOf(rowBase(r)), 0);
     const totalTotalPrice = mergedRows.reduce((sum, r) => sum + withTax(rowBase(r)), 0);
     const totalImpact = mergedRows.reduce((sum, r) => sum + r.contractImpact, 0);
+    // Comparison tabs:
+    //  - "current": Subtotal · Tax · Total price · Contract impact (base price on
+    //    every row, tax broken out, total = base + tax).
+    //  - "previous": the earlier "Original + Tax" layout — Original price (— for
+    //    post-contract) · Revised price · Tax · Contract impact, all prices ex-tax.
+    const isPrevious = selGridVersion === 'previous';
+    const sortedRows = sortItems('sel-standalone', orderedRows.map(r => ({ ...r, price: r.revisedPrice, _impact: r.contractImpact })));
+    const totalOriginalOnly = mergedRows.reduce((sum, r) => sum + r.originalPrice, 0);
+    const totalRevised = mergedRows.reduce((sum, r) => sum + r.revisedPrice, 0);
+    // Comparison tabs hidden — we settled on the "Original + Tax + impact" layout
+    // (selGridVersion defaults to 'previmpact'). To compare layouts again, restore
+    // the <BdsTabs> below and the other branches stay wired up.
+    const tabs = null;
+    // const tabs = (
+    //   <BdsTabs
+    //     className="jps-sel-compare-tabs"
+    //     ariaLabel="Selections grid layout"
+    //     activeKey={selGridVersion}
+    //     onChange={k => setSelGridVersion(k as 'current' | 'previous' | 'previmpact' | 'fulltax2')}
+    //     tabs={[
+    //       { key: 'current', label: 'Current' },
+    //       { key: 'previous', label: 'Original + Tax' },
+    //       { key: 'previmpact', label: 'Original + Tax + impact' },
+    //       { key: 'fulltax2', label: 'Original w/ tax + revised' },
+    //     ]}
+    //   />
+    // );
+    if (selGridVersion === 'fulltax2') {
+      // Original price (with tax) · Revised price (pre-tax) · Tax · Total revised · Contract impact.
+      // Same shape as 'fulltax' but the tax column is labeled simply "Tax".
+      const totalOrigWithTax = mergedRows.reduce((sum, r) => sum + (r.originalPrice > 0 ? withTax(r.originalPrice) : 0), 0);
+      const totalRevisedTax = mergedRows.reduce((sum, r) => sum + taxOf(r.revisedPrice), 0);
+      return (
+        <>
+          {tabs}
+          <div className="jps-table">
+            <div className="jps-table-header jps-table-sel-fulltax">
+              {sortableHeader('sel-standalone', 'title', 'Title', 'jps-col-title')}
+              {sortableHeader('sel-standalone', 'date', 'Date', 'jps-col-date')}
+              {sortableHeader('sel-standalone', 'origPrice', 'Original price (with tax)', 'jps-col-price-orig')}
+              {sortableHeader('sel-standalone', 'price', 'Revised price', 'jps-col-price-revised')}
+              {sortableHeader('sel-standalone', 'tax', 'Tax', 'jps-col-tax')}
+              {sortableHeader('sel-standalone', 'total', 'Total revised price', 'jps-col-total')}
+              {sortableHeader('sel-standalone', 'impact', <span className="jps-impact-hdr"><span>Approved changes</span><span>(excl. tax)</span></span>, 'jps-col-impact')}
+            </div>
+            {sortedRows.map((item, i) => (
+              <div key={i} className={`jps-table-row jps-table-sel-fulltax${item.status === 'pending' ? ' jps-row-pending' : ''}`}>
+                <div className="jps-col-title">
+                  <div>
+                    <span className="jps-item-name" onClick={() => onOpenSelection?.({ name: item.name, category: item.category, price: item.price, allowanceName: item.allowanceName, status: item.status })}>{item.name}</span>
+                    {item.status === 'pending' && <BdsBadge text="Pending" displayType="warning" />}
+                  </div>
+                </div>
+                <div className="jps-col-date">{item.date || '—'}</div>
+                <div className="jps-col-price-orig">
+                  {item.originalPrice > 0 ? fmt(withTax(item.originalPrice)) : <span className="jps-impact-neutral">—</span>}
+                </div>
+                <div className="jps-col-price-revised">{fmt(item.revisedPrice)}</div>
+                <div className="jps-col-tax">{fmt(taxOf(item.revisedPrice))}</div>
+                <div className="jps-col-total">{fmt(withTax(item.revisedPrice))}</div>
+                <div className="jps-col-impact">
+                  {item.contractImpact !== 0
+                    ? <span className="jps-impact-up">{fmtSigned(item.contractImpact)}</span>
+                    : <span className="jps-impact-neutral">—</span>}
+                </div>
+              </div>
+            ))}
+            <div className="jps-table-row jps-table-sel-fulltax jps-row-total">
+              <div className="jps-col-title">Total</div>
+              <div className="jps-col-date"></div>
+              <div className="jps-col-price-orig">{fmt(totalOrigWithTax)}</div>
+              <div className="jps-col-price-revised">{fmt(totalRevised)}</div>
+              <div className="jps-col-tax">{fmt(totalRevisedTax)}</div>
+              <div className="jps-col-total">{fmt(totalTotalPrice)}</div>
+              <div className="jps-col-impact">
+                {totalImpact > 0
+                  ? <span className="jps-impact-up">{fmtSigned(totalImpact)}</span>
+                  : <span className="jps-impact-neutral">—</span>}
+              </div>
+            </div>
+          </div>
+        </>
+      );
+    }
+    if (selGridVersion === 'previmpact') {
+      // Copy of "Original + Tax" with a Contract impact column added at the end.
+      return (
+        <>
+          {tabs}
+          <div className="jps-table">
+            <div className="jps-table-header jps-table-sel-fulltax">
+              {sortableHeader('sel-standalone', 'title', 'Title', 'jps-col-title')}
+              {sortableHeader('sel-standalone', 'date', 'Date', 'jps-col-date')}
+              {sortableHeader('sel-standalone', 'origPrice', 'Original price', 'jps-col-price-orig')}
+              {sortableHeader('sel-standalone', 'price', 'Revised price', 'jps-col-price-revised')}
+              {sortableHeader('sel-standalone', 'tax', 'Tax', 'jps-col-tax')}
+              {sortableHeader('sel-standalone', 'total', 'Total price', 'jps-col-total')}
+              {sortableHeader('sel-standalone', 'impact', <span className="jps-impact-hdr"><span>Approved changes</span><span>(excl. tax)</span></span>, 'jps-col-impact')}
+            </div>
+            {sortedRows.map((item, i) => (
+              <div key={i} className={`jps-table-row jps-table-sel-fulltax${item.status === 'pending' ? ' jps-row-pending' : ''}`}>
+                <div className="jps-col-title">
+                  <div>
+                    <span className="jps-item-name" onClick={() => onOpenSelection?.({ name: item.name, category: item.category, price: item.price, allowanceName: item.allowanceName, status: item.status })}>{item.name}</span>
+                    {item.status === 'pending' && <BdsBadge text="Pending" displayType="warning" />}
+                  </div>
+                </div>
+                <div className="jps-col-date">{item.date || '—'}</div>
+                <div className="jps-col-price-orig">
+                  {item.originalPrice > 0 ? fmt(item.originalPrice) : <span className="jps-impact-neutral">—</span>}
+                </div>
+                <div className="jps-col-price-revised">{fmt(item.revisedPrice)}</div>
+                <div className="jps-col-tax">{fmt(taxOf(rowBase(item)))}</div>
+                <div className="jps-col-total">{fmt(withTax(rowBase(item)))}</div>
+                <div className="jps-col-impact">
+                  {item.contractImpact !== 0
+                    ? <span className="jps-impact-up">{fmtSigned(item.contractImpact)}</span>
+                    : <span className="jps-impact-neutral">—</span>}
+                </div>
+              </div>
+            ))}
+            <div className="jps-table-row jps-table-sel-fulltax jps-row-total">
+              <div className="jps-col-title">Total</div>
+              <div className="jps-col-date"></div>
+              <div className="jps-col-price-orig">{fmt(totalOriginalOnly)}</div>
+              <div className="jps-col-price-revised">{fmt(totalRevised)}</div>
+              <div className="jps-col-tax">{fmt(totalTaxCol)}</div>
+              <div className="jps-col-total">{fmt(totalTotalPrice)}</div>
+              <div className="jps-col-impact">
+                {totalImpact > 0
+                  ? <span className="jps-impact-up">{fmtSigned(totalImpact)}</span>
+                  : <span className="jps-impact-neutral">—</span>}
+              </div>
+            </div>
+          </div>
+        </>
+      );
+    }
+    if (isPrevious) {
+      return (
+        <>
+          {tabs}
+          <div className="jps-table">
+            <div className="jps-table-header jps-table-sel-standalone">
+              {sortableHeader('sel-standalone', 'title', 'Title', 'jps-col-title')}
+              {sortableHeader('sel-standalone', 'date', 'Date', 'jps-col-date')}
+              {sortableHeader('sel-standalone', 'origPrice', 'Original price', 'jps-col-price-orig')}
+              {sortableHeader('sel-standalone', 'price', 'Revised price', 'jps-col-price-revised')}
+              {sortableHeader('sel-standalone', 'tax', 'Tax', 'jps-col-tax')}
+              {sortableHeader('sel-standalone', 'total', 'Total price', 'jps-col-total')}
+            </div>
+            {sortedRows.map((item, i) => (
+              <div key={i} className={`jps-table-row jps-table-sel-standalone${item.status === 'pending' ? ' jps-row-pending' : ''}`}>
+                <div className="jps-col-title">
+                  <div>
+                    <span className="jps-item-name" onClick={() => onOpenSelection?.({ name: item.name, category: item.category, price: item.price, allowanceName: item.allowanceName, status: item.status })}>{item.name}</span>
+                    {item.status === 'pending' && <BdsBadge text="Pending" displayType="warning" />}
+                  </div>
+                </div>
+                <div className="jps-col-date">{item.date || '—'}</div>
+                <div className="jps-col-price-orig">
+                  {item.originalPrice > 0 ? fmt(item.originalPrice) : <span className="jps-impact-neutral">—</span>}
+                </div>
+                <div className="jps-col-price-revised">{fmt(item.revisedPrice)}</div>
+                <div className="jps-col-tax">{fmt(taxOf(rowBase(item)))}</div>
+                <div className="jps-col-total">{fmt(withTax(rowBase(item)))}</div>
+              </div>
+            ))}
+            <div className="jps-table-row jps-table-sel-standalone jps-row-total">
+              <div className="jps-col-title">Total</div>
+              <div className="jps-col-date"></div>
+              <div className="jps-col-price-orig">{fmt(totalOriginalOnly)}</div>
+              <div className="jps-col-price-revised">{fmt(totalRevised)}</div>
+              <div className="jps-col-tax">{fmt(totalTaxCol)}</div>
+              <div className="jps-col-total">{fmt(totalTotalPrice)}</div>
+            </div>
+          </div>
+        </>
+      );
+    }
     return (
+      <>
+        {tabs}
       <div className="jps-table">
         <div className="jps-table-header jps-table-sel-standalone">
           {sortableHeader('sel-standalone', 'title', 'Title', 'jps-col-title')}
@@ -587,9 +775,9 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
           {sortableHeader('sel-standalone', 'origPrice', 'Subtotal', 'jps-col-price-orig')}
           {sortableHeader('sel-standalone', 'tax', 'Tax', 'jps-col-tax')}
           {sortableHeader('sel-standalone', 'total', 'Total price', 'jps-col-total')}
-          {sortableHeader('sel-standalone', 'impact', 'Contract impact (excl. tax)', 'jps-col-impact')}
+          {sortableHeader('sel-standalone', 'impact', <span className="jps-impact-hdr"><span>Approved changes</span><span>(excl. tax)</span></span>, 'jps-col-impact')}
         </div>
-        {sortItems('sel-standalone', orderedRows.map(r => ({ ...r, price: r.revisedPrice, _impact: r.contractImpact }))).map((item, i) => (
+        {sortedRows.map((item, i) => (
           <div key={i} className={`jps-table-row jps-table-sel-standalone${item.status === 'pending' ? ' jps-row-pending' : ''}`}>
             <div className="jps-col-title">
               <div>
@@ -621,6 +809,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
           </div>
         </div>
       </div>
+      </>
     );
   };
 
@@ -864,7 +1053,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                       <th className="jps-print-th-right">Subtotal</th>
                       <th className="jps-print-th-right">Tax</th>
                       <th className="jps-print-th-right">Total price</th>
-                      <th className="jps-print-th-right">Contract impact (excl. tax)</th>
+                      <th className="jps-print-th-right">Approved changes (excl. tax)</th>
                     </tr>
                   </thead>
                   <tbody>
