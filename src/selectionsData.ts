@@ -129,8 +129,8 @@ export type DepositTrueUpAllowance = {
   name: string;
   costCode: string;
   budgetAmount: number;     // contract allowance amount
-  billedUpfront: number;    // deposit already invoiced (typically = budgetAmount)
-  scenario: 'over' | 'under' | 'partial' | 'exact';
+  billedUpfront: number;    // deposit already invoiced (typically = budgetAmount; 0 = no deposit collected)
+  scenario: 'over' | 'under' | 'partial' | 'exact' | 'nodeposit';
   scenarioNote: string;
   selections: DepositSelection[];
 };
@@ -186,6 +186,19 @@ export const DEPOSIT_TRUEUP_ALLOWANCES: DepositTrueUpAllowance[] = [
     scenarioNote: 'Allowance billed upfront ($2,000). Selection finalized at exactly $2,000 — mark complete and the variance nets to $0, so no line is added.',
     selections: [
       { id: 'dt-4a', name: 'Interior wall paint', costCode: '9050', costType: 'Material', approvedPrice: 2000, status: 'done' },
+    ],
+  },
+  {
+    id: 'dt-5',
+    name: 'Appliances Allowance',
+    costCode: '9060 - Appliances',
+    budgetAmount: 0,
+    billedUpfront: 0,
+    scenario: 'nodeposit',
+    scenarioNote: 'No deposit collected — nothing was billed upfront for this allowance. The finalized selections bill at full price as their own line, with no deposit reversal.',
+    selections: [
+      { id: 'dt-5a', name: 'Range & hood', costCode: '9060', costType: 'Material', approvedPrice: 3200, status: 'done' },
+      { id: 'dt-5b', name: 'Refrigerator', costCode: '9060', costType: 'Material', approvedPrice: 2800, status: 'done' },
     ],
   },
 ];

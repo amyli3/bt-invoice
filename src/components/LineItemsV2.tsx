@@ -5,7 +5,7 @@ import { COST_TYPES, getNextId } from '../mockData';
 import { fmt, parseTaxRate } from '../utils';
 import { BdsText } from '../bds';
 
-function AddFromDropdown({ onOpenEstimate, onOpenSelections, onOpenSelections2 }: { onOpenEstimate?: () => void; onOpenSelections?: () => void; onOpenSelections2?: () => void }) {
+function AddFromDropdown({ onOpenEstimate, onOpenSelections, onOpenSelections2, onOpenSelections3, onOpenAll }: { onOpenEstimate?: () => void; onOpenSelections?: () => void; onOpenSelections2?: () => void; onOpenSelections3?: () => void; onOpenAll?: () => void }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -37,6 +37,12 @@ function AddFromDropdown({ onOpenEstimate, onOpenSelections, onOpenSelections2 }
           </button>
           <button className="add-from-option" onClick={() => { setOpen(false); onOpenSelections2?.(); }}>
             <span style={{ fontWeight: 500 }}>Selection 2</span>
+          </button>
+          <button className="add-from-option" onClick={() => { setOpen(false); onOpenSelections3?.(); }}>
+            <span style={{ fontWeight: 500 }}>Selection 3</span>
+          </button>
+          <button className="add-from-option" onClick={() => { setOpen(false); onOpenAll?.(); }} style={{ borderTop: '1px solid var(--g200)' }}>
+            <span style={{ fontWeight: 600 }}>All sources</span>
           </button>
         </div>
       )}
@@ -175,9 +181,11 @@ interface Props {
   onOpenEstimate?: () => void;
   onOpenSelections?: () => void;
   onOpenSelections2?: () => void;
+  onOpenSelections3?: () => void;
+  onOpenAll?: () => void;
 }
 
-export default function LineItems({ invoice, onChange, vis, onOpenEstimate, onOpenSelections, onOpenSelections2 }: Props) {
+export default function LineItems({ invoice, onChange, vis, onOpenEstimate, onOpenSelections, onOpenSelections2, onOpenSelections3, onOpenAll }: Props) {
   const add = () => onChange({...invoice, lineItems: [...invoice.lineItems, { id: getNextId(), description: '', costCode: '', costType: 'Material', unitCost: 0, quantity: 1, unit: '--', markup: 0 }]});
   const upd = (i: number, item: LineItem) => { const l = [...invoice.lineItems]; l[i] = item; onChange({...invoice, lineItems: l}); };
   const rem = (i: number) => {
@@ -198,7 +206,7 @@ export default function LineItems({ invoice, onChange, vis, onOpenEstimate, onOp
   return (
     <div className="sec" style={{paddingBottom: 0}}>
       <div style={{display: 'flex', justifyContent: 'flex-end', alignItems: 'center', marginBottom: 8, flexWrap: 'wrap', gap: 8}}>
-        <AddFromDropdown onOpenEstimate={onOpenEstimate} onOpenSelections={onOpenSelections} onOpenSelections2={onOpenSelections2} />
+        <AddFromDropdown onOpenEstimate={onOpenEstimate} onOpenSelections={onOpenSelections} onOpenSelections2={onOpenSelections2} onOpenSelections3={onOpenSelections3} onOpenAll={onOpenAll} />
       </div>
       <div className="lt-scroll liv2-lt-scroll">
         <table className="lt">
