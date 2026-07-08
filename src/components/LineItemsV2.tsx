@@ -195,8 +195,8 @@ function GroupSummaryRow({ item, colCount, vis, taxRate, activeEditId, onActivat
           </div>
         </td>
         {vis.costType && <td style={{ ...editBg, ...vtop }}>{editing
-          ? <>{lbl('Cost type')}<select className="badge" style={{ cursor: 'pointer', fontSize: 12, padding: '4px 6px' }} value={item.costType} onChange={e => u('costType', e.target.value)}>{COST_TYPES.map(t => <option key={t}>{t}</option>)}</select><label style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8, fontSize: 12, color: 'var(--g600)' }}><input type="checkbox" />Mark as Bid</label></>
-          : <span style={{ color: 'var(--g500)' }}>{isAllowance ? 'Allowance' : 'Selection'}</span>}</td>}
+          ? <>{lbl('Cost type')}<select className="badge" style={{ cursor: 'pointer', fontSize: 12, padding: '4px 6px' }} value={COST_TYPES.includes(item.costType) ? item.costType : 'None'} onChange={e => u('costType', e.target.value)}>{COST_TYPES.map(t => <option key={t}>{t}</option>)}</select><label style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8, fontSize: 12, color: 'var(--g600)' }}><input type="checkbox" />Mark as Bid</label></>
+          : <span style={{ color: 'var(--g500)' }}>{COST_TYPES.includes(item.costType) ? item.costType : ''}</span>}</td>}
         {vis.unitCost && <td style={{ ...editBg, ...vtop, textAlign: editing ? 'left' : 'right' }}>{editing ? <>{lbl('Unit cost')}<input type="number" style={{ ...box, width: 80 }} value={item.unitCost} onChange={e => u('unitCost', parseFloat(e.target.value) || 0)} /></> : null}</td>}
         {vis.quantity && <td style={{ ...editBg, ...vtop, textAlign: editing ? 'left' : 'center' }}>{editing ? <>{lbl('Quantity')}<input type="number" style={{ ...box, width: 60 }} value={item.quantity} onChange={e => u('quantity', parseFloat(e.target.value) || 0)} /></> : null}</td>}
         {vis.unit && <td style={{ ...editBg, ...vtop, textAlign: editing ? 'left' : 'center', color: 'var(--g400)', fontSize: 12 }}>{editing ? <>{lbl('Unit')}<input style={{ ...box, width: 50 }} value={item.unit === '--' ? '' : item.unit} onChange={e => u('unit', e.target.value)} /></> : null}</td>}
@@ -277,7 +277,6 @@ function GroupItemizedRows({ item, vis, taxRate, activeEditId, onActivate, onCha
     const open = !!openLeaf[mi];
     const leafId = item.id + '#' + mi;
     const active = activeEditId === leafId;
-    const costTypeText = m.isAllowance ? 'Allowance' : 'Selection';
     const toggle = () => { if (!open) onActivate?.(leafId); setOpenLeaf(o => ({ ...o, [mi]: !o[mi] })); };
     if (!open) {
       rows.push(
@@ -293,7 +292,7 @@ function GroupItemizedRows({ item, vis, taxRate, activeEditId, onActivate, onCha
               </div>
             </div>
           </td>
-          {tail(costTypeText, m.amount)}
+          {tail('', m.amount)}
         </tr>,
       );
       return;
