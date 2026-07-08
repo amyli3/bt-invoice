@@ -1,6 +1,6 @@
 import { Invoice, Job, ColumnDef } from './types';
 
-export const COST_TYPES = ['Labor', 'Material', 'Equipment', 'Subcontractor', 'Other'];
+export const COST_TYPES = ['None', 'Labor', 'Material', 'Equipment', 'Subcontractor', 'Other'];
 
 export const ALL_COLUMNS: ColumnDef[] = [
   { key: 'items', label: 'Items', alwaysOn: true },

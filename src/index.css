@@ -6493,7 +6493,9 @@ button.jps-term-label { cursor: pointer; }
   padding: 6px 12px; font-size: 12px; color: var(--g700);
 }
 .liv2-stack-dropdown li:hover { background: var(--g50); }
-.liv2-stack-name { flex: 1; min-width: 0; word-break: break-word; }
+.liv2-stack-name-wrap { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.liv2-stack-name { word-break: break-word; }
+.liv2-stack-code { color: var(--g500); font-variant-numeric: tabular-nums; font-size: 11px; }
 .liv2-stack-amt { color: var(--g500); white-space: nowrap; font-variant-numeric: tabular-nums; }
 
 /* ══════════════ SELECTIONS WIZARD V2 (invoice-2) ══════════════ */
@@ -6591,6 +6593,17 @@ button.jps-term-label { cursor: pointer; }
 .selv2-pill-muted { background: var(--g100); color: var(--g500); }
 .selv2-pill-credit { background: #fdecec; color: var(--red, #c53030); }
 .selv2-pill-overage { background: #fff4e0; color: #b25800; }
+
+/* Deposit & true-up (V4): reconciliation strip under the allowance header */
+.selv4-recon-strip {
+  display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  padding: 8px 14px; background: var(--bds-color-gray-5, #f7f9fc);
+  border-top: 1px solid var(--bds-color-gray-10);
+}
+.selv4-recon-item { display: flex; flex-direction: column; gap: 1px; }
+.selv4-recon-label { font-size: 10px; color: var(--g500); font-weight: 500; }
+.selv4-recon-val { font-size: 14px; color: var(--bt-midnight); font-weight: 600; font-variant-numeric: tabular-nums; }
+.selv4-recon-op { font-size: 12px; color: var(--g400); align-self: flex-end; padding-bottom: 2px; }
 
 /* Deposit & true-up (V4): mark-complete action bar inside an expanded allowance */
 .selv2-markcomplete-bar {
@@ -6864,3 +6877,137 @@ button.jps-term-label { cursor: pointer; }
 .jdc-mode-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 2px; }
 .jdc-mode-laststamp { font-size: 12px; color: var(--g500); }
 @media (max-width: 760px) { .jdc-cols { grid-template-columns: 1fr; gap: 28px; } }
+
+/* ── Client Preview Invoice (#client-preview-invoice) ────────────────────────
+   Visual language borrowed from the JPS print page (.jps-print-*): gray canvas,
+   controls card above a document "paper", dark logo mark, right-aligned company
+   block, title + summary row, gray-headed tables, right-aligned totals. */
+.cpi-shell { display: flex; flex-direction: column; height: 100%; background: var(--g100); }
+.cpi-titlebar { display: flex; align-items: center; justify-content: space-between; padding: 16px 28px; background: white; border-bottom: 1px solid var(--g200); flex-shrink: 0; }
+.cpi-title { display: flex; align-items: center; gap: 8px; font-size: 20px; font-weight: 700; color: var(--bt-midnight); }
+.cpi-title-muted { font-weight: 500; color: var(--g500); }
+.cpi-icon-link { background: none; border: none; color: var(--g400); cursor: pointer; display: inline-flex; padding: 2px; border-radius: 4px; }
+.cpi-icon-link:hover { color: var(--bt-blue); background: var(--g50); }
+.cpi-title-actions { display: flex; gap: 4px; }
+.cpi-icon-btn { background: none; border: none; color: var(--g500); cursor: pointer; padding: 6px; border-radius: 6px; display: inline-flex; }
+.cpi-icon-btn:hover { background: var(--g50); color: var(--g700); }
+
+.cpi-body { flex: 1; overflow-y: auto; padding: 24px 16px; display: flex; flex-direction: column; align-items: center; gap: 16px; }
+
+/* Controls card — mirrors .jps-print-controls */
+.cpi-intro-card { width: 100%; max-width: 820px; background: white; border: 1px solid var(--g200); border-radius: 10px; padding: 16px 20px; }
+.cpi-intro { font-size: 13px; color: var(--g700); line-height: 1.6; margin: 0 0 12px; }
+.cpi-intro strong { color: var(--bt-blue); font-weight: 600; }
+.cpi-toggle { display: inline-flex; align-items: center; gap: 6px; background: none; border: none; color: var(--bt-blue); font-size: 14px; font-weight: 600; cursor: pointer; font-family: inherit; padding: 0; }
+.cpi-toggle:hover { color: var(--bt-blue-hover); }
+
+/* Compact settings bar: Bill-to section on the left, Customize on the right */
+.cpi-bar { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.cpi-bar-billto { display: flex; flex-direction: column; gap: 5px; min-width: 260px; }
+.cpi-bar-lbl { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; color: var(--bt-midnight); }
+.cpi-customize-btn { display: inline-flex; align-items: center; gap: 7px; font-family: inherit; font-size: 13px; font-weight: 600; color: var(--g700); background: white; border: 1px solid var(--g200); border-radius: 8px; padding: 8px 14px; cursor: pointer; white-space: nowrap; transition: background .1s, border-color .1s; }
+.cpi-customize-btn:hover { background: var(--g50); border-color: var(--g300); }
+.cpi-customize-btn.on { color: var(--bt-blue); border-color: var(--bt-blue); background: var(--bt-blue-light); }
+
+.cpi-edit { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--g100); }
+.cpi-edit-grid { display: grid; grid-template-columns: 1fr 220px; gap: 24px; }
+.cpi-edit-col { display: flex; flex-direction: column; gap: 10px; }
+.cpi-edit-col-right { align-items: flex-start; }
+.cpi-edit-h { font-size: 13px; font-weight: 700; color: var(--bt-midnight); display: flex; align-items: center; gap: 6px; }
+.cpi-info { display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px; border-radius: 50%; border: 1px solid var(--g300); color: var(--g400); font-size: 9px; font-style: italic; font-weight: 700; cursor: help; }
+.cpi-check { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--g700); cursor: pointer; }
+.cpi-check input { width: 15px; height: 15px; accent-color: var(--bt-blue); cursor: pointer; }
+
+/* Bill-to selector field */
+.cpi-field { display: flex; flex-direction: column; gap: 5px; padding: 12px; background: var(--g50); border: 1px solid var(--g200); border-radius: 8px; }
+.cpi-field-lbl { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; color: var(--bt-midnight); }
+.cpi-select { font-family: inherit; font-size: 13px; color: var(--g800); background: white; border: 1px solid var(--g300); border-radius: 6px; padding: 7px 10px; cursor: pointer; outline: none; }
+.cpi-select:focus { border-color: var(--bt-blue); }
+.cpi-field-hint { font-size: 11px; color: var(--g500); line-height: 1.4; }
+
+.cpi-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 4px; border: 1px solid var(--g200); border-radius: 8px; padding: 8px; }
+.cpi-chip { display: inline-flex; align-items: center; gap: 4px; padding: 4px 8px; font-size: 12px; font-weight: 500; color: var(--g700); background: var(--g50); border: 1px solid var(--g200); border-radius: 6px; }
+.cpi-chip-locked { color: var(--g500); background: white; }
+.cpi-chip-x { background: none; border: none; color: var(--g400); cursor: pointer; font-size: 15px; line-height: 1; padding: 0 0 0 2px; }
+.cpi-chip-x:hover { color: var(--red); }
+/* Full-width "add a column" row — a labeled dropdown spanning the panel */
+.cpi-addrow { margin-top: 8px; }
+.cpi-addrow-select { width: 100%; font-family: inherit; font-size: 13px; color: var(--g800); background: white; border: 1px solid var(--g300); border-radius: 6px; padding: 8px 10px; cursor: pointer; outline: none; }
+.cpi-addrow-select:hover:not(:disabled) { border-color: var(--g400); }
+.cpi-addrow-select:focus { border-color: var(--bt-blue); }
+.cpi-addrow-select:disabled { color: var(--g400); background: var(--g50); cursor: not-allowed; }
+.cpi-edit-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+.cpi-edit-actions .btn { padding: 7px 16px; font-size: 13px; }
+.cpi-edit-actions .btn:disabled { opacity: .5; cursor: not-allowed; }
+
+/* Invoice document "paper" — mirrors .jps-print-paper */
+.cpi-paper { width: 100%; max-width: 820px; background: white; box-shadow: 0 4px 16px rgba(0,0,0,0.08); padding: 40px 48px; color: var(--bt-midnight); font-size: 12px; line-height: 1.4; margin-bottom: 8px; }
+.cpi-paper-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 32px; gap: 24px; }
+.cpi-logo { display: flex; align-items: center; gap: 10px; }
+.cpi-logo-mark { width: 32px; height: 32px; border-radius: 6px; background: var(--bt-midnight); color: white; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 18px; }
+.cpi-logo-name { font-size: 18px; font-weight: 700; color: var(--bt-midnight); }
+.cpi-logo-tag { font-size: 10px; color: var(--g500); }
+.cpi-company { font-size: 11px; color: var(--g700); text-align: right; line-height: 1.5; }
+
+.cpi-doc-eyebrow { font-size: 11px; font-weight: 600; color: var(--g500); text-transform: uppercase; letter-spacing: .05em; }
+.cpi-doc-title { font-size: 18px; font-weight: 700; color: var(--bt-midnight); margin: 2px 0 12px; padding: 0; }
+.cpi-jobrow { display: flex; justify-content: space-between; gap: 16px; font-size: 12px; color: var(--g600); padding: 10px 0; border-top: 1px solid var(--g100); border-bottom: 1px solid var(--g100); margin-bottom: 20px; }
+.cpi-jobrow strong { color: var(--bt-midnight); font-weight: 600; }
+.cpi-summary-row { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 28px; gap: 24px; }
+.cpi-lbl { font-size: 10px; font-weight: 700; color: var(--g400); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 3px; }
+.cpi-billto { font-size: 12px; color: var(--g700); line-height: 1.5; }
+.cpi-bill-name { font-size: 14px; font-weight: 700; color: var(--bt-midnight); }
+.cpi-bill-sub { font-size: 11px; color: var(--g600); }
+.cpi-summary-side { display: flex; align-items: flex-start; gap: 16px; }
+.cpi-summary-values { display: flex; flex-direction: column; gap: 4px; font-size: 12px; min-width: 220px; }
+.cpi-summary-values > div { display: flex; justify-content: space-between; gap: 16px; }
+.cpi-summary-values span { color: var(--g700); }
+.cpi-summary-values strong { color: var(--bt-midnight); font-weight: 700; }
+.cpi-summary-due { border-top: 1px solid var(--g200); margin-top: 4px; padding-top: 6px; }
+.cpi-summary-due strong { font-size: 15px; }
+.cpi-qr { flex-shrink: 0; border: 1px solid var(--g200); border-radius: 8px; padding: 3px; height: fit-content; }
+
+.cpi-section { margin-bottom: 24px; }
+.cpi-section-title { font-size: 13px; font-weight: 700; color: var(--bt-midnight); margin: 0 0 8px; padding: 0; }
+.cpi-tbl-wrap { overflow-x: auto; }
+.cpi-tbl { width: 100%; border-collapse: collapse; font-size: 11px; }
+.cpi-tbl thead th { text-align: left; font-weight: 700; color: var(--bt-midnight); padding: 8px 10px; border-bottom: 1px solid var(--g300); background: var(--g50); white-space: nowrap; }
+.cpi-tbl th.cpi-r, .cpi-tbl td.cpi-r { text-align: right !important; }
+.cpi-tbl tbody td { padding: 8px 10px; border-bottom: 1px solid var(--g100); color: var(--g700); vertical-align: top; }
+.cpi-item-name { font-weight: 600; color: var(--bt-midnight); }
+.cpi-item-code { font-size: 10.5px; color: var(--g500); margin-top: 2px; }
+.cpi-strong { font-weight: 600; color: var(--bt-midnight); }
+.cpi-total-row td { background: var(--g50); font-weight: 700; color: var(--bt-midnight) !important; border-bottom: none !important; border-top: 1px solid var(--g300); }
+.cpi-hidden-note { padding: 20px; text-align: center; font-size: 12px; color: var(--g500); font-style: italic; background: var(--g50); border: 1px solid var(--g200); border-radius: 8px; margin-bottom: 24px; }
+
+.cpi-block-body { font-size: 12px; color: var(--g700); line-height: 1.7; }
+.cpi-block-body strong { color: var(--bt-midnight); }
+
+/* Buildertrend Payments footer — mirrors the reference invoice's pay strip */
+.cpi-pay-footer { display: flex; align-items: center; gap: 16px; margin-top: 32px; padding-top: 20px; border-top: 1px solid var(--g200); }
+.cpi-pay-footer .cpi-qr { padding: 0; border: none; }
+.cpi-pay-text { flex: 1; }
+.cpi-pay-brand { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--bt-midnight); margin-bottom: 4px; }
+.cpi-pay-brand strong { font-weight: 700; }
+.cpi-pay-mark { width: 18px; height: 18px; border-radius: 4px; background: var(--bt-blue); color: white; display: inline-flex; align-items: center; justify-content: center; font-weight: 800; font-size: 12px; }
+.cpi-pay-sub { color: var(--g500); font-weight: 500; padding-left: 6px; border-left: 1px solid var(--g300); }
+.cpi-pay-line { font-size: 11px; color: var(--g600); line-height: 1.6; }
+.cpi-pay-line strong { color: var(--bt-midnight); font-weight: 600; }
+
+/* Totals block — mirrors .jps-print-totals */
+.cpi-totals { margin-top: 32px; margin-bottom: 24px; margin-left: auto; width: 240px; font-size: 12px; }
+.cpi-totals-line { display: flex; justify-content: space-between; gap: 16px; padding: 5px 8px; color: var(--g700); }
+.cpi-totals-muted { color: var(--g500); font-size: 11px; }
+.cpi-totals-heading { background: var(--g50); font-weight: 700; color: var(--bt-midnight); border-top: 1px solid var(--g200); margin-top: 2px; }
+.cpi-totals-heading strong { font-weight: 700; }
+
+.cpi-footer { display: flex; justify-content: flex-end; gap: 8px; padding: 14px 28px; background: white; border-top: 1px solid var(--g200); flex-shrink: 0; }
+
+@media (max-width: 760px) {
+  .cpi-edit-grid { grid-template-columns: 1fr; gap: 20px; }
+  .cpi-paper { padding: 24px 20px; }
+  .cpi-paper-header, .cpi-summary-row { flex-direction: column; }
+  .cpi-company, .cpi-summary-side { text-align: left; }
+  .cpi-summary-values { min-width: 0; }
+  .cpi-totals { width: 100%; }
+}

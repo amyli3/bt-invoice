@@ -1,11 +1,28 @@
 import type { ModalAllowance } from './components/AIAPayApp';
 
+// Cost-code number → category name, so a bare code like "8010" can be shown
+// with its title ("8010 - Lighting").
+export const COST_CODE_NAMES: Record<string, string> = {
+  '9040': 'Cabinets', '9045': 'Cabinet install', '9041': 'Cabinet handles',
+  '8010': 'Lighting', '4010': 'Plumbing', '9050': 'Paint', '9060': 'Appliances',
+  '9070': 'Tile', '6020': 'Electrical', '6025': 'Smart Home', '8020': 'Hardware',
+  '2050': 'Sitework', '9035': 'Countertops', '9030': 'Kitchen Fixtures',
+};
+
+// Normalize a cost code to "NUM - Title". Leaves already-titled codes as-is.
+export function costCodeLabel(cc: string | undefined): string {
+  if (!cc) return cc || '';
+  if (cc.includes(' - ')) return cc;
+  const n = cc.trim();
+  return COST_CODE_NAMES[n] ? `${n} - ${COST_CODE_NAMES[n]}` : cc;
+}
+
 export type InvoiceSelectionScenario = ModalAllowance & {
   scenarioNote?: string;
   // V3 model: allowance is never billed directly; only selections invoice.
   // Override the V2 hover text when V3 behavior differs meaningfully.
   scenarioNoteV3?: string;
-  closeoutMode?: 'credit';
+  closeoutMode?: 'credit' | 'complete';
 };
 
 export const INVOICE_SELECTION_SCENARIOS: InvoiceSelectionScenario[] = [
@@ -32,6 +49,19 @@ export const INVOICE_SELECTION_SCENARIOS: InvoiceSelectionScenario[] = [
     scenarioNoteV3: 'Selection came in under budget. Only the selection invoices; unspent allowance budget stays on the budget side and is never invoiced.',
     selections: [
       { id: 'ms-14', name: 'Pendant light fixtures', costCode: '8010', costType: 'Material', originalPrice: 500, approvedPrice: 500, status: 'approved' },
+    ],
+  },
+  {
+    id: 'ma-6c',
+    name: 'Lighting Allowance (marked complete)',
+    costCode: '8010 - Lighting',
+    budgetAmount: 1000,
+    previouslyInvoiced: 0,
+    closeoutMode: 'complete',
+    scenarioNote: 'Allowance never invoiced, marked complete. Selection came in under — invoice just the selection; unspent budget closes out, no credit owed.',
+    scenarioNoteV3: 'Marked complete, allowance never invoiced. Only the $700 selection invoices; the unused $300 closes out on the budget side (no credit, since nothing was pre-billed).',
+    selections: [
+      { id: 'ms-14c', name: 'Pendant light fixtures', costCode: '8010', costType: 'Material', originalPrice: 700, approvedPrice: 700, status: 'approved' },
     ],
   },
   {
@@ -115,6 +145,9 @@ export const INVOICE_SELECTION_SCENARIOS: InvoiceSelectionScenario[] = [
    ───────────────────────────────────────────────────────────────────────── */
 export type DepositSelection = {
   id: string;
+  // The selection's title (the decision, e.g. "Kitchen Faucet").
+  title: string;
+  // The chosen line item under that selection (e.g. "Delta Touchless Faucet").
   name: string;
   costCode: string;
   costType: string;
@@ -122,6 +155,9 @@ export type DepositSelection = {
   // 'done'    → selection is finalized and counts toward the locked variance
   // 'pending' → still being chosen; blocks a clean full completion
   status: 'done' | 'pending';
+  // This selection's amount was already billed on a PRIOR invoice (round-1).
+  // It still counts toward the approved-selections total, but isn't re-billed.
+  alreadyInvoiced?: boolean;
 };
 
 export type DepositTrueUpAllowance = {
@@ -130,7 +166,12 @@ export type DepositTrueUpAllowance = {
   costCode: string;
   budgetAmount: number;     // contract allowance amount
   billedUpfront: number;    // deposit already invoiced (typically = budgetAmount; 0 = no deposit collected)
-  scenario: 'over' | 'under' | 'partial' | 'exact' | 'nodeposit';
+  // Total already invoiced against this allowance across ALL prior invoices
+  // (deposit + any earlier true-ups). Defaults to billedUpfront when omitted.
+  // When a builder invoiced the allowance, put some selections against it, then
+  // adds another selection later, this is what "previously invoiced" reflects.
+  invoicedToDate?: number;
+  scenario: 'over' | 'under' | 'partial' | 'exact' | 'nodeposit' | 'addmore' | 'crosscode';
   scenarioNote: string;
   selections: DepositSelection[];
 };
@@ -145,8 +186,8 @@ export const DEPOSIT_TRUEUP_ALLOWANCES: DepositTrueUpAllowance[] = [
     scenario: 'over',
     scenarioNote: 'Allowance billed upfront ($5,000). Selections finalized at $6,200 — mark complete to lock the +$1,200 overage and charge it on this invoice.',
     selections: [
-      { id: 'dt-1a', name: 'Custom shaker cabinets', costCode: '9040', costType: 'Material', approvedPrice: 4400, status: 'done' },
-      { id: 'dt-1b', name: 'Soft-close hardware', costCode: '9040', costType: 'Material', approvedPrice: 1800, status: 'done' },
+      { id: 'dt-1a', title: 'Cabinetry', name: 'Custom shaker cabinets', costCode: '9040', costType: 'Material', approvedPrice: 4400, status: 'done' },
+      { id: 'dt-1b', title: 'Cabinet hardware', name: 'Soft-close hardware', costCode: '9040', costType: 'Material', approvedPrice: 1800, status: 'done' },
     ],
   },
   {
@@ -158,8 +199,8 @@ export const DEPOSIT_TRUEUP_ALLOWANCES: DepositTrueUpAllowance[] = [
     scenario: 'under',
     scenarioNote: 'Allowance billed upfront ($3,000). Selections finalized at $2,400 — mark complete to lock the -$600 credit and apply it on this invoice.',
     selections: [
-      { id: 'dt-2a', name: 'Pendant fixtures', costCode: '8010', costType: 'Material', approvedPrice: 1500, status: 'done' },
-      { id: 'dt-2b', name: 'Recessed cans', costCode: '8010', costType: 'Material', approvedPrice: 900, status: 'done' },
+      { id: 'dt-2a', title: 'Pendant lighting', name: 'Pendant fixtures', costCode: '8010', costType: 'Material', approvedPrice: 1500, status: 'done' },
+      { id: 'dt-2b', title: 'Recessed lighting', name: 'Recessed cans', costCode: '8010', costType: 'Material', approvedPrice: 900, status: 'done' },
     ],
   },
   {
@@ -171,9 +212,9 @@ export const DEPOSIT_TRUEUP_ALLOWANCES: DepositTrueUpAllowance[] = [
     scenario: 'partial',
     scenarioNote: 'Allowance billed upfront ($4,000). Two selections are done ($1,800); the kitchen faucet is still being chosen. The variance can’t be fully locked until every selection is finalized.',
     selections: [
-      { id: 'dt-3a', name: 'Shower valve set', costCode: '4010', costType: 'Material', approvedPrice: 1100, status: 'done' },
-      { id: 'dt-3b', name: 'Bathroom faucet set', costCode: '4010', costType: 'Material', approvedPrice: 700, status: 'done' },
-      { id: 'dt-3c', name: 'Kitchen faucet (in progress)', costCode: '4010', costType: 'Material', approvedPrice: 0, status: 'pending' },
+      { id: 'dt-3a', title: 'Shower valve', name: 'Shower valve set', costCode: '4010', costType: 'Material', approvedPrice: 1100, status: 'done' },
+      { id: 'dt-3b', title: 'Bathroom faucet', name: 'Bathroom faucet set', costCode: '4010', costType: 'Material', approvedPrice: 700, status: 'done' },
+      { id: 'dt-3c', title: 'Kitchen faucet', name: 'Kitchen faucet (in progress)', costCode: '4010', costType: 'Material', approvedPrice: 0, status: 'pending' },
     ],
   },
   {
@@ -185,7 +226,7 @@ export const DEPOSIT_TRUEUP_ALLOWANCES: DepositTrueUpAllowance[] = [
     scenario: 'exact',
     scenarioNote: 'Allowance billed upfront ($2,000). Selection finalized at exactly $2,000 — mark complete and the variance nets to $0, so no line is added.',
     selections: [
-      { id: 'dt-4a', name: 'Interior wall paint', costCode: '9050', costType: 'Material', approvedPrice: 2000, status: 'done' },
+      { id: 'dt-4a', title: 'Interior paint', name: 'Interior wall paint', costCode: '9050', costType: 'Material', approvedPrice: 2000, status: 'done' },
     ],
   },
   {
@@ -197,8 +238,66 @@ export const DEPOSIT_TRUEUP_ALLOWANCES: DepositTrueUpAllowance[] = [
     scenario: 'nodeposit',
     scenarioNote: 'No deposit collected — nothing was billed upfront for this allowance. The finalized selections bill at full price as their own line, with no deposit reversal.',
     selections: [
-      { id: 'dt-5a', name: 'Range & hood', costCode: '9060', costType: 'Material', approvedPrice: 3200, status: 'done' },
-      { id: 'dt-5b', name: 'Refrigerator', costCode: '9060', costType: 'Material', approvedPrice: 2800, status: 'done' },
+      { id: 'dt-5a', title: 'Range & hood', name: 'Gas range & vent hood', costCode: '9060', costType: 'Material', approvedPrice: 3200, status: 'done' },
+      { id: 'dt-5b', title: 'Refrigerator', name: 'French-door refrigerator', costCode: '9060', costType: 'Material', approvedPrice: 2800, status: 'done' },
+    ],
+  },
+  {
+    // "Add another selection later": allowance was invoiced ($5,000 deposit),
+    // then two selections ($4,400 + $1,800 = $6,200) were reconciled on a prior
+    // invoice — so $6,200 has been invoiced to date. Now a third selection
+    // ($900) comes in. Approved selections total $7,100; invoiced-to-date
+    // $6,200 → only the new $900 is billable now.
+    id: 'dt-6',
+    name: 'Tile Allowance',
+    costCode: '9070 - Tile',
+    budgetAmount: 5000,
+    billedUpfront: 5000,
+    invoicedToDate: 6200,
+    scenario: 'addmore',
+    scenarioNote: 'Allowance invoiced, then selections reconciled on a prior invoice. A new selection came in later — only the new amount is billable now.',
+    selections: [
+      { id: 'dt-6a', title: 'Floor tile', name: 'Floor tile — main bath', costCode: '9070', costType: 'Material', approvedPrice: 4400, status: 'done', alreadyInvoiced: true },
+      { id: 'dt-6b', title: 'Accent wall tile', name: 'Accent wall tile', costCode: '9070', costType: 'Material', approvedPrice: 1800, status: 'done', alreadyInvoiced: true },
+      { id: 'dt-6c', title: 'Shower niche tile', name: 'Shower niche tile (new)', costCode: '9070', costType: 'Material', approvedPrice: 900, status: 'done' },
+    ],
+  },
+  {
+    // Cross-cost-code reconciliation: the allowance was billed upfront at its
+    // own cost code (6020 Electrical, $500), but the chosen selection lands on a
+    // DIFFERENT cost code (6025 Smart Home, $400). The true-up can't collapse to
+    // one net line — it reverses the allowance at 6020 (−$500) and books the
+    // selection at 6025 (+$400), moving dollars between codes. Net is a −$100
+    // credit, but split across two budget lines so each code stays accurate.
+    id: 'dt-7',
+    name: 'Fixtures Allowance',
+    costCode: '6020 - Electrical',
+    budgetAmount: 500,
+    billedUpfront: 500,
+    scenario: 'crosscode',
+    scenarioNote: 'Allowance billed upfront at 6020 ($500). The chosen selection lands on a different cost code (6025) at $400 — the allowance is reversed at 6020 and the selection booked at 6025, netting a $100 credit across the two codes.',
+    selections: [
+      { id: 'dt-7a', title: 'Smart switches', name: 'Smart dimmer switches', costCode: '6025 - Smart Home', costType: 'Equipment', approvedPrice: 400, status: 'done' },
+    ],
+  },
+  {
+    // Cross-code with MULTIPLE selections spanning several different codes,
+    // none matching the allowance's code. The allowance was billed upfront at
+    // 9030 (Kitchen Fixtures, $8,000); the chosen selections land on 4010,
+    // 8010, and 9035. The true-up reverses the allowance at 9030 and books each
+    // selection at its own code — dollars move across four budget lines, netting
+    // a $500 overage overall.
+    id: 'dt-8',
+    name: 'Kitchen Package Allowance',
+    costCode: '9030 - Kitchen Fixtures',
+    budgetAmount: 8000,
+    billedUpfront: 8000,
+    scenario: 'crosscode',
+    scenarioNote: 'Allowance billed upfront at 9030 ($8,000). The selections land on three different cost codes (4010 Plumbing, 8010 Lighting, 9035 Countertops) — the allowance is reversed at 9030 and each selection booked at its own code, so all four budget lines stay accurate. Net is a $500 overage.',
+    selections: [
+      { id: 'dt-8a', title: 'Kitchen sink', name: 'Farmhouse apron sink', costCode: '4010 - Plumbing', costType: 'Material', approvedPrice: 2500, status: 'done' },
+      { id: 'dt-8b', title: 'Island pendants', name: 'Brass pendant lights', costCode: '8010 - Lighting', costType: 'Material', approvedPrice: 1800, status: 'done' },
+      { id: 'dt-8c', title: 'Countertops', name: 'Quartz countertop', costCode: '9035 - Countertops', costType: 'Material', approvedPrice: 4200, status: 'done' },
     ],
   },
 ];
@@ -227,5 +326,40 @@ export const INVOICE_STANDALONE_SELECTIONS: StandaloneSelection[] = [
     costCode: '2050 - Sitework',
     costType: 'Material',
     approvedPrice: 320,
+  },
+];
+
+/* ─────────────────────────────────────────────────────────────────────────
+   Standalone allowances — allowances with no selections chosen yet. There's
+   no variance to reconcile, so they bill as a single flat line (the allowance
+   amount) and render as a lightweight row, exactly like a standalone
+   selection. The card/expand treatment is reserved for allowances that have
+   linked selections (where there's a breakdown to drill into).
+   ───────────────────────────────────────────────────────────────────────── */
+export type StandaloneAllowance = {
+  id: string;
+  name: string;
+  costCode: string;
+  costType: string;
+  amount: number;         // allowance amount to invoice
+  scenarioNote?: string;
+};
+
+export const INVOICE_STANDALONE_ALLOWANCES: StandaloneAllowance[] = [
+  {
+    id: 'sa-1',
+    name: 'Landscaping Allowance',
+    costCode: '2050 - Sitework',
+    costType: 'Allowance',
+    amount: 6000,
+    scenarioNote: 'Allowance with no selections chosen yet — invoice the allowance amount directly. The variance settles later, once selections come in and it’s marked complete.',
+  },
+  {
+    id: 'sa-2',
+    name: 'Countertops Allowance',
+    costCode: '9035 - Countertops',
+    costType: 'Allowance',
+    amount: 4500,
+    scenarioNote: 'Allowance with no selections chosen yet — invoice the allowance amount directly.',
   },
 ];

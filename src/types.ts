@@ -26,7 +26,7 @@ export interface LineItem {
   // Breakdown of selections that were netted into this line (when the
   // selections wizard combined same-cost-code rows). Present only on lines
   // produced by the V2 wizard with grouping enabled.
-  rolledUp?: { name: string; amount: number; isAllowance?: boolean }[];
+  rolledUp?: { name: string; amount: number; costCode?: string; isAllowance?: boolean }[];
 }
 
 export interface Payment {

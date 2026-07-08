@@ -17,6 +17,7 @@ import SelectionsModal from './components/SelectionsModal';
 import SelectionsModalV2 from './components/SelectionsModalV2';
 import SelectionsModalV3 from './components/SelectionsModalV3';
 import SelectionsModalV4 from './components/SelectionsModalV4';
+import SelectionsModalV5 from './components/SelectionsModalV5';
 import AddFromAllModal from './components/AddFromAllModal';
 import JobPriceSummary from './components/JobPriceSummary';
 import JobDetailsClients from './components/JobDetailsClients';
@@ -31,15 +32,16 @@ import ClientSelections from './components/ClientSelections';
 import ClientSelections2 from './components/ClientSelections2';
 import ClientSelections3 from './components/ClientSelections3';
 import ClientPortal, { ClientTopNav } from './components/ClientPortal';
+import ClientPreviewInvoice from './components/ClientPreviewInvoice';
 import MobileBudget from './components/MobileBudget';
 import JobCostingBudget from './components/JobCostingBudget';
 import UnderageFlows from './components/UnderageFlows';
 import { JOBS } from './mockData';
 import { getNextId } from './mockData';
 
-type PageType = 'invoice' | 'invoice-2' | 'invoice-3' | 'job-price-summary' | 'selections' | 'option-detail' | 'progress-invoice' | 'change-order' | 'change-order-list' | 'client-portal' | 'client-jps' | 'estimate' | 'client-selections' | 'client-selections-2' | 'client-selections-3' | 'mobile-budget' | 'job-costing-budget' | 'underage-flows' | 'job-details-clients';
+type PageType = 'invoice' | 'invoice-2' | 'invoice-3' | 'client-preview-invoice' | 'job-price-summary' | 'selections' | 'option-detail' | 'progress-invoice' | 'change-order' | 'change-order-list' | 'client-portal' | 'client-jps' | 'estimate' | 'client-selections' | 'client-selections-2' | 'client-selections-3' | 'mobile-budget' | 'job-costing-budget' | 'underage-flows' | 'job-details-clients';
 
-const validPages: PageType[] = ['invoice', 'invoice-2', 'invoice-3', 'job-price-summary', 'selections', 'option-detail', 'progress-invoice', 'change-order', 'change-order-list', 'client-portal', 'client-jps', 'estimate', 'client-selections', 'client-selections-2', 'client-selections-3', 'mobile-budget', 'job-costing-budget', 'underage-flows', 'job-details-clients'];
+const validPages: PageType[] = ['invoice', 'invoice-2', 'invoice-3', 'client-preview-invoice', 'job-price-summary', 'selections', 'option-detail', 'progress-invoice', 'change-order', 'change-order-list', 'client-portal', 'client-jps', 'estimate', 'client-selections', 'client-selections-2', 'client-selections-3', 'mobile-budget', 'job-costing-budget', 'underage-flows', 'job-details-clients'];
 
 function getInitialPage(): PageType {
   // Support ?page=X query param (used when hash is occupied by Figma capture)
@@ -101,6 +103,11 @@ export default function App() {
   const [selModalOpen, setSelModalOpen] = useState(false);
   const [selV2ModalOpen, setSelV2ModalOpen] = useState(false);
   const [selV4ModalOpen, setSelV4ModalOpen] = useState(false);
+  const [selV5ModalOpen, setSelV5ModalOpen] = useState(false);
+  // How grouped allowance lines render on the invoice: 'summary' = one rolled-up
+  // line per allowance; 'itemized' = broken out, nested by cost code. Set by the
+  // wizard's "Group line items" checkbox and flippable via the invoice toggle.
+  const [stackView, setStackView] = useState<'summary' | 'itemized'>('summary');
   const [selV2on3ModalOpen, setSelV2on3ModalOpen] = useState(false);
   const [addAllModalOpen, setAddAllModalOpen] = useState(false);
   const [selectionsWizardOpen, setSelectionsWizardOpen] = useState(false);
@@ -143,7 +150,7 @@ export default function App() {
   const heldUnderages = INVOICE_SELECTION_SCENARIOS.flatMap(ma => {
     const approved = ma.selections.reduce((s, sel) => s + sel.approvedPrice, 0);
     const delta = ma.budgetAmount - approved;
-    const isComplete = ma.closeoutMode === 'credit' || completedAllowanceIds.has(ma.id);
+    const isComplete = !!ma.closeoutMode || completedAllowanceIds.has(ma.id);
     if (!isComplete || delta <= 0) return [];
     return [{ id: ma.id, name: ma.name, costCode: ma.costCode, amount: delta }];
   });
@@ -174,7 +181,9 @@ export default function App() {
     if (newItems.length > 0) setInvoice(inv => ({ ...inv, lineItems: [...inv.lineItems, ...newItems] }));
   };
 
-  const handleAddFromSelections = (items: any[]) => {
+  const handleAddFromSelections = (items: any[], opts?: { grouped?: boolean }) => {
+    // The wizard's "Group line items" checkbox sets the invoice's initial view.
+    if (opts && opts.grouped !== undefined) setStackView(opts.grouped ? 'summary' : 'itemized');
     setInvoice(inv => {
       let lineItems = [...inv.lineItems];
       items.forEach((group: any) => {
@@ -262,7 +271,7 @@ export default function App() {
     const invoicedSelectionsTotal = ma.selections.reduce((s, sel) => s + (sel.status === 'invoiced' ? sel.approvedPrice : 0), 0);
     const notPreviouslyInvoiced = ma.previouslyInvoiced === 0;
     const anyInvoicedSelection = ma.selections.some(s => s.status === 'invoiced');
-    const markedComplete = ma.closeoutMode === 'credit' || completedAllowanceIds.has(ma.id);
+    const markedComplete = !!ma.closeoutMode || completedAllowanceIds.has(ma.id);
 
     let allowanceNewInvoiceAmt: number | null;
     let invoiceBalance: number;
@@ -358,6 +367,40 @@ export default function App() {
       ],
     }))
   );
+
+  // Standalone allowances — allowances with no selections nested yet. Builders
+  // can invoice the allowance amount itself before any selection is chosen.
+  // Only surfaced in the Selection 3 (allowance-billable) wizard.
+  const standaloneAllowanceData = [
+    { id: 'sa-1', name: 'Landscaping Allowance', costCode: '2050 - Sitework', budget: 6000, preInvoiced: 0 },
+    { id: 'sa-2', name: 'Appliance Allowance', costCode: '9060 - Appliances', budget: 4500, preInvoiced: 0 },
+  ].map(a => ({
+    id: a.id,
+    type: 'allowance' as 'allowance' | 'selection',
+    name: a.name,
+    scenarioNote: 'Allowance with no selections chosen yet — invoice the allowance amount directly.',
+    scenarioNoteV3: undefined,
+    allowancePreInvoiced: a.preInvoiced,
+    canMarkComplete: false,
+    isComplete: false,
+    revisedPrice: a.budget,
+    previouslyInvoiced: a.preInvoiced,
+    invoiceBalance: a.budget,
+    allowanceBudget: a.budget,
+    overage: 0,
+    children: [
+      {
+        id: `${a.id}-rev`,
+        lineItem: a.name,
+        costCode: a.costCode,
+        costType: 'Allowance',
+        selection: 'Allowance',
+        price: a.budget,
+        newInvoiceAmt: a.budget,
+      },
+    ],
+  }));
+  const selection3Data = [...selectionsModalData, ...standaloneAllowanceData];
 
   const [isNarrow, setIsNarrow] = useState(window.innerWidth <= 960);
   useEffect(() => {
@@ -458,6 +501,17 @@ export default function App() {
               }
             }}
           />
+        </div>
+      </div>
+    );
+  }
+
+  if (activePage === 'client-preview-invoice') {
+    return (
+      <div style={{display: 'flex', flexDirection: 'column', height: '100vh'}}>
+        <TopNav onNavigate={(page) => setActivePage(page as PageType)} />
+        <div style={{flex: 1, minHeight: 0}}>
+          <ClientPreviewInvoice />
         </div>
       </div>
     );
@@ -658,7 +712,7 @@ export default function App() {
               <InvoiceInfo invoice={invoice} onChange={setInvoice} />
               <OwnerPrice invoice={invoice} onChange={setInvoice} />
               {invoice.mode === 'lineItems' && (isInvoiceV2Like
-                ? <LineItemsV2 invoice={invoice} onChange={setInvoice} vis={vis} onVisChange={setVis} onOpenEstimate={() => setEstModalOpen(true)} onOpenSelections={() => setSelV2ModalOpen(true)} onOpenSelections2={() => setSelV4ModalOpen(true)} onOpenSelections3={() => setSelV2on3ModalOpen(true)} onOpenAll={() => setAddAllModalOpen(true)} />
+                ? <LineItemsV2 invoice={invoice} onChange={setInvoice} vis={vis} onVisChange={setVis} stackView={stackView} onStackViewChange={setStackView} onOpenEstimate={() => setEstModalOpen(true)} onOpenSelections={() => setSelV2ModalOpen(true)} onOpenSelections2={() => setSelV4ModalOpen(true)} onOpenSelections2b={() => setSelV5ModalOpen(true)} onOpenSelections3={() => setSelV2on3ModalOpen(true)} onOpenAll={() => setAddAllModalOpen(true)} />
                 : <LineItems invoice={invoice} onChange={setInvoice} vis={vis} onVisChange={setVis} onOpenEstimate={() => setEstModalOpen(true)} onOpenSelections={() => setSelModalOpen(true)} />)}
               <Notes invoice={invoice} onChange={setInvoice} />
             </div>
@@ -743,11 +797,17 @@ export default function App() {
         onClose={() => setSelV2ModalOpen(false)}
         onAdd={handleAddFromSelections}
         addedChildIds={invoice.lineItems.flatMap(li => li.relatedItem?.childIds ?? [])}
-        data={selectionsModalData}
+        data={selection3Data}
       />
       <SelectionsModalV4
         open={selV4ModalOpen && activePage === 'invoice-3'}
         onClose={() => setSelV4ModalOpen(false)}
+        onAdd={handleAddFromSelections}
+        addedChildIds={invoice.lineItems.flatMap(li => li.relatedItem?.childIds ?? [])}
+      />
+      <SelectionsModalV5
+        open={selV5ModalOpen && activePage === 'invoice-3'}
+        onClose={() => setSelV5ModalOpen(false)}
         onAdd={handleAddFromSelections}
         addedChildIds={invoice.lineItems.flatMap(li => li.relatedItem?.childIds ?? [])}
       />
@@ -756,7 +816,7 @@ export default function App() {
         onClose={() => setSelV2on3ModalOpen(false)}
         onAdd={handleAddFromSelections}
         addedChildIds={invoice.lineItems.flatMap(li => li.relatedItem?.childIds ?? [])}
-        data={selectionsModalData}
+        data={selection3Data}
       />
       <AddFromAllModal
         open={addAllModalOpen && activePage === 'invoice-3'}

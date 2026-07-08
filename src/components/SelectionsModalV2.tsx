@@ -116,6 +116,7 @@ export default function SelectionsModalV2({ open, onClose, onAdd, data, addedChi
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [includeDescs, setIncludeDescs] = useState(true);
   const [groupByCode, setGroupByCode] = useState(true);
+  const [hideAllowanceLines, setHideAllowanceLines] = useState(false);
 
   // V2 model: per-row checkboxes. Two distinct flows depending on whether
   // the allowance was already invoiced.
@@ -228,7 +229,11 @@ export default function SelectionsModalV2({ open, onClose, onAdd, data, addedChi
 
   const creditsOwed = availableData.filter(g => g.type === 'allowance' && creditAmount(g) > 0);
   const creditIds = new Set(creditsOwed.map(g => g.id));
-  const allowances = availableData.filter(g => g.type === 'allowance' && !creditIds.has(g.id));
+  // A "bare" allowance has no selection children yet — only the allowance row.
+  const isBareAllowance = (g: SelectionGroup) =>
+    g.type === 'allowance' && !g.children.some(c => c.selection !== 'Allowance');
+  const allowances = availableData.filter(g => g.type === 'allowance' && !creditIds.has(g.id) && !isBareAllowance(g));
+  const bareAllowances = availableData.filter(g => g.type === 'allowance' && !creditIds.has(g.id) && isBareAllowance(g));
   const standalone = availableData.filter(g => g.type === 'selection');
 
   const toggleChild = (g: SelectionGroup, c: SelectionChild) => {
@@ -497,18 +502,12 @@ export default function SelectionsModalV2({ open, onClose, onAdd, data, addedChi
           </div>
           <div className="selv2-group-meta">
             {g.type === 'allowance' && (
-              <>
-                <div className="selv2-meta-item">
-                  <div className="selv2-meta-label">Budget</div>
-                  <div className="selv2-meta-value">${fmt(g.allowanceBudget ?? 0)}</div>
+              <div className="selv2-meta-item">
+                <div className="selv2-meta-label">Previously invoiced</div>
+                <div className="selv2-meta-value" style={{ color: g.previouslyInvoiced > 0 ? 'var(--bt-midnight)' : 'var(--g500)' }}>
+                  ${fmt(g.previouslyInvoiced)}
                 </div>
-                <div className="selv2-meta-item">
-                  <div className="selv2-meta-label">Previously invoiced</div>
-                  <div className="selv2-meta-value" style={{ color: g.previouslyInvoiced > 0 ? 'var(--bt-midnight)' : 'var(--g500)' }}>
-                    ${fmt(g.previouslyInvoiced)}
-                  </div>
-                </div>
-              </>
+              </div>
             )}
             <div className="selv2-meta-item">
               <div className="selv2-meta-label">Invoice amount</div>
@@ -542,7 +541,15 @@ export default function SelectionsModalV2({ open, onClose, onAdd, data, addedChi
                 </tr>
               </thead>
               <tbody>
-                {g.children.map(c => {
+                {g.children.filter(c => {
+                  // Hide allowance lines when the toggle is on.
+                  if (hideAllowanceLines && c.selection === 'Allowance') return false;
+                  // Hide selections that were already invoiced on a prior invoice
+                  // (newInvoiceAmt === null) — the prior amount is reflected in the
+                  // group's "Previously invoiced" total, no need for greyed rows.
+                  if (c.selection !== 'Allowance' && c.newInvoiceAmt === null) return false;
+                  return true;
+                }).map(c => {
                   const isAllowanceRow = c.selection === 'Allowance';
                   const onThisInvoice = isAlreadyAdded(c);
                   const billableRow = isBillable(g, c);
@@ -655,6 +662,10 @@ export default function SelectionsModalV2({ open, onClose, onAdd, data, addedChi
               <div className={"est-check" + (groupByCode ? ' on' : '')} />
               Group by cost code
             </label>
+            <label className="selv2-inline-check selv2-controls-opt" onClick={() => setHideAllowanceLines(v => !v)}>
+              <div className={"est-check" + (hideAllowanceLines ? ' on' : '')} />
+              Hide allowance line items
+            </label>
             <div className="selv2-controls-spacer" />
             <button type="button" className="est-expand-btn" onClick={toggleExpandAll}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M7 20l5-5 5 5" /><path d="M7 4l5 5 5-5" /></svg>
@@ -665,14 +676,104 @@ export default function SelectionsModalV2({ open, onClose, onAdd, data, addedChi
           <div className="selv2-sections">
             {allowances.length > 0 && (
               <>
-                <div className="selv2-section-label">Allowances</div>
+                <div className="selv2-section-label">Allowances with approved selections</div>
                 {allowances.map(renderGroup)}
+              </>
+            )}
+            {bareAllowances.length > 0 && (
+              <>
+                <div className="selv2-section-label" style={{ marginTop: 12 }}>Allowances (no selections yet)</div>
+                <div className="selv2-children" style={{ background: 'white', border: '1px solid var(--g200)', borderRadius: 8, overflow: 'hidden' }}>
+                  <table className="selv2-table">
+                    <colgroup>
+                      <col style={{ width: 40 }} />
+                      <col />
+                      <col style={{ width: 150 }} />
+                      <col style={{ width: 110 }} />
+                      <col style={{ width: 130 }} />
+                    </colgroup>
+                    <thead>
+                      <tr>
+                        <th></th>
+                        <th>Allowance</th>
+                        <th>Cost code</th>
+                        <th>Cost type</th>
+                        <th style={{ textAlign: 'right' }}>Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {bareAllowances.flatMap(g =>
+                        g.children.filter(c => c.selection === 'Allowance').map(c => {
+                          const isOn = !!checked[c.id];
+                          return (
+                            <tr key={c.id}>
+                              <td>
+                                <div className={"est-check" + (isOn ? ' on' : '')} onClick={() => toggleChild(g, c)} />
+                              </td>
+                              <td>
+                                <div className="selv2-cell-name">
+                                  <span className="selv2-row-icon"><AllowanceIcon /></span>
+                                  <span>{c.lineItem}</span>
+                                </div>
+                              </td>
+                              <td className="selv2-cell-mono">{c.costCode}</td>
+                              <td className="selv2-cell-type">{c.costType || 'Allowance'}</td>
+                              <td style={{ textAlign: 'right', fontWeight: 500 }}>${fmt(c.price)}</td>
+                            </tr>
+                          );
+                        }),
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </>
             )}
             {standalone.length > 0 && (
               <>
-                <div className="selv2-section-label" style={{ marginTop: 12 }}>Standalone selections</div>
-                {standalone.map(renderGroup)}
+                <div className="selv2-section-label" style={{ marginTop: 12 }}>Selections</div>
+                <div className="selv2-children" style={{ background: 'white', border: '1px solid var(--g200)', borderRadius: 8, overflow: 'hidden' }}>
+                  <table className="selv2-table">
+                    <colgroup>
+                      <col style={{ width: 40 }} />
+                      <col />
+                      <col style={{ width: 150 }} />
+                      <col style={{ width: 110 }} />
+                      <col style={{ width: 130 }} />
+                    </colgroup>
+                    <thead>
+                      <tr>
+                        <th></th>
+                        <th>Line item</th>
+                        <th>Cost code</th>
+                        <th>Cost type</th>
+                        <th style={{ textAlign: 'right' }}>Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {standalone.flatMap(g =>
+                        g.children.filter(c => c.selection !== 'Allowance' && c.newInvoiceAmt !== null).map(c => {
+                          const isOn = !!checked[c.id];
+                          return (
+                            <tr key={c.id}>
+                              <td>
+                                <div className={"est-check" + (isOn ? ' on' : '')} onClick={() => toggleChild(g, c)} />
+                              </td>
+                              <td>
+                                <div className="selv2-cell-name">
+                                  <span className="selv2-row-icon"><SelectionIcon /></span>
+                                  <span>{c.lineItem}</span>
+                                </div>
+                              </td>
+                              <td className="selv2-cell-mono">{c.costCode}</td>
+                              <td className="selv2-cell-type">{c.costType || 'Selection'}</td>
+                              <td style={{ textAlign: 'right', fontWeight: 500 }}>${fmt(c.price)}</td>
+                            </tr>
+                          );
+                        }),
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </>
             )}
             {creditsOwed.length > 0 && (

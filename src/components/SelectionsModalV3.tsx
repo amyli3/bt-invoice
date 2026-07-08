@@ -175,12 +175,15 @@ export default function SelectionsModalV3({ open, onClose, onAdd, data, addedChi
     return Math.max(0, c.price - checkedSelTotal);
   };
 
-  // Allowance is never directly billable in V2. Builders invoice from
-  // selections; the wizard auto-handles pre-invoiced reversals.
+  // Release 1: selections under an allowance can't be cherry-picked — they move
+  // as a group via the group-header checkbox. The only individually-checkable
+  // row is the allowance itself (for invoicing the allowance on its own). For
+  // standalone selections (no allowance), the selection rows stay checkable.
   const isCheckable = (g: SelectionGroup, c: SelectionChild) => {
     if (!isBillable(g, c)) return false;
-    if (c.selection === 'Allowance') return false;
-    return true;
+    if (c.selection === 'Allowance') return !isPreInvoiced(g);
+    // Selection rows are checkable only in standalone (non-allowance) groups.
+    return g.type !== 'allowance';
   };
 
   // Allowance is "credit owed" when it's marked complete, was pre-invoiced,
@@ -222,24 +225,26 @@ export default function SelectionsModalV3({ open, onClose, onAdd, data, addedChi
   };
   const toggleExpand = (id: string) => setExpanded(e => ({ ...e, [id]: !e[id] }));
 
-  // Tri-state per group — considers only currently-checkable children.
+  // Group state: 'all' when every billable child in the group is checked, 'none'
+  // when none are. (No partial — the group checkbox is all-or-nothing so a
+  // builder can't cherry-pick one selection out of an allowance.)
   const groupState = (g: SelectionGroup): 'all' | 'none' | 'partial' => {
-    const checkable = g.children.filter(c => isCheckable(g, c) || checked[c.id]);
-    if (checkable.length === 0) return 'none';
-    const onCount = checkable.filter(c => checked[c.id]).length;
+    const billableChildren = g.children.filter(c => isBillable(g, c));
+    if (billableChildren.length === 0) return 'none';
+    const onCount = billableChildren.filter(c => checked[c.id]).length;
     if (onCount === 0) return 'none';
-    if (onCount === checkable.length) return 'all';
+    if (onCount === billableChildren.length) return 'all';
     return 'partial';
   };
 
+  // The group-header checkbox invoices the whole allowance + all its selections
+  // together. It bypasses per-row checkability so selections (which aren't
+  // individually clickable) still get checked as a set.
   const toggleGroup = (g: SelectionGroup) => {
-    const state = groupState(g);
-    const next = state !== 'all';
+    const next = groupState(g) !== 'all';
     setChecked(s => {
       const c = { ...s };
-      g.children.forEach(child => {
-        if (isCheckable(g, child) || c[child.id]) c[child.id] = next;
-      });
+      g.children.forEach(child => { if (isBillable(g, child)) c[child.id] = next; });
       return c;
     });
   };
@@ -471,8 +476,11 @@ export default function SelectionsModalV3({ open, onClose, onAdd, data, addedChi
           diffCodeSels.forEach(c => {
             rows.push({ ...c, newInvoiceAmt: c.price });
           });
-          if (rows.length === 0) return null;
-          return { ...g, children: rows };
+          // Drop any line that nets to exactly $0 — it's noise on the invoice
+          // (e.g. a same-code selection fully absorbed by the reversal).
+          const nonZero = rows.filter(r => (r.newInvoiceAmt ?? 0) !== 0);
+          if (nonZero.length === 0) return null;
+          return { ...g, children: nonZero };
         }
 
         if (remaining === 0) {
@@ -533,13 +541,29 @@ export default function SelectionsModalV3({ open, onClose, onAdd, data, addedChi
         return { ...g, children: finalRows };
       }
 
-      // Not pre-invoiced: builders invoice from selections at full price.
-      // The allowance is a budget tracker, never billed as a line item.
-      const filteredChildren: SelectionChild[] = g.children
+      // Not pre-invoiced (Release 1 reconciliation): the allowance is a checkable
+      // billable line. Selections bill at full price. When the allowance is ALSO
+      // checked, its line clamps to max(0, allowance − checkedSelections):
+      //   • allowance only            → bill the full allowance
+      //   • allowance $5k, sels $4k   → allowance $1k + selection $4k  (= $5k)
+      //   • allowance $5k, sels $5k   → allowance $0 (dropped) + selection $5k
+      //   • allowance $5k, sels $6k   → allowance $0 (dropped) + selection $6k
+      const allowanceChild = g.children.find(c => c.selection === 'Allowance');
+      const allowanceChecked = !!(allowanceChild && checked[allowanceChild.id]);
+      const selRows: SelectionChild[] = g.children
         .filter(c => c.selection !== 'Allowance' && checked[c.id] && c.newInvoiceAmt !== null)
         .map(c => ({ ...c, newInvoiceAmt: c.price }));
-      if (filteredChildren.length === 0) return null;
-      const netted = maybeNet(filteredChildren, g.name);
+
+      const rows: SelectionChild[] = [];
+      if (allowanceChecked && allowanceChild) {
+        const remainingAllowance = effectiveAmount(g, allowanceChild); // already clamped ≥ 0
+        if (remainingAllowance > 0) {
+          rows.push({ ...allowanceChild, newInvoiceAmt: remainingAllowance });
+        }
+      }
+      rows.push(...selRows);
+      if (rows.length === 0) return null;
+      const netted = maybeNet(rows, g.name);
       return { ...g, children: netted };
     })
     .filter((g): g is SelectionGroup => g !== null);
@@ -581,8 +605,11 @@ export default function SelectionsModalV3({ open, onClose, onAdd, data, addedChi
       <div key={g.id} className="selv2-group">
         <div className="selv2-group-header">
           <div className="selv2-group-left">
+            {/* Whole-allowance selection: one checkbox bills the allowance +
+                all its selections together. Builders can't invoice a single
+                selection out of an allowance. */}
             <div
-              className={"est-check" + (state === 'all' ? ' on' : state === 'partial' ? ' partial' : '') + (noneBillable ? ' disabled' : '')}
+              className={"est-check" + (state !== 'none' ? ' on' : '') + (noneBillable ? ' disabled' : '')}
               onClick={() => !noneBillable && toggleGroup(g)}
             />
             <button type="button" className="selv2-chev-btn" onClick={() => toggleExpand(g.id)}>
@@ -596,35 +623,34 @@ export default function SelectionsModalV3({ open, onClose, onAdd, data, addedChi
             {(g.scenarioNoteV3 || g.scenarioNote) && <ScenarioTooltip note={g.scenarioNoteV3 || g.scenarioNote!} />}
           </div>
           <div className="selv2-group-meta">
+            {/* Three figures: the allowance bucket already collected, the total
+                of the selections drawing against it, and what's left to invoice.
+                Only the previously-invoiced ALLOWANCE offsets the selections —
+                previously-invoiced selections are already settled and excluded
+                entirely (not shown, not counted). */}
             {g.type === 'allowance' && (() => {
-              const preBill = g.allowancePreInvoiced ?? 0;
-              if (preBill <= 0) return null;
-              // Show REMAINING unused credit, which reduces as selections are
-              // checked. If marked complete, just show the static pre-bill since
-              // the credit-owed section handles it.
-              let credit = preBill;
-              if (!g.isComplete) {
-                const invoicedSelsTotal = g.children
-                  .filter(c => c.selection !== 'Allowance' && c.newInvoiceAmt === null)
-                  .reduce((s, c) => s + c.price, 0);
-                const alreadyAddedSelsTotal = g.children
-                  .filter(c => c.selection !== 'Allowance' && isAlreadyAdded(c))
-                  .reduce((s, c) => s + c.price, 0);
-                // Hide-decision uses only COMMITTED consumption (prior invoices +
-                // already-added sels). Display-value also subtracts currently-
-                // checked sels so the builder sees the credit shrink in real time.
-                const remainingBeforeChecks = Math.max(0, preBill - invoicedSelsTotal - alreadyAddedSelsTotal);
-                if (remainingBeforeChecks <= 0) return null;
-                const checkedNewSelsTotal = g.children
-                  .filter(c => c.selection !== 'Allowance' && checked[c.id] && !isAlreadyAdded(c) && c.newInvoiceAmt !== null)
-                  .reduce((s, c) => s + c.price, 0);
-                credit = Math.max(0, remainingBeforeChecks - checkedNewSelsTotal);
-              }
+              const prevInvoiced = g.previouslyInvoiced ?? 0;
+              // Selection amount = selections still open (exclude ones already
+              // invoiced on a prior invoice: newInvoiceAmt === null).
+              const selectionTotal = g.children
+                .filter(c => c.selection !== 'Allowance' && c.newInvoiceAmt !== null)
+                .reduce((s, c) => s + c.price, 0);
               return (
-                <div className="selv2-meta-item">
-                  <div className="selv2-meta-label">Previously invoiced allowance</div>
-                  <div className="selv2-meta-value">${fmt(credit)}</div>
-                </div>
+                <>
+                  {/* Only show the allowance figure when something was actually
+                      invoiced against it — otherwise "$0 previously invoiced" is
+                      just noise for a not-yet-invoiced allowance. */}
+                  {prevInvoiced > 0 && (
+                    <div className="selv2-meta-item">
+                      <div className="selv2-meta-label">Previously invoiced allowance</div>
+                      <div className="selv2-meta-value">${fmt(prevInvoiced)}</div>
+                    </div>
+                  )}
+                  <div className="selv2-meta-item">
+                    <div className="selv2-meta-label">Selection amount</div>
+                    <div className="selv2-meta-value">${fmt(selectionTotal)}</div>
+                  </div>
+                </>
               );
             })()}
             <div className="selv2-meta-item">
@@ -646,6 +672,7 @@ export default function SelectionsModalV3({ open, onClose, onAdd, data, addedChi
                 <col style={{ width: 40 }} />
                 <col />
                 <col style={{ width: 150 }} />
+                <col style={{ width: 130 }} />
                 <col style={{ width: 110 }} />
                 <col style={{ width: 130 }} />
               </colgroup>
@@ -653,86 +680,72 @@ export default function SelectionsModalV3({ open, onClose, onAdd, data, addedChi
                 <tr>
                   <th></th>
                   <th>Line item</th>
+                  <th>Selection</th>
                   <th>Cost code</th>
                   <th>Cost type</th>
                   <th style={{ textAlign: 'right' }}>Amount</th>
                 </tr>
               </thead>
               <tbody>
-                {g.children.filter(c => c.selection !== 'Allowance' && c.newInvoiceAmt !== null).map(c => {
-                  const isAllowanceRow = c.selection === 'Allowance';
-                  const onThisInvoice = isAlreadyAdded(c);
-                  const billableRow = isBillable(g, c);
-                  const isOn = !!checked[c.id];
-                  const amt = effectiveAmount(g, c);
-                  const preInvAllowance = isAllowanceRow && preInv;
-                  const covered = isAllowanceRow && !preInv && amt === 0;
-                  const reduced = isAllowanceRow && !preInv && amt > 0 && amt < c.price;
-                  // Pre-invoiced allowance row always displays $0 — the allowance was
-                  // already billed, so it contributes nothing more to this invoice. The
-                  // net (overage or credit) rolls up to the group's Invoice amount via
-                  // the outgoing payload.
-                  const rowAmt = preInvAllowance ? 0 : amt;
-                  const closedOut = isAllowanceRow && g.isComplete && !preInv;
-                  const dim = !billableRow || covered || preInvAllowance;
-                  const checkboxTitle = onThisInvoice
-                    ? 'Already on this invoice'
-                    : closedOut
-                      ? 'Allowance marked complete — unspent budget closes out on the budget side'
-                      : !billableRow
-                        ? 'Already invoiced — not billable on this invoice'
-                        : covered
-                          ? 'Fully covered by selected selections'
-                          : undefined;
+                {/* Allowance row — shown as context (no checkbox). Selection
+                    happens at the group level. When the group is checked, the
+                    allowance amount clamps to max(0, allowance − selections). */}
+                {(() => {
+                  const allowanceChild = g.children.find(c => c.selection === 'Allowance');
+                  if (!allowanceChild || preInv) return null; // pre-invoiced reversal is auto-handled, not shown as a row
+                  const active = groupState(g) !== 'none';
+                  const amt = effectiveAmount(g, allowanceChild); // clamped ≥ 0
+                  const reduced = amt > 0 && amt < allowanceChild.price;
+                  const covered = amt === 0;
                   return (
-                    <tr key={c.id} className={dim ? 'selv2-row-disabled' : ''}>
+                    <tr key={allowanceChild.id}>
+                      <td></td>
                       <td>
-                        {preInvAllowance ? null : (
+                        <div className="selv2-cell-name">
+                          <span className="selv2-row-icon"><AllowanceIcon /></span>
+                          <span>{allowanceChild.lineItem}</span>
+                          {active && covered && <span className="selv2-pill selv2-pill-muted">Covered by selections</span>}
+                        </div>
+                      </td>
+                      <td className="selv2-cell-type" style={{ color: 'var(--g400)' }}>—</td>
+                      <td className="selv2-cell-mono">{allowanceChild.costCode}</td>
+                      <td className="selv2-cell-type">Allowance</td>
+                      <td style={{ textAlign: 'right', fontWeight: 500 }}>
+                        ${fmt(active ? amt : allowanceChild.price)}
+                        {active && reduced && (
+                          <div style={{ fontSize: 10, fontWeight: 400, color: 'var(--g400)', textDecoration: 'line-through' }}>
+                            ${fmt(allowanceChild.price)}
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })()}
+                {/* Selection rows — display-only under an allowance (move as a
+                    group); checkable only for standalone selections. */}
+                {g.children.filter(c => c.selection !== 'Allowance' && c.newInvoiceAmt !== null).map(c => {
+                  const checkable = isCheckable(g, c);
+                  const isOn = !!checked[c.id];
+                  return (
+                    <tr key={c.id}>
+                      <td>
+                        {checkable && (
                           <div
-                            className={"est-check" + (isOn ? ' on' : '') + (dim && !isOn ? ' disabled' : '')}
+                            className={"est-check" + (isOn ? ' on' : '')}
                             onClick={() => toggleChild(g, c)}
-                            title={checkboxTitle}
                           />
                         )}
                       </td>
                       <td>
                         <div className="selv2-cell-name">
-                          <span className="selv2-row-icon">
-                            {isAllowanceRow ? <AllowanceIcon /> : <SelectionIcon />}
-                          </span>
+                          <span className="selv2-row-icon"><SelectionIcon /></span>
                           <span>{c.lineItem}</span>
-                          {closedOut && (
-                            <span className="selv2-pill selv2-pill-muted">Closed out on budget</span>
-                          )}
-                          {!billableRow && !closedOut && !onThisInvoice && (
-                            <span className="selv2-pill selv2-pill-muted">Invoiced</span>
-                          )}
-                          {c.selectionStatus && billableRow && !isAllowanceRow && (
-                            <span className="selv2-pill selv2-pill-approved">{c.selectionStatus}</span>
-                          )}
                         </div>
-                        {preInvAllowance && (
-                          <div style={{ fontSize: 11, color: 'var(--g500)', marginTop: 2 }}>
-                            ${fmt(g.previouslyInvoiced)} previously invoiced
-                          </div>
-                        )}
                       </td>
+                      <td className="selv2-cell-type">{c.selection}</td>
                       <td className="selv2-cell-mono">{c.costCode}</td>
-                      <td className="selv2-cell-type">{c.costType || (isAllowanceRow ? 'Allowance' : 'Selection')}</td>
-                      <td
-                        style={{
-                          textAlign: 'right',
-                          fontWeight: 500,
-                          color: undefined,
-                        }}
-                      >
-                        ${fmt(rowAmt)}
-                        {reduced && (
-                          <div style={{ fontSize: 10, fontWeight: 400, color: 'var(--g400)', textDecoration: 'line-through' }}>
-                            ${fmt(c.price)}
-                          </div>
-                        )}
-                      </td>
+                      <td className="selv2-cell-type">{c.costType || 'Selection'}</td>
+                      <td style={{ textAlign: 'right', fontWeight: 500 }}>${fmt(c.price)}</td>
                     </tr>
                   );
                 })}
