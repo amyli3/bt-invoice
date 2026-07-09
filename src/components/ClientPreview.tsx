@@ -1,5 +1,6 @@
 import { Invoice, ClientColumnVisibility, LineItem } from '../types';
 import { fmt, fmtDate, parseTaxRate } from '../utils';
+import { ESTIMATE_GROUP_BY_ID } from '../selectionsData';
 
 interface ColumnConfig {
   key: string;
@@ -28,6 +29,54 @@ function attributeReallocationsToTarget(lineItems: LineItem[]): LineItem[] {
   });
 }
 
+// Turn "Cabinets Allowance (previously invoiced)" into a client-facing credit
+// label ("Cabinets Allowance — credit applied") so a reversal reads as an
+// intentional offset rather than a bare negative amount.
+function creditLabel(rawName: string): string {
+  return rawName.replace(/\s*\(previously invoiced\)\s*/i, '').trim() + ' — credit applied';
+}
+
+// An "atom" is one indivisible amount at one cost code. A grouped allowance
+// line carries its breakdown in rolledUp (the reversal + each selection, each
+// with its own cost code), so a single line can span several codes. Both the
+// "By cost code" and "All line items" views build from atoms — that's what lets
+// a cross-cost-code true-up be attributed to the codes where the money actually
+// landed, instead of collapsing under the allowance's original code.
+interface Atom { description: string; costCode: string; costType: string; amount: number; isReversal: boolean; }
+function toAtoms(item: LineItem): Atom[] {
+  if (item.rolledUp && item.rolledUp.length) {
+    return item.rolledUp.map(m => {
+      const isReversal = !!m.isAllowance && m.amount < 0;
+      return {
+        // rolledUp amounts are already the client-facing figures (these lines
+        // carry markup 0), so no markup is re-applied here.
+        description: isReversal ? creditLabel(m.name) : m.name,
+        costCode: m.costCode || item.costCode,
+        costType: m.isAllowance ? 'Allowance' : item.costType,
+        amount: m.amount,
+        isReversal,
+      };
+    });
+  }
+  const amount = item.unitCost * item.quantity * (1 + item.markup / 100);
+  return [{ description: item.description || item.costCode, costCode: item.costCode, costType: item.costType, amount, isReversal: false }];
+}
+
+// Cost codes are stored inconsistently — bare ("9040") on some selections vs.
+// full ("9040 - Cabinets") on allowances. Key by the code NUMBER and track the
+// most descriptive label seen for it, so display stays consistent everywhere.
+const codeNum = (cc: string) => (cc || '').split(' - ')[0].trim();
+function buildLabelByNum(lineItems: LineItem[]): Record<string, string> {
+  const m: Record<string, string> = {};
+  const note = (cc?: string) => {
+    const k = codeNum(cc || '');
+    if (!k) return;
+    if (!m[k] || (cc!.includes(' - ') && !m[k].includes(' - '))) m[k] = cc!;
+  };
+  lineItems.forEach(li => { note(li.costCode); (li.rolledUp || []).forEach(mv => note(mv.costCode || li.costCode)); });
+  return m;
+}
+
 // Collapse line items added from the same allowance/selection group into one
 // row per cost code, so the client sees a single net amount per category
 // instead of the allowance reversal + individual selections side-by-side.
@@ -48,7 +97,9 @@ function rollUpByGroup(lineItems: LineItem[]): LineItem[] {
       keyIndex[key] = result.length;
       result.push({
         ...item,
-        description: item.costCode || item.relatedItem!.name,
+        // Under the room parent rows, label each item by its combined title
+        // (e.g. "Cabinets Allowance — final balance") rather than a cost code.
+        description: item.relatedItem?.name || item.description || item.costCode,
         unitCost: lineTotal,
         quantity: 1,
         markup: 0,
@@ -65,45 +116,94 @@ function rollUpByGroup(lineItems: LineItem[]): LineItem[] {
   return result;
 }
 
-// Collapse by cost code alone — every line at the same cost code becomes one
-// row, regardless of whether it came from an allowance, selection, or manual
-// add. Used by the "By cost code" client view.
+// Collapse by cost code — every amount at the same cost code becomes one row.
+// Grouped allowance lines are first broken into atoms, so a cross-cost-code
+// true-up is distributed to the codes where the money landed (its selections
+// merge with any other lines at those codes) rather than sitting as one net
+// figure under the allowance's original code. A code that is purely a reversal
+// (no same-code selection to net against) is labeled as an allowance credit
+// instead of a bare negative cost-code row.
 function rollUpByCostCode(lineItems: LineItem[]): LineItem[] {
-  const result: LineItem[] = [];
-  const keyIndex: Record<string, number> = {};
-  for (const item of lineItems) {
-    const cc = item.costCode || '';
-    if (!cc) {
-      result.push(item);
+  const labelByNum = buildLabelByNum(lineItems);
+  const order: string[] = [];
+  // Per code number: running total, whether it has a real (non-reversal) amount,
+  // and — if it is reversal-only — the credit label to show instead of the code.
+  const agg: Record<string, { amount: number; costType: string; hasSelection: boolean; creditDesc?: string }> = {};
+  const looseRows: LineItem[] = [];
+  for (const a of lineItems.flatMap(toAtoms)) {
+    const key = codeNum(a.costCode);
+    if (!key) {
+      looseRows.push({ id: `cc-none-${looseRows.length}`, description: a.description, costCode: '', costType: a.costType, unitCost: a.amount, quantity: 1, unit: '--', markup: 0 });
       continue;
     }
-    const lineTotal = item.unitCost * item.quantity * (1 + item.markup / 100);
-    if (keyIndex[cc] === undefined) {
-      keyIndex[cc] = result.length;
-      result.push({
-        ...item,
-        description: cc,
-        unitCost: lineTotal,
+    if (!agg[key]) { order.push(key); agg[key] = { amount: 0, costType: a.costType, hasSelection: false, creditDesc: undefined }; }
+    const g = agg[key];
+    g.amount += a.amount;
+    if (a.isReversal) { if (!g.creditDesc) g.creditDesc = a.description; }
+    else g.hasSelection = true;
+  }
+  const rows = order.map(key => {
+    const g = agg[key];
+    const label = labelByNum[key] || key;
+    // A code with only a reversal (no same-code selection to net against) reads
+    // as an allowance credit; otherwise it's the merged net at that cost code.
+    const description = !g.hasSelection && g.creditDesc ? g.creditDesc : label;
+    return { id: `cc-${key}`, description, costCode: label, costType: g.costType, unitCost: g.amount, quantity: 1, unit: '--', markup: 0 };
+  });
+  return [...rows, ...looseRows];
+}
+
+// Fully itemized view: expand every grouped allowance line into its individual
+// movement rows (the reversal + each selection), so nothing stays combined.
+// Ungrouped lines pass through unchanged (preserving their own markup, etc.).
+function expandAllLineItems(lineItems: LineItem[]): LineItem[] {
+  const labelByNum = buildLabelByNum(lineItems);
+  const out: LineItem[] = [];
+  for (const item of lineItems) {
+    if (item.rolledUp && item.rolledUp.length) {
+      toAtoms(item).forEach((a, i) => out.push({
+        id: `${item.id}-m${i}`,
+        description: a.description,
+        costCode: labelByNum[codeNum(a.costCode)] || a.costCode,
+        costType: a.costType,
+        unitCost: a.amount,
         quantity: 1,
-        markup: 0,
         unit: '--',
-      });
+        markup: 0,
+      }));
     } else {
-      const existing = result[keyIndex[cc]];
-      result[keyIndex[cc]] = { ...existing, unitCost: existing.unitCost + lineTotal };
+      out.push(item);
     }
   }
-  return result;
+  return out;
 }
 
 export default function ClientPreview({ invoice, clientVis, groupBy = 'estimate' }: Props) {
   const isFlatFee = invoice.mode === 'flatFee';
   const displayLineItems = (() => {
     if (isFlatFee) return invoice.lineItems;
-    if (groupBy === 'all') return invoice.lineItems;
+    if (groupBy === 'all') return expandAllLineItems(invoice.lineItems);
     const attributed = attributeReallocationsToTarget(invoice.lineItems);
     return groupBy === 'costcode' ? rollUpByCostCode(attributed) : rollUpByGroup(attributed);
   })();
+  // "By estimate" mirrors how the builder organized the estimate (e.g. by room):
+  // group the invoiced items under parent rows, each with its own subtotal.
+  const estimateGroups = (() => {
+    if (groupBy !== 'estimate' || isFlatFee) return [];
+    const order: string[] = [];
+    const byGroup: Record<string, LineItem[]> = {};
+    for (const item of displayLineItems) {
+      const g = ESTIMATE_GROUP_BY_ID[item.relatedItem?.groupId || ''] || 'Other';
+      if (!byGroup[g]) { order.push(g); byGroup[g] = []; }
+      byGroup[g].push(item);
+    }
+    return order.map(name => ({
+      name,
+      items: byGroup[name],
+      subtotal: byGroup[name].reduce((s, i) => s + i.unitCost * i.quantity * (1 + i.markup / 100), 0),
+    }));
+  })();
+
   const subtotal = isFlatFee
     ? (invoice.flatFeeAmount || 0)
     : invoice.lineItems.reduce((s, i) => s + i.unitCost * i.quantity * (1 + i.markup / 100), 0);
@@ -116,6 +216,9 @@ export default function ClientPreview({ invoice, clientVis, groupBy = 'estimate'
 
   const cols: ColumnConfig[] = [];
   cols.push({ key: 'desc', label: 'Description', align: 'left' });
+  // The itemized view labels rows by item name, so surface the cost code as its
+  // own column there (the grouped views already encode the code in the label).
+  if (groupBy === 'all') cols.push({ key: 'costCode', label: 'Cost code', align: 'left' });
   if (clientVis.costType) cols.push({ key: 'costType', label: 'Type', align: 'left' });
   if (clientVis.quantity) cols.push({ key: 'qty', label: 'Qty', align: 'center' });
   if (clientVis.unit) cols.push({ key: 'unit', label: 'Unit', align: 'center' });
@@ -123,12 +226,13 @@ export default function ClientPreview({ invoice, clientVis, groupBy = 'estimate'
   cols.push({ key: 'amount', label: 'Amount', align: 'right' });
   if (taxRate > 0) cols.push({ key: 'tax', label: 'Tax', align: 'right' });
 
-  const renderCell = (item: LineItem, c: ColumnConfig) => {
+  const renderCell = (item: LineItem, c: ColumnConfig, indent = false) => {
     const cp = item.unitCost * item.quantity * (1 + item.markup / 100);
     const unitClient = item.unitCost * (1 + item.markup / 100);
     const itemTax = cp * (taxRate / 100);
     switch (c.key) {
-      case 'desc': return <td key={c.key} style={{fontWeight: 500, color: 'var(--g800)', whiteSpace: 'normal'}}>{item.description || '—'}</td>;
+      case 'desc': return <td key={c.key} style={{fontWeight: 500, color: 'var(--g800)', whiteSpace: 'normal', paddingLeft: indent ? 24 : undefined}}>{item.description || '—'}</td>;
+      case 'costCode': return <td key={c.key} style={{color: 'var(--g500)', whiteSpace: 'nowrap'}}>{item.costCode || '—'}</td>;
       case 'costType': return <td key={c.key}><span style={{padding: '1px 6px', fontSize: 10, border: '1px solid var(--g200)', borderRadius: 3}}>{item.costType}</span></td>;
       case 'qty': return <td key={c.key} style={{textAlign: 'center'}}>{item.quantity}</td>;
       case 'unit': return <td key={c.key} style={{textAlign: 'center', color: 'var(--g400)'}}>{item.unit}</td>;
@@ -202,7 +306,18 @@ export default function ClientPreview({ invoice, clientVis, groupBy = 'estimate'
             <table className="paper-tbl">
               <thead><tr>{cols.map(c => <th key={c.key} style={{textAlign: c.align as 'left'|'right'|'center'}}>{c.label}</th>)}</tr></thead>
               <tbody>
-                {displayLineItems.map(item => <tr key={item.id}>{cols.map(c => renderCell(item, c))}</tr>)}
+                {groupBy === 'estimate'
+                  ? estimateGroups.flatMap(g => [
+                      <tr key={`grp-${g.name}`} style={{background: 'var(--g50)'}}>
+                        {cols.map(c => (
+                          <td key={c.key} style={{fontWeight: 700, color: 'var(--bt-midnight)', textAlign: (c.align as 'left'|'right'|'center'), borderTop: '1px solid var(--g200)'}}>
+                            {c.key === 'desc' ? g.name : c.key === 'amount' ? `$${fmt(g.subtotal)}` : ''}
+                          </td>
+                        ))}
+                      </tr>,
+                      ...g.items.map(item => <tr key={item.id}>{cols.map(c => renderCell(item, c, true))}</tr>),
+                    ])
+                  : displayLineItems.map(item => <tr key={item.id}>{cols.map(c => renderCell(item, c))}</tr>)}
                 {displayLineItems.length === 0 && <tr><td colSpan={cols.length} style={{padding: 24, textAlign: 'center', color: 'var(--g300)', fontStyle: 'italic'}}>No line items</td></tr>}
               </tbody>
             </table>

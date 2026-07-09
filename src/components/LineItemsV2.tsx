@@ -38,7 +38,7 @@ function AddFromDropdown({ onOpenEstimate, onOpenSelections, onOpenSelections2b 
           {/* Release 1 = Estimate + Selections. Exploration forks below kept in
               code but hidden from the dropdown; re-enable any if needed. */}
           <button className="add-from-option" onClick={() => { setOpen(false); onOpenSelections2b?.(); }}>
-            <span style={{ fontWeight: 500 }}>Selections 2 (copy)</span>
+            <span style={{ fontWeight: 500 }}>Selections &amp; Allowances</span>
           </button>
           {/*
           <button className="add-from-option" onClick={() => { setOpen(false); onOpenSelections2?.(); }}>

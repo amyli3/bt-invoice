@@ -363,3 +363,21 @@ export const INVOICE_STANDALONE_ALLOWANCES: StandaloneAllowance[] = [
     scenarioNote: 'Allowance with no selections chosen yet — invoice the allowance amount directly.',
   },
 ];
+
+// Hypothetical estimate groupings, keyed by the source allowance/selection id.
+// Many builders organize an estimate by room; the client preview's "By estimate"
+// view uses this to show room parent rows over just the invoiced line items,
+// mirroring how the estimate itself is grouped. Ids not listed fall under "Other".
+export const ESTIMATE_GROUP_BY_ID: Record<string, string> = {
+  'dt-1': 'Kitchen',           // Cabinets Allowance
+  'dt-5': 'Kitchen',           // Appliances Allowance
+  'dt-8': 'Kitchen',           // Kitchen Package Allowance
+  'sa-2': 'Kitchen',           // Countertops Allowance
+  'dt-2': 'Primary Bathroom',  // Lighting Allowance
+  'dt-4': 'Primary Bathroom',  // Paint Allowance (reconciles on budget)
+  'dt-6': 'Primary Bathroom',  // Tile Allowance
+  'dt-7': 'Primary Bathroom',  // Fixtures Allowance
+  'sa-1': 'Exterior',          // Landscaping Allowance
+  'ss-1': 'Exterior',          // Front door hardware
+  'ss-2': 'Exterior',          // Custom mailbox
+};

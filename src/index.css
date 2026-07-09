@@ -6558,6 +6558,25 @@ button.jps-term-label { cursor: pointer; }
 }
 .selv2-group-icon { display: inline-flex; align-items: center; }
 .selv2-group-name { font-weight: 600; font-size: 14px; color: var(--bt-midnight); }
+/* Zero-variance allowance reconciled exactly on budget: de-emphasized, with a
+   green "settled" badge. Nothing owed, but shown so the builder can close it. */
+.selv2-group.is-settled { background: var(--g50); }
+.selv2-group.is-settled .selv2-group-header { background: var(--g50); }
+.selv2-settled-badge {
+  display: inline-flex; align-items: center; font-size: 11px; font-weight: 600;
+  color: var(--green); background: var(--green-bg); padding: 1px 8px; border-radius: 20px; white-space: nowrap;
+}
+/* Percentage input for invoicing a portion of a standalone allowance. */
+.selv2-pct-field { display: inline-flex; align-items: center; border: 1px solid var(--g300); border-radius: 6px; overflow: hidden; background: #fff; }
+.selv2-pct-field input { width: 46px; padding: 4px 6px; border: none; outline: none; text-align: right; font-size: 13px; font-family: inherit; color: var(--bt-midnight); background: transparent; -moz-appearance: textfield; }
+.selv2-pct-field input::-webkit-outer-spin-button, .selv2-pct-field input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.selv2-pct-suffix { padding: 4px 6px; font-size: 12px; color: var(--g500); border-left: 1px solid var(--g300); background: var(--g50); }
+/* Allowance grid header with the "Adjust invoice %" / Apply all control */
+.selv2-section-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.selv2-draw-control { display: inline-flex; align-items: center; gap: 8px; }
+.selv2-draw-label { font-size: 12px; color: var(--g600); white-space: nowrap; }
+/* Per-section "Select all" placed under a section heading */
+.selv2-section-selectall { margin: 6px 0 10px; }
 .selv2-group-meta { display: flex; align-items: center; gap: 24px; }
 .selv2-meta-item { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
 .selv2-meta-label { font-size: 11px; color: var(--g500); font-weight: 500; white-space: nowrap; }
@@ -6917,6 +6936,19 @@ button.jps-term-label { cursor: pointer; }
 .cpi-info { display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px; border-radius: 50%; border: 1px solid var(--g300); color: var(--g400); font-size: 9px; font-style: italic; font-weight: 700; cursor: help; }
 .cpi-check { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--g700); cursor: pointer; }
 .cpi-check input { width: 15px; height: 15px; accent-color: var(--bt-blue); cursor: pointer; }
+/* Sub-option nested under a parent checkbox (e.g. description position under Description) */
+.cpi-check-sub { margin-left: 24px; margin-top: -4px; font-size: 12px; color: var(--g600); }
+.cpi-check-sub.is-disabled { color: var(--g400); cursor: not-allowed; }
+.cpi-check-sub.is-disabled input { cursor: not-allowed; }
+
+/* Description-position radio group, nested under the Description checkbox */
+.cpi-subradio { margin-left: 24px; margin-top: 2px; display: flex; align-items: center; flex-wrap: wrap; gap: 6px 12px; }
+.cpi-subradio-lbl { font-size: 12px; color: var(--g600); margin-right: 2px; }
+.cpi-radio { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--g700); cursor: pointer; }
+.cpi-radio input { width: 14px; height: 14px; accent-color: var(--bt-blue); cursor: pointer; }
+.cpi-subradio.is-disabled { color: var(--g400); }
+.cpi-subradio.is-disabled .cpi-subradio-lbl, .cpi-subradio.is-disabled .cpi-radio { color: var(--g400); cursor: not-allowed; }
+.cpi-subradio.is-disabled .cpi-radio input { cursor: not-allowed; }
 
 /* Bill-to selector field */
 .cpi-field { display: flex; flex-direction: column; gap: 5px; padding: 12px; background: var(--g50); border: 1px solid var(--g200); border-radius: 8px; }

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { fmt } from '../utils';
-import { DEPOSIT_TRUEUP_ALLOWANCES, type DepositTrueUpAllowance, INVOICE_STANDALONE_SELECTIONS, INVOICE_STANDALONE_ALLOWANCES } from '../selectionsData';
+import { DEPOSIT_TRUEUP_ALLOWANCES, type DepositTrueUpAllowance, INVOICE_STANDALONE_SELECTIONS } from '../selectionsData';
 
 /* ─── Scenario note tooltip ─── */
 function ScenarioTooltip({ note }: { note: string }) {
@@ -46,76 +46,6 @@ function fmtCurrency(v: number) {
   return v < 0 ? '-' + s : s;
 }
 
-/* ─────────────────────────────────────────────────────────────────────────
-   Round 2 re-invoicing (Option A — bill only the new delta). Illustrative card.
-   Scenario: a Flooring allowance was invoiced in round 1 ($7,200 — deposit +
-   selections). A new selection ($1,100) just came in, so only the new
-   selection is billed. Fully interactive (checkbox + chevron).
-   ───────────────────────────────────────────────────────────────────────── */
-function RoundTwoCard() {
-  const [on, setOn] = useState(false);
-  const [open, setOpen] = useState(true);
-  return (
-    <div className="selv2-group">
-        <div className="selv2-group-header">
-          <div className="selv2-group-left">
-            <div className={"est-check" + (on ? ' on' : '')} onClick={() => setOn(v => !v)} />
-            <button type="button" className="selv2-chev-btn" onClick={() => setOpen(v => !v)}>
-              <span className={"est-group-chevron" + (open ? ' open' : '')}>&#9654;</span>
-            </button>
-            <span className="selv2-group-icon"><AllowanceIcon /></span>
-            <span className="selv2-group-name">Flooring Allowance</span>
-            <ScenarioTooltip note="Round 2 re-invoicing. This allowance was already invoiced in a prior round ($7,200 — deposit plus its first selections). A new selection (stair tread upgrade, $1,100) came in afterward, so only the new selection is billed now — the previously invoiced amount is remembered and not re-billed." />
-          </div>
-          <div className="selv2-group-meta">
-            {/* Fully-spent allowance: the deposit was already invoiced AND
-                consumed by prior selections, so there's no credit left to net
-                against. The new selection is just a new amount to invoice at
-                full price — showing "previously invoiced allowance" here would
-                falsely imply an available credit. The $7,200 context lives in
-                the tooltip instead. */}
-            <div className="selv2-meta-item">
-              <div className="selv2-meta-label">Selection amount</div>
-              <div className="selv2-meta-value">$1,100.00</div>
-            </div>
-            <div className="selv2-meta-item">
-              <div className="selv2-meta-label">Invoice amount</div>
-              <div className="selv2-meta-value selv2-meta-value-total">$1,100.00</div>
-            </div>
-          </div>
-        </div>
-        {open && (
-          <div className="selv2-children">
-            <table className="selv2-table">
-              <colgroup>
-                <col style={{ width: 40 }} /><col /><col /><col style={{ width: 150 }} />
-                <col style={{ width: 110 }} /><col style={{ width: 130 }} />
-              </colgroup>
-              <thead>
-                <tr><th></th><th>Selection title</th><th>Selection line item</th><th>Cost code</th><th>Cost type</th><th style={{ textAlign: 'right' }}>Amount</th></tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td></td>
-                  <td>
-                    <div className="selv2-cell-name">
-                      <span className="selv2-row-icon"><SelectionIcon /></span>
-                      <span>Stair treads</span>
-                    </div>
-                  </td>
-                  <td>Stair tread upgrade</td>
-                  <td className="selv2-cell-mono">6010</td>
-                  <td className="selv2-cell-type">Material</td>
-                  <td style={{ textAlign: 'right', fontWeight: 500 }}>$1,100.00</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-  );
-}
-
 /* ─── Outgoing payload shape (matches handleAddFromSelections in App.tsx) ─── */
 interface OutChild {
   id: string;
@@ -156,6 +86,8 @@ export default function SelectionsModalV5({ open, onClose, onAdd, addedChildIds 
   // invoice (Summary). Unchecked adds them broken out (Itemized). Either way the
   // builder can flip the view on the invoice with the Summary/Itemized toggle.
   const [groupLineItems, setGroupLineItems] = useState(true);
+  // Percentage of an allowance to invoice now (deposits / progress). Defaults to
+  // 100% when unset. New invoice amount = allowance amount × this %.
 
   const addedSet = new Set(addedChildIds);
   // Only allowances that are marked complete on the Selections page AND have a
@@ -178,17 +110,15 @@ export default function SelectionsModalV5({ open, onClose, onAdd, addedChildIds 
     const doneAll = a.selections.filter(s => s.status === 'done').reduce((sum, s) => sum + s.approvedPrice, 0);
     const newDone = a.selections.filter(s => s.status === 'done' && !s.alreadyInvoiced).reduce((sum, s) => sum + s.approvedPrice, 0);
     const billable = isReInvoiced ? newDone : doneAll - a.billedUpfront;
-    return billable !== 0; // non-zero amount to invoice
+    // Keep zero-variance allowances that had a deposit to reconcile: they
+    // settled exactly on budget, so instead of hiding them we surface them as
+    // "Settled · $0 due" so the builder can confirm and close them out.
+    return billable !== 0 || (a.billedUpfront > 0 && !isReInvoiced); // billable, or settled on budget
   });
 
   // Standalone selections (no allowance backing) bill at full approved price,
   // same as the other wizard. Hide any already added to this invoice.
   const standalone = INVOICE_STANDALONE_SELECTIONS.filter(s => !addedSet.has(s.id));
-
-  // Standalone allowances (no selections chosen yet) bill as a single flat
-  // line at the allowance amount — no variance, so they render as lightweight
-  // rows just like standalone selections. Hide any already on this invoice.
-  const standaloneAllowances = INVOICE_STANDALONE_ALLOWANCES.filter(a => !addedSet.has(a.id));
 
   useEffect(() => {
     if (!open) return;
@@ -236,34 +166,58 @@ export default function SelectionsModalV5({ open, onClose, onAdd, addedChildIds 
   // A fully-locked allowance with non-zero variance is the only thing that
   // produces an invoice line.
   const isTrueable = (a: DepositTrueUpAllowance) => isComplete(a) && !hasPending(a);
+  // Reconciled exactly on budget: a deposit was billed and the finalized
+  // selections match it, so nothing more is owed. Shown as "Settled" (not
+  // hidden) and still addable as a $0 reconciled line for the record.
+  const settled = (a: DepositTrueUpAllowance) => isTrueable(a) && !noDeposit(a) && !reInvoiced(a) && variance(a) === 0;
 
   const toggleCheck = (a: DepositTrueUpAllowance) => {
+    // Zero-variance allowances (incl. settled/on-budget) aren't invoiced here.
     if (!isTrueable(a) || variance(a) === 0) return;
     setChecked(c => ({ ...c, [a.id]: !c[a.id] }));
   };
   const toggleExpand = (id: string) => setExpanded(e => ({ ...e, [id]: !e[id] }));
   const toggleStandalone = (id: string) => setChecked(c => ({ ...c, [id]: !c[id] }));
 
-  // Global "Select all" — tri-state across every billable allowance AND
-  // standalone selection in the list.
-  const billableIds = [...data.map(a => a.id), ...standaloneAllowances.map(a => a.id), ...standalone.map(s => s.id)];
-  const globalState: 'all' | 'none' | 'partial' = (() => {
-    if (billableIds.length === 0) return 'none';
-    const on = billableIds.filter(id => checked[id]).length;
-    if (on === 0) return 'none';
-    if (on === billableIds.length) return 'all';
-    return 'partial';
-  })();
-  const toggleAll = () => {
-    const next = globalState !== 'all';
-    setChecked(c => {
-      const u = { ...c };
-      billableIds.forEach(id => { u[id] = next; });
-      return u;
-    });
-  };
-
   const catOf = (cc: string) => { const i = cc.indexOf(' - '); return i >= 0 ? cc.slice(i + 3).trim() : cc; };
+
+  // Section-level "Select all" helpers (tri-state over a set of checkbox ids).
+  const triState = (ids: string[]): 'all' | 'none' | 'partial' => {
+    if (ids.length === 0) return 'none';
+    const on = ids.filter(id => checked[id]).length;
+    return on === 0 ? 'none' : on === ids.length ? 'all' : 'partial';
+  };
+  const setMany = (ids: string[], val: boolean) => setChecked(c => { const n = { ...c }; ids.forEach(id => { n[id] = val; }); return n; });
+  // Top allowances (true-up cards) — only the ones that can actually be invoiced
+  // (settled / zero-variance cards aren't billable here, so they're excluded).
+  const cardIds = data.filter(a => isTrueable(a) && variance(a) !== 0).map(a => a.id);
+  const cardsSelState = triState(cardIds);
+  const toggleCards = () => setMany(cardIds, cardsSelState !== 'all');
+  // Standalone selections grid — select-all over its rows.
+  const selKeys = standalone.map(s => s.id);
+  const selSelState = triState(selKeys);
+  const toggleSel = () => setMany(selKeys, selSelState !== 'all');
+
+  // Client-facing title for the combined invoice line. The bare allowance name
+  // is ambiguous: it implies a fresh allowance charge even when we're only
+  // billing selections (no deposit) or reconciling a prior deposit. So the
+  // title states what this line actually represents on THIS invoice.
+  const stripAllowance = (n: string) => n.replace(/\s*Allowance$/i, '').trim();
+  const clientTitle = (a: DepositTrueUpAllowance): string => {
+    // Reconciled exactly on budget — the deposit covered the selections, $0 due.
+    if (settled(a)) return `${a.name} — reconciled (on budget)`;
+    // No deposit was ever billed — nothing allowance-y is charged, these are
+    // just the chosen items. Drop "Allowance" so it doesn't read as a budget.
+    if (noDeposit(a)) return `${stripAllowance(a.name)} — selections`;
+    // Deposit already reconciled on a prior invoice; this is a genuinely new item.
+    if (reInvoiced(a)) {
+      const n = a.selections.filter(s => s.status === 'done' && !s.alreadyInvoiced).length;
+      return `${a.name} — additional selection${n > 1 ? 's' : ''}`;
+    }
+    // Normal true-up against a prior deposit: overage settles the balance,
+    // underage is a credit back to the client.
+    return variance(a) < 0 ? `${a.name} — credit` : `${a.name} — final balance`;
+  };
 
   // Build the outgoing payload: ONE net line per checked allowance, carrying its
   // full breakdown in rolledUp (the reversal + each selection, each with its
@@ -291,7 +245,7 @@ export default function SelectionsModalV5({ open, onClose, onAdd, addedChildIds 
       return {
         id: a.id,
         type: 'allowance' as const,
-        name: a.name,
+        name: clientTitle(a),
         children: [{
           id: `${a.id}-trueup`,
           lineItem: ccName,
@@ -323,25 +277,7 @@ export default function SelectionsModalV5({ open, onClose, onAdd, addedChildIds 
       }],
     }));
 
-  // Standalone allowances → one allowance line each at the allowance amount.
-  const outgoingStandaloneAllowances: OutGroup[] = standaloneAllowances
-    .filter(a => checked[a.id])
-    .map(a => ({
-      id: a.id,
-      type: 'allowance' as const,
-      name: a.name,
-      children: [{
-        id: `${a.id}-std`,
-        lineItem: a.name,
-        costCode: a.costCode,
-        costType: a.costType,
-        selection: 'Allowance',
-        newInvoiceAmt: a.amount,
-        sourceChildIds: [`${a.id}-std`],
-      }],
-    }));
-
-  const allOutgoing = [...outgoing, ...outgoingStandaloneAllowances, ...outgoingStandalone];
+  const allOutgoing = [...outgoing, ...outgoingStandalone];
 
   const invoiceSubtotal = allOutgoing.reduce(
     (s, g) => s + g.children.reduce((cs, c) => cs + (c.newInvoiceAmt ?? 0), 0), 0);
@@ -365,46 +301,64 @@ export default function SelectionsModalV5({ open, onClose, onAdd, addedChildIds 
   const renderAllowance = (a: DepositTrueUpAllowance) => {
     const isOpen = !!expanded[a.id];
     const ri = reInvoiced(a);   // "add more later": deposit already spent
+    const isSettled = settled(a);   // reconciled exactly on budget, $0 due
     const sel = selectionAmount(a);   // selections that count for THIS invoice
     const v = variance(a);      // amount to invoice now
     const isOn = !!checked[a.id];
+    // Whether there's a prior-invoiced deposit to net against. When there isn't
+    // (no deposit, or the deposit is already spent), the selection amount equals
+    // the invoice amount, so we collapse to a single "Invoice amount" metric.
+    const hasCredit = !noDeposit(a) && !reInvoiced(a);
 
     return (
-      <div key={a.id} className="selv2-group">
+      <div key={a.id} className={"selv2-group" + (isSettled ? ' is-settled' : '')}>
         <div className="selv2-group-header">
           <div className="selv2-group-left">
+            {/* A settled (on-budget) allowance isn't invoiced here — it reconciles
+                once marked complete — so its checkbox is disabled. */}
             <div
-              className={"est-check" + (isOn ? ' on' : '')}
-              onClick={() => toggleCheck(a)}
-              title={isOn ? 'Will be added to this invoice' : 'Add to this invoice'}
+              className={"est-check" + (isOn ? ' on' : '') + (isSettled ? ' disabled' : '')}
+              onClick={isSettled ? undefined : () => toggleCheck(a)}
+              title={isSettled ? 'Reconciles once marked complete — nothing to invoice here' : isOn ? 'Will be added to this invoice' : 'Add to this invoice'}
             />
             <button type="button" className="selv2-chev-btn" onClick={() => toggleExpand(a.id)}>
               {chevron(isOpen)}
             </button>
             <span className="selv2-group-icon"><AllowanceIcon /></span>
             <span className="selv2-group-name">{a.name}</span>
-            <ScenarioTooltip note={`Allowance previously invoiced $${fmt(a.billedUpfront)}. ${a.scenarioNote}`} />
+            {isSettled && <span className="selv2-settled-badge">Settled · on budget</span>}
+            <ScenarioTooltip note={
+              isSettled
+                ? `Allowance previously invoiced $${fmt(a.billedUpfront)}. The selections reconciled exactly on budget, so there's nothing to invoice. This is shown here only as an example — in the live product it won't appear in the wizard; it reconciles automatically once the allowance is marked complete.`
+                : `Allowance previously invoiced $${fmt(a.billedUpfront)}. ${a.scenarioNote}`
+            } />
           </div>
           <div className="selv2-group-meta">
-            {/* Re-invoiced (deposit already spent): no credit left to net
-                against, so the "previously invoiced allowance" metric is
-                omitted — the new selection just bills at full price. */}
-            {!ri && (
+            {hasCredit ? (
+              <>
+                <div className="selv2-meta-item">
+                  <div className="selv2-meta-label">Previously invoiced allowance</div>
+                  <div className="selv2-meta-value">${fmt(a.billedUpfront)}</div>
+                </div>
+                <div className="selv2-meta-item">
+                  <div className="selv2-meta-label">Selection amount</div>
+                  <div className="selv2-meta-value">${fmt(sel)}</div>
+                </div>
+                <div className="selv2-meta-item">
+                  <div className="selv2-meta-label">Invoice amount</div>
+                  <div className="selv2-meta-value selv2-meta-value-total">
+                    {fmtCurrency(v)}
+                  </div>
+                </div>
+              </>
+            ) : (
               <div className="selv2-meta-item">
-                <div className="selv2-meta-label">Previously invoiced allowance</div>
-                <div className="selv2-meta-value">${fmt(a.billedUpfront)}</div>
+                <div className="selv2-meta-label">Invoice amount</div>
+                <div className="selv2-meta-value selv2-meta-value-total">
+                  {fmtCurrency(v)}
+                </div>
               </div>
             )}
-            <div className="selv2-meta-item">
-              <div className="selv2-meta-label">Selection amount</div>
-              <div className="selv2-meta-value">${fmt(sel)}</div>
-            </div>
-            <div className="selv2-meta-item">
-              <div className="selv2-meta-label">Invoice amount</div>
-              <div className="selv2-meta-value selv2-meta-value-total">
-                {fmtCurrency(v)}
-              </div>
-            </div>
           </div>
         </div>
 
@@ -473,10 +427,6 @@ export default function SelectionsModalV5({ open, onClose, onAdd, addedChildIds 
           </div>
 
           <div className="selv2-controls">
-            <label className="selv2-inline-check selv2-controls-primary" onClick={toggleAll}>
-              <div className={"est-check" + (globalState === 'all' ? ' on' : globalState === 'partial' ? ' partial' : '')} />
-              <span className="selv2-controls-label">Select all</span>
-            </label>
             <label className="selv2-inline-check selv2-controls-opt" onClick={() => setIncludeDescs(v => !v)}>
               <div className={"est-check" + (includeDescs ? ' on' : '')} />
               Include descriptions
@@ -493,63 +443,19 @@ export default function SelectionsModalV5({ open, onClose, onAdd, addedChildIds 
           </div>
 
           <div className="selv2-sections">
-            {(data.length > 0) && (
+            {data.length > 0 && (
               <>
-                <div className="selv2-section-label">Allowances</div>
+                <div className="selv2-section-label">Allowances with selections</div>
+                <label className="selv2-inline-check selv2-section-selectall" onClick={toggleCards}>
+                  <div className={"est-check" + (cardsSelState === 'all' ? ' on' : cardsSelState === 'partial' ? ' partial' : '')} />
+                  <span className="selv2-controls-label">Select all</span>
+                </label>
                 {data.map(renderAllowance)}
-                <RoundTwoCard />
-              </>
-            )}
-            {standaloneAllowances.length > 0 && (
-              <>
-                <div className="selv2-section-label" style={{ marginTop: data.length > 0 ? 12 : 0 }}>Allowances — no selections yet</div>
-                <div className="selv2-children" style={{ background: 'white', border: '1px solid var(--g200)', borderRadius: 8, overflow: 'hidden' }}>
-                  <table className="selv2-table">
-                    <colgroup>
-                      <col style={{ width: 40 }} />
-                      <col />
-                      <col style={{ width: 150 }} />
-                      <col style={{ width: 110 }} />
-                      <col style={{ width: 130 }} />
-                    </colgroup>
-                    <thead>
-                      <tr>
-                        <th></th>
-                        <th>Line item</th>
-                        <th>Cost code</th>
-                        <th>Cost type</th>
-                        <th style={{ textAlign: 'right' }}>Amount</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {standaloneAllowances.map(a => {
-                        const isOn = !!checked[a.id];
-                        return (
-                          <tr key={a.id}>
-                            <td>
-                              <div className={"est-check" + (isOn ? ' on' : '')} onClick={() => toggleStandalone(a.id)} />
-                            </td>
-                            <td>
-                              <div className="selv2-cell-name">
-                                <span className="selv2-row-icon"><AllowanceIcon /></span>
-                                <span>{a.name}</span>
-                                {a.scenarioNote && <ScenarioTooltip note={a.scenarioNote} />}
-                              </div>
-                            </td>
-                            <td className="selv2-cell-mono">{a.costCode}</td>
-                            <td className="selv2-cell-type">{a.costType}</td>
-                            <td style={{ textAlign: 'right', fontWeight: 500 }}>${fmt(a.amount)}</td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
               </>
             )}
             {standalone.length > 0 && (
               <>
-                <div className="selv2-section-label" style={{ marginTop: (data.length > 0 || standaloneAllowances.length > 0) ? 12 : 0 }}>Selections</div>
+                <div className="selv2-section-label" style={{ marginTop: data.length > 0 ? 24 : 0 }}>Selections</div>
                 <div className="selv2-children" style={{ background: 'white', border: '1px solid var(--g200)', borderRadius: 8, overflow: 'hidden' }}>
                   <table className="selv2-table">
                     <colgroup>
@@ -561,7 +467,7 @@ export default function SelectionsModalV5({ open, onClose, onAdd, addedChildIds 
                     </colgroup>
                     <thead>
                       <tr>
-                        <th></th>
+                        <th><div className={"est-check" + (selSelState === 'all' ? ' on' : selSelState === 'partial' ? ' partial' : '')} onClick={toggleSel} style={{ cursor: 'pointer' }} title="Select all selections" /></th>
                         <th>Line item</th>
                         <th>Cost code</th>
                         <th>Cost type</th>
@@ -593,7 +499,7 @@ export default function SelectionsModalV5({ open, onClose, onAdd, addedChildIds 
                 </div>
               </>
             )}
-            {data.length === 0 && standaloneAllowances.length === 0 && standalone.length === 0 && (
+            {data.length === 0 && standalone.length === 0 && (
               <div className="selv2-empty">No selections to add.</div>
             )}
           </div>
