@@ -1,6 +1,11 @@
 import { useMemo, useState } from 'react';
 import { INVOICE_SELECTION_SCENARIOS, INVOICE_STANDALONE_SELECTIONS } from '../selectionsData';
 import { BTRelatedItemTag, RelatedItemType } from '../bds';
+import { EXISTING_INVOICES } from '../mockData';
+
+export type InvoiceWizardTarget =
+  | { type: 'new'; invoiceType: 'invoice' | 'progress' }
+  | { type: 'existing'; invoiceNumber: string };
 
 type RowStatus = 'Pending' | 'Approved' | 'Declined' | 'Draft';
 type ViewMode = 'allowance' | 'location' | 'vendor';
@@ -359,7 +364,7 @@ interface SelectionsPageProps {
   onOpenInvoice?: () => void;
   onOpenReallocation?: () => void;
   onInvoiceSelected?: (ids: string[], target: 'new' | 'existing') => void;
-  onOpenInvoiceWizard?: (preselectIds?: string[]) => void;
+  onOpenInvoiceWizard?: (preselectIds?: string[], target?: InvoiceWizardTarget) => void;
 }
 
 export default function SelectionsPage({
@@ -376,6 +381,7 @@ export default function SelectionsPage({
 }: SelectionsPageProps) {
   const [moreActionsOpen, setMoreActionsOpen] = useState(false);
   const [optionMenuOpen, setOptionMenuOpen] = useState(false);
+  const [invoiceMenuOpen, setInvoiceMenuOpen] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>('allowance');
   const [viewLayout, setViewLayout] = useState<ViewLayout>('list');
   const [audience, setAudience] = useState<AudienceView>('builder');
@@ -766,10 +772,46 @@ export default function SelectionsPage({
                 Client view
               </button>
             </div>
-            <button className="btn btn-s" style={{ gap: 4 }} onClick={() => onOpenInvoiceWizard?.()}>
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 2V12M2 7H12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
-              Invoice
-            </button>
+            <div style={{ position: 'relative' }}>
+              <button className="btn btn-s" style={{ gap: 4 }} onClick={() => setInvoiceMenuOpen(o => !o)} aria-expanded={invoiceMenuOpen}>
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 2V12M2 7H12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                Invoice
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{ marginLeft: 2 }}><path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              </button>
+              {invoiceMenuOpen && (
+                <>
+                  <div className="sp-menu-backdrop" onClick={() => setInvoiceMenuOpen(false)} />
+                  <div className="sp-mass-action-dropdown" style={{ bottom: 'auto', top: 'calc(100% + 6px)', right: 0, left: 'auto', minWidth: 260 }}>
+                    <div className="sp-menu-group-label">Create new</div>
+                    <button type="button" className="sp-mass-action-dropdown-item" onClick={() => { setInvoiceMenuOpen(false); onOpenInvoiceWizard?.(undefined, { type: 'new', invoiceType: 'invoice' }); }}>Invoice</button>
+                    <button type="button" className="sp-mass-action-dropdown-item" onClick={() => { setInvoiceMenuOpen(false); onOpenInvoiceWizard?.(undefined, { type: 'new', invoiceType: 'progress' }); }}>Progress invoice</button>
+                    {EXISTING_INVOICES.length > 0 && (
+                      <>
+                        <div className="sp-menu-divider" />
+                        <div className="sp-menu-group-label">Add to existing</div>
+                        {EXISTING_INVOICES.map(inv => {
+                          const total = inv.lineItems.reduce((s, li) => s + li.unitCost * li.quantity * (1 + li.markup / 100), 0);
+                          return (
+                            <button
+                              key={inv.invoiceNumber}
+                              type="button"
+                              className="sp-mass-action-dropdown-item"
+                              style={{ display: 'block', textAlign: 'left' }}
+                              onClick={() => { setInvoiceMenuOpen(false); onOpenInvoiceWizard?.(undefined, { type: 'existing', invoiceNumber: inv.invoiceNumber }); }}
+                            >
+                              <div>#{inv.invoiceNumber} — {inv.title}</div>
+                              <div style={{ fontSize: 11, color: 'var(--g500)', marginTop: 2 }}>
+                                {inv.type === 'progress' ? 'Progress invoice' : 'Invoice'} · {inv.status} · {fmt(total)}
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
             <div className="od-split-btn" style={{ position: 'relative' }}>
               <button className="od-split-main" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }} onClick={() => onOpenOption?.()}>
                 <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 2V12M2 7H12" stroke="white" strokeWidth="1.5" strokeLinecap="round"/></svg>

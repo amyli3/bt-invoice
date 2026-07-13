@@ -62,6 +62,10 @@ const ESTIMATE_DATA: EstimateItem[] = [
     ]
   },
   { id: 'g6', type: 'allowance', name: '1/2 Bathroom', costCode: '07.00 - Bathroom', costType: 'Subcontractor', clientPrice: 500, previouslyInvoicedPct: 100, children: [] },
+  { id: 'g4', type: 'allowance', name: 'Countertops', costCode: '12.30 - Countertops', costType: 'Materials', clientPrice: 8000, previouslyInvoicedPct: 0, children: [] },
+  { id: 'g5', type: 'allowance', name: 'Landscaping', costCode: '02.90 - Landscaping', costType: 'Subcontractor', clientPrice: 6000, previouslyInvoicedPct: 25, children: [] },
+  { id: 'g7', type: 'allowance', name: 'Appliances', costCode: '11.30 - Appliances', costType: 'Materials', clientPrice: 9000, previouslyInvoicedPct: 50, children: [] },
+  { id: 'g8', type: 'allowance', name: 'Front door', costCode: '08.10 - Doors', costType: 'Materials', clientPrice: 3500, previouslyInvoicedPct: 0, children: [] },
 ];
 
 /* ─── Progress Bar ─── */
@@ -91,7 +95,9 @@ interface Props {
 }
 
 export default function EstimateModal({ open, onClose, onAdd, jobName }: Props) {
-  // Filter out allowances that have selections (children) — those belong in the selections workflow
+  // Allowances that have selections are reconciled in the Selections & Allowances
+  // wizard, not invoiced here — so exclude them from the estimate modal. Only
+  // estimate line items and allowances without selections show here.
   const filteredData = ESTIMATE_DATA.filter(d => {
     if (d.type === 'allowance' && 'children' in d && d.children && d.children.length > 0) return false;
     return true;
@@ -311,8 +317,7 @@ export default function EstimateModal({ open, onClose, onAdd, jobName }: Props) 
 
               {/* Grouped sections */}
               {renderSection('Estimate line items', lines)}
-              {renderSection('Allowances', allowances.filter(a => a.type === 'allowance' && !(a as EstimateGroup).children?.length))}
-              {renderSection('Allowances with selections', allowances.filter(a => a.type === 'allowance' && (a as EstimateGroup).children?.length > 0))}
+              {renderSection('Allowances', allowances)}
             </div>
           </div>
         </div>

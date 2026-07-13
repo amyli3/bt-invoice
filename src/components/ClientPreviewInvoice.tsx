@@ -80,10 +80,11 @@ export default function ClientPreviewInvoice() {
   const [cols, setCols] = useState<ColKey[]>(['items', 'tax', 'unitCost', 'quantity', 'clientPrice', 'markup']);
   const [qrCode, setQrCode] = useState(false);
   const [customFields, setCustomFields] = useState(true);
-  const [description, setDescription] = useState(true);
-  // Position of the invoice description. Default is bottom (below the totals),
-  // which restores the pre-update layout; builders opt in to the top placement.
-  const [descriptionAtTop, setDescriptionAtTop] = useState(false);
+  // Two free-text messages the builder can place on the invoice: an intro
+  // (invoice context, renders above the line items) and a closing (payment
+  // notes, renders below the totals — restoring the pre-update bottom layout).
+  const [introText, setIntroText] = useState(true);
+  const [closingText, setClosingText] = useState(true);
   const [billToId, setBillToId] = useState<string>('c1');
 
   const billTo = CONTACTS.find(c => c.id === billToId) || CONTACTS[0];
@@ -221,32 +222,13 @@ export default function ClientPreviewInvoice() {
                     <span>Custom fields</span>
                   </label>
                   <label className="cpi-check">
-                    <input type="checkbox" checked={description} onChange={e => setDescription(e.target.checked)} />
-                    <span>Description</span>
+                    <input type="checkbox" checked={introText} onChange={e => setIntroText(e.target.checked)} />
+                    <span>Introduction text</span>
                   </label>
-                  <div className={"cpi-subradio" + (description ? '' : ' is-disabled')}>
-                    <span className="cpi-subradio-lbl">Description position</span>
-                    <label className="cpi-radio">
-                      <input
-                        type="radio"
-                        name="cpi-desc-pos"
-                        checked={descriptionAtTop}
-                        disabled={!description}
-                        onChange={() => setDescriptionAtTop(true)}
-                      />
-                      <span>Top</span>
-                    </label>
-                    <label className="cpi-radio">
-                      <input
-                        type="radio"
-                        name="cpi-desc-pos"
-                        checked={!descriptionAtTop}
-                        disabled={!description}
-                        onChange={() => setDescriptionAtTop(false)}
-                      />
-                      <span>Bottom</span>
-                    </label>
-                  </div>
+                  <label className="cpi-check">
+                    <input type="checkbox" checked={closingText} onChange={e => setClosingText(e.target.checked)} />
+                    <span>Closing text</span>
+                  </label>
                 </div>
               </div>
 
@@ -300,14 +282,13 @@ export default function ClientPreviewInvoice() {
             <div><strong>Invoice:</strong> Draw 1</div>
           </div>
 
-          {description && descriptionAtTop && (
+          {introText && (
             <section className="cpi-section">
-              <h3 className="cpi-section-title">Description of invoice</h3>
+              <h3 className="cpi-section-title">Introduction text</h3>
               <div className="cpi-block-body">
                 Invoice for work completed on the second-floor master suite remodel through May 2026.
                 Covers framing, window and skylight installation, and carpet for the primary bedroom,
-                plus approved change orders CO-1 through CO-3. Payment is due within 30 days of the
-                invoice date. Please reference invoice Li-0111 with your payment.
+                plus approved change orders CO-1 through CO-3.
               </div>
             </section>
           )}
@@ -365,14 +346,13 @@ export default function ClientPreviewInvoice() {
             <div className="cpi-totals-line cpi-totals-heading"><span>Amount due</span><strong>${fmt(amountDue)}</strong></div>
           </div>
 
-          {description && !descriptionAtTop && (
+          {closingText && (
             <section className="cpi-section">
-              <h3 className="cpi-section-title">Description of invoice</h3>
+              <h3 className="cpi-section-title">Closing text</h3>
               <div className="cpi-block-body">
-                Invoice for work completed on the second-floor master suite remodel through May 2026.
-                Covers framing, window and skylight installation, and carpet for the primary bedroom,
-                plus approved change orders CO-1 through CO-3. Payment is due within 30 days of the
-                invoice date. Please reference invoice Li-0111 with your payment.
+                Payment is due within 30 days of the invoice date. Please reference invoice Li-0111
+                with your payment. We accept check, ACH transfer, or online payment through the link
+                above. Thank you for your business.
               </div>
             </section>
           )}

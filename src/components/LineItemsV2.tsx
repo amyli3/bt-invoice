@@ -5,7 +5,7 @@ import { fmt, parseTaxRate } from '../utils';
 import { costCodeLabel } from '../selectionsData';
 import { BdsBadge } from '../bds';
 
-function AddFromDropdown({ onOpenEstimate, onOpenSelections, onOpenSelections2b }: { onOpenEstimate?: () => void; onOpenSelections?: () => void; onOpenSelections2?: () => void; onOpenSelections2b?: () => void; onOpenSelections3?: () => void; onOpenAll?: () => void }) {
+function AddFromDropdown({ onOpenEstimate, onOpenSelections2b }: { onOpenEstimate?: () => void; onOpenSelections?: () => void; onOpenSelections2?: () => void; onOpenSelections2b?: () => void; onOpenSelections3?: () => void; onOpenAll?: () => void }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -32,13 +32,10 @@ function AddFromDropdown({ onOpenEstimate, onOpenSelections, onOpenSelections2b 
           <button className="add-from-option" onClick={() => { setOpen(false); onOpenEstimate?.(); }}>
             <span style={{ fontWeight: 500 }}>Estimate</span>
           </button>
-          <button className="add-from-option" onClick={() => { setOpen(false); onOpenSelections?.(); }}>
-            <span style={{ fontWeight: 500 }}>Selections</span>
-          </button>
-          {/* Release 1 = Estimate + Selections. Exploration forks below kept in
-              code but hidden from the dropdown; re-enable any if needed. */}
+          {/* "Selections" opens the V5 Selections & Allowances wizard. The older
+              plain-selections wizard (onOpenSelections) is hidden. */}
           <button className="add-from-option" onClick={() => { setOpen(false); onOpenSelections2b?.(); }}>
-            <span style={{ fontWeight: 500 }}>Selections &amp; Allowances</span>
+            <span style={{ fontWeight: 500 }}>Selections</span>
           </button>
           {/*
           <button className="add-from-option" onClick={() => { setOpen(false); onOpenSelections2?.(); }}>

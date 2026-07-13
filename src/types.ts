@@ -44,6 +44,8 @@ export interface Invoice {
   dueDate: string;
   paymentTerms: string;
   status: string;
+  /** Regular invoice vs. a progress-billing draw. Defaults to 'invoice' when unset. */
+  type?: 'invoice' | 'progress';
   taxType: string;
   mode: 'lineItems' | 'flatFee';
   from: Address;

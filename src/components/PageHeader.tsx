@@ -19,10 +19,13 @@ export default function PageHeader({ invoice, jobOpen, onToggleJob }: Props) {
           )}
           <div>
             <div className="pg-hdr-sub">{invoice.to.name}</div>
-            <div className="pg-title">Invoice</div>
+            <div className="pg-title">{invoice.type === 'progress' ? 'Progress invoice' : 'Invoice'}</div>
           </div>
         </div>
         <div className="pg-hdr-right">
+          {invoice.invoiceNumber && invoice.status !== 'Unreleased' && (
+            <span style={{ fontSize: 13, color: 'var(--g500)' }}>#{invoice.invoiceNumber}</span>
+          )}
           <span className="status status-unreleased">{invoice.status}</span>
         </div>
       </div>

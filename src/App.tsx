@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Invoice, ColumnVisibility, ClientColumnVisibility } from './types';
-import { defaultInvoice } from './mockData';
+import { defaultInvoice, EXISTING_INVOICES } from './mockData';
 import TopNav from './components/TopNav';
 import JobSidebar from './components/JobSidebar';
 import PageHeader from './components/PageHeader';
@@ -24,8 +24,9 @@ import JobDetailsClients from './components/JobDetailsClients';
 import SelectionsPage from './components/SelectionsPage';
 import OptionDetailPage from './components/OptionDetailPage';
 import AIAPayApp, { type OverageInfo } from './components/AIAPayApp';
+import AIAPayApp2 from './components/AIAPayApp2';
 import { INVOICE_SELECTION_SCENARIOS, INVOICE_STANDALONE_SELECTIONS } from './selectionsData';
-import ChangeOrderPage from './components/ChangeOrderPage';
+import ChangeOrderPage, { type COInvoiceTarget } from './components/ChangeOrderPage';
 import ChangeOrderListPage from './components/ChangeOrderListPage';
 import EstimatePage from './components/EstimatePage';
 import ClientSelections from './components/ClientSelections';
@@ -33,15 +34,14 @@ import ClientSelections2 from './components/ClientSelections2';
 import ClientSelections3 from './components/ClientSelections3';
 import ClientPortal, { ClientTopNav } from './components/ClientPortal';
 import ClientPreviewInvoice from './components/ClientPreviewInvoice';
-import MobileBudget from './components/MobileBudget';
 import JobCostingBudget from './components/JobCostingBudget';
 import UnderageFlows from './components/UnderageFlows';
 import { JOBS } from './mockData';
 import { getNextId } from './mockData';
 
-type PageType = 'invoice' | 'invoice-2' | 'invoice-3' | 'client-preview-invoice' | 'job-price-summary' | 'selections' | 'option-detail' | 'progress-invoice' | 'change-order' | 'change-order-list' | 'client-portal' | 'client-jps' | 'estimate' | 'client-selections' | 'client-selections-2' | 'client-selections-3' | 'mobile-budget' | 'job-costing-budget' | 'underage-flows' | 'job-details-clients';
+type PageType = 'invoice' | 'invoice-2' | 'invoice-3' | 'client-preview-invoice' | 'job-price-summary' | 'selections' | 'option-detail' | 'progress-invoice' | 'progress-invoice-2' | 'change-order' | 'change-order-list' | 'client-portal' | 'client-jps' | 'estimate' | 'client-selections' | 'client-selections-2' | 'client-selections-3' | 'job-costing-budget' | 'underage-flows' | 'job-details-clients';
 
-const validPages: PageType[] = ['invoice', 'invoice-2', 'invoice-3', 'client-preview-invoice', 'job-price-summary', 'selections', 'option-detail', 'progress-invoice', 'change-order', 'change-order-list', 'client-portal', 'client-jps', 'estimate', 'client-selections', 'client-selections-2', 'client-selections-3', 'mobile-budget', 'job-costing-budget', 'underage-flows', 'job-details-clients'];
+const validPages: PageType[] = ['invoice', 'invoice-2', 'invoice-3', 'client-preview-invoice', 'job-price-summary', 'selections', 'option-detail', 'progress-invoice', 'progress-invoice-2', 'change-order', 'change-order-list', 'client-portal', 'client-jps', 'estimate', 'client-selections', 'client-selections-2', 'client-selections-3', 'job-costing-budget', 'underage-flows', 'job-details-clients'];
 
 function getInitialPage(): PageType {
   // Support ?page=X query param (used when hash is occupied by Figma capture)
@@ -65,6 +65,13 @@ export default function App() {
   const [piGroupBy, setPiGroupBy] = useState<'estimate' | 'costcode'>('estimate');
   const [currentOverages, setCurrentOverages] = useState<OverageInfo[]>([]);
   const [selectedCOId, setSelectedCOId] = useState<string | null>(null);
+  // Progress Invoice 2 — a standalone copy of the progress invoice page/state
+  // so it can be edited without touching the original 'progress-invoice' page.
+  // (No change-order approval flow is wired up for the copy yet, so there's no
+  // approvedCOIds/overages state to track — those props aren't used here.)
+  const [addedCostIds2, setAddedCostIds2] = useState<string[]>(['cost-1', 'cost-2', 'cost-3', 'cost-6', 'cost-7', 'cost-8']);
+  const [addedCOIds2, setAddedCOIds2] = useState<string[]>([]);
+  const [piGroupBy2, setPiGroupBy2] = useState<'estimate' | 'costcode'>('estimate');
 
   const setActivePage = (page: PageType | string) => {
     // Handle change-order:id navigation
@@ -112,6 +119,9 @@ export default function App() {
   const [addAllModalOpen, setAddAllModalOpen] = useState(false);
   const [selectionsWizardOpen, setSelectionsWizardOpen] = useState(false);
   const [wizardPreselectIds, setWizardPreselectIds] = useState<string[]>([]);
+  // Which existing invoice the Selections wizard is adding to, if any (vs. a
+  // brand-new invoice). Drives the "Add to Invoice #X" framing in the wizard.
+  const [wizardTargetInvoice, setWizardTargetInvoice] = useState<{ invoiceNumber: string; title: string; type: 'invoice' | 'progress' } | null>(null);
   const [completedAllowanceIds, setCompletedAllowanceIds] = useState<Set<string>>(new Set());
   const toggleAllowanceComplete = (id: string) => {
     setCompletedAllowanceIds(prev => {
@@ -481,22 +491,38 @@ export default function App() {
             onBack={() => setActivePage(selectedCOId ? 'change-order-list' : 'progress-invoice')}
             overages={currentOverages}
             coId={selectedCOId}
-            onApprove={() => {
+            onApprove={(invoiceTarget?: COInvoiceTarget, coLineItems?: Invoice['lineItems'], coTitle?: string) => {
+              // Mark the CO approved either way — this is what makes it
+              // eligible for manual "Add change order" later if the builder
+              // didn't choose to auto-invoice it now.
+              let newIds: string[] = [];
               if (selectedCOId === 'co-3') {
                 // Budget reallocation CO
-                const newIds = ['co-3a', 'co-3b'].filter(id => !addedCOIds.includes(id));
-                if (newIds.length > 0) {
-                  setApprovedCOIds(prev => [...prev, ...newIds]);
-                  setAddedCOIds(prev => [...prev, ...newIds]);
-                }
+                newIds = ['co-3a', 'co-3b'].filter(id => !addedCOIds.includes(id));
               } else {
                 const coMap: Record<string, string> = { '4100': 'co-1', '6100': 'co-2' };
-                const newIds = currentOverages
+                newIds = currentOverages
                   .map(o => coMap[o.costCode])
                   .filter((id): id is string => !!id && !addedCOIds.includes(id));
-                if (newIds.length > 0) {
-                  setApprovedCOIds(prev => [...prev, ...newIds]);
-                  setAddedCOIds(prev => [...prev, ...newIds]);
+              }
+              if (newIds.length > 0) {
+                setApprovedCOIds(prev => [...prev, ...newIds]);
+              }
+
+              // "Invoice client upon approval" was checked — route the CO to
+              // wherever the builder chose.
+              if (invoiceTarget?.type === 'openbook') {
+                if (newIds.length > 0) setAddedCOIds(prev => [...prev, ...newIds]);
+              } else if (invoiceTarget?.type === 'new' && coLineItems && coLineItems.length > 0) {
+                setInvoice({ ...defaultInvoice, type: invoiceTarget.invoiceType, title: coTitle ?? '', lineItems: coLineItems });
+                setWizardTargetInvoice(null);
+                setActivePage('invoice-3');
+              } else if (invoiceTarget?.type === 'existing' && coLineItems && coLineItems.length > 0) {
+                const existing = EXISTING_INVOICES.find(inv => inv.invoiceNumber === invoiceTarget.invoiceNumber);
+                if (existing) {
+                  setInvoice({ ...existing, lineItems: [...existing.lineItems, ...coLineItems] });
+                  setWizardTargetInvoice({ invoiceNumber: existing.invoiceNumber, title: existing.title, type: existing.type ?? 'invoice' });
+                  setActivePage('invoice-3');
                 }
               }
             }}
@@ -523,6 +549,17 @@ export default function App() {
         <TopNav onNavigate={(page) => setActivePage(page as PageType)} />
         <div style={{flex: 1, overflowY: 'auto'}}>
           <AIAPayApp onNavigate={(page) => setActivePage(page as PageType)} approvedCOIds={approvedCOIds} addedCostIds={addedCostIds} onCostIdsChange={setAddedCostIds} addedCOIds={addedCOIds} onCOIdsChange={setAddedCOIds} groupBy={piGroupBy} onGroupByChange={setPiGroupBy} onOveragesChange={setCurrentOverages} />
+        </div>
+      </div>
+    );
+  }
+
+  if (activePage === 'progress-invoice-2') {
+    return (
+      <div style={{display: 'flex', flexDirection: 'column', height: '100vh'}}>
+        <TopNav onNavigate={(page) => setActivePage(page as PageType)} />
+        <div style={{flex: 1, overflowY: 'auto'}}>
+          <AIAPayApp2 onNavigate={(page) => setActivePage(page as PageType)} addedCostIds={addedCostIds2} onCostIdsChange={setAddedCostIds2} addedCOIds={addedCOIds2} onCOIdsChange={setAddedCOIds2} groupBy={piGroupBy2} onGroupByChange={setPiGroupBy2} />
         </div>
       </div>
     );
@@ -571,7 +608,21 @@ export default function App() {
               onToggleAllowanceComplete={toggleAllowanceComplete}
               onOpenInvoice={() => setActivePage('invoice')}
               onOpenReallocation={() => { setActivePage('invoice-2'); setSelModalOpen(true); }}
-              onOpenInvoiceWizard={(ids) => { setInvoice(defaultInvoice); setWizardPreselectIds(ids ?? []); setSelectionsWizardOpen(true); }}
+              onOpenInvoiceWizard={(ids, target) => {
+                if (target?.type === 'existing') {
+                  const existing = EXISTING_INVOICES.find(inv => inv.invoiceNumber === target.invoiceNumber);
+                  setInvoice(existing ?? defaultInvoice);
+                  setWizardTargetInvoice(existing ? { invoiceNumber: existing.invoiceNumber, title: existing.title, type: existing.type ?? 'invoice' } : null);
+                } else {
+                  setInvoice({ ...defaultInvoice, type: target?.invoiceType ?? 'invoice' });
+                  setWizardTargetInvoice(null);
+                }
+                setWizardPreselectIds(ids ?? []);
+                // Open the wizard as an overlay on the selections grid itself.
+                // Navigation to the invoice builder happens on "Add" (see the
+                // SelectionsModalV5 mount below), not up front.
+                setSelV5ModalOpen(true);
+              }}
               onInvoiceSelected={(ids, _target) => {
                 // Map selected row IDs from the grid to invoice line items.
                 // Allowance rows match by group.id; selection/standalone rows
@@ -623,12 +674,21 @@ export default function App() {
           data={selectionsModalData}
           initialCheckedIds={wizardPreselectIds}
         />
+        <SelectionsModalV5
+          open={selV5ModalOpen && activePage === 'selections'}
+          onClose={() => setSelV5ModalOpen(false)}
+          onAdd={(items, opts) => {
+            // Add the selected rows to the invoice, then take the builder to
+            // the invoice builder to see the result. The wizard calls onClose
+            // right after onAdd, so this only fires on "Add", not on Cancel.
+            handleAddFromSelections(items, opts);
+            setActivePage('invoice-3');
+          }}
+          addedChildIds={invoice.lineItems.flatMap(li => li.relatedItem?.childIds ?? [])}
+          targetInvoice={wizardTargetInvoice}
+        />
       </div>
     );
-  }
-
-  if (activePage === 'mobile-budget') {
-    return <MobileBudget onBack={() => setActivePage('invoice')} />;
   }
 
   if (activePage === 'underage-flows') {
@@ -810,6 +870,7 @@ export default function App() {
         onClose={() => setSelV5ModalOpen(false)}
         onAdd={handleAddFromSelections}
         addedChildIds={invoice.lineItems.flatMap(li => li.relatedItem?.childIds ?? [])}
+        targetInvoice={wizardTargetInvoice}
       />
       <SelectionsModalV2
         open={selV2on3ModalOpen && activePage === 'invoice-3'}

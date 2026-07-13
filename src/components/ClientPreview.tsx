@@ -29,13 +29,6 @@ function attributeReallocationsToTarget(lineItems: LineItem[]): LineItem[] {
   });
 }
 
-// Turn "Cabinets Allowance (previously invoiced)" into a client-facing credit
-// label ("Cabinets Allowance — credit applied") so a reversal reads as an
-// intentional offset rather than a bare negative amount.
-function creditLabel(rawName: string): string {
-  return rawName.replace(/\s*\(previously invoiced\)\s*/i, '').trim() + ' — credit applied';
-}
-
 // An "atom" is one indivisible amount at one cost code. A grouped allowance
 // line carries its breakdown in rolledUp (the reversal + each selection, each
 // with its own cost code), so a single line can span several codes. Both the
@@ -48,9 +41,11 @@ function toAtoms(item: LineItem): Atom[] {
     return item.rolledUp.map(m => {
       const isReversal = !!m.isAllowance && m.amount < 0;
       return {
-        // rolledUp amounts are already the client-facing figures (these lines
-        // carry markup 0), so no markup is re-applied here.
-        description: isReversal ? creditLabel(m.name) : m.name,
+        // Use the builder's own line label (e.g. "Cabinets Allowance (previously
+        // invoiced)") verbatim — the client preview is read-only, so the builder
+        // side is the single source of truth for titles. rolledUp amounts are
+        // already client-facing (markup 0), so no markup is re-applied.
+        description: m.name,
         costCode: m.costCode || item.costCode,
         costType: m.isAllowance ? 'Allowance' : item.costType,
         amount: m.amount,
@@ -220,8 +215,15 @@ export default function ClientPreview({ invoice, clientVis, groupBy = 'estimate'
   // own column there (the grouped views already encode the code in the label).
   if (groupBy === 'all') cols.push({ key: 'costCode', label: 'Cost code', align: 'left' });
   if (clientVis.costType) cols.push({ key: 'costType', label: 'Type', align: 'left' });
+  if (clientVis.markedAs) cols.push({ key: 'markedAs', label: 'Marked as', align: 'left' });
   if (clientVis.quantity) cols.push({ key: 'qty', label: 'Qty', align: 'center' });
   if (clientVis.unit) cols.push({ key: 'unit', label: 'Unit', align: 'center' });
+  // Open-book columns (cost + markup) — off by default; a builder can toggle them
+  // on for cost-plus jobs where the owner sees the full breakdown.
+  if (clientVis.unitCost) cols.push({ key: 'unitCost', label: 'Unit cost', align: 'right' });
+  if (clientVis.builderCost) cols.push({ key: 'builderCost', label: 'Builder cost', align: 'right' });
+  if (clientVis.markup) cols.push({ key: 'markup', label: 'Markup', align: 'center' });
+  if (clientVis.markupAmount) cols.push({ key: 'markupAmount', label: 'Markup amt', align: 'right' });
   if (clientVis.unitPrice) cols.push({ key: 'unitPrice', label: 'Price', align: 'right' });
   cols.push({ key: 'amount', label: 'Amount', align: 'right' });
   if (taxRate > 0) cols.push({ key: 'tax', label: 'Tax', align: 'right' });
@@ -234,8 +236,13 @@ export default function ClientPreview({ invoice, clientVis, groupBy = 'estimate'
       case 'desc': return <td key={c.key} style={{fontWeight: 500, color: 'var(--g800)', whiteSpace: 'normal', paddingLeft: indent ? 24 : undefined}}>{item.description || '—'}</td>;
       case 'costCode': return <td key={c.key} style={{color: 'var(--g500)', whiteSpace: 'nowrap'}}>{item.costCode || '—'}</td>;
       case 'costType': return <td key={c.key}><span style={{padding: '1px 6px', fontSize: 10, border: '1px solid var(--g200)', borderRadius: 3}}>{item.costType}</span></td>;
+      case 'markedAs': return <td key={c.key} style={{color: 'var(--g400)'}}>—</td>;
       case 'qty': return <td key={c.key} style={{textAlign: 'center'}}>{item.quantity}</td>;
       case 'unit': return <td key={c.key} style={{textAlign: 'center', color: 'var(--g400)'}}>{item.unit}</td>;
+      case 'unitCost': return <td key={c.key} style={{textAlign: 'right', color: 'var(--g600)'}}>${fmt(item.unitCost)}</td>;
+      case 'builderCost': return <td key={c.key} style={{textAlign: 'right', color: 'var(--g600)'}}>${fmt(item.unitCost * item.quantity)}</td>;
+      case 'markup': return <td key={c.key} style={{textAlign: 'center', color: 'var(--g600)'}}>{item.markup}%</td>;
+      case 'markupAmount': return <td key={c.key} style={{textAlign: 'right', color: 'var(--g600)'}}>${fmt(item.unitCost * item.quantity * item.markup / 100)}</td>;
       case 'unitPrice': return <td key={c.key} style={{textAlign: 'right'}}>${fmt(unitClient)}</td>;
       case 'amount': return <td key={c.key} className="amt">${fmt(cp)}</td>;
       case 'tax': return <td key={c.key} style={{textAlign: 'right', color: 'var(--g500)'}}>${fmt(itemTax)}</td>;

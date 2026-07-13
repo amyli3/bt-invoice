@@ -6577,6 +6577,8 @@ button.jps-term-label { cursor: pointer; }
 .selv2-draw-label { font-size: 12px; color: var(--g600); white-space: nowrap; }
 /* Per-section "Select all" placed under a section heading */
 .selv2-section-selectall { margin: 6px 0 10px; }
+/* Helper/explainer line under a section heading (e.g. Credits owed) */
+.selv2-section-help { font-size: 12px; color: var(--g600); line-height: 1.5; margin: 2px 0 10px; max-width: 640px; }
 .selv2-group-meta { display: flex; align-items: center; gap: 24px; }
 .selv2-meta-item { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
 .selv2-meta-label { font-size: 11px; color: var(--g500); font-weight: 500; white-space: nowrap; }
@@ -6733,7 +6735,7 @@ button.jps-term-label { cursor: pointer; }
 }
 .sp-mass-action-dropdown {
   position: absolute; bottom: calc(100% + 8px); right: 0;
-  min-width: 220px;
+  min-width: 220px; z-index: 101;
   background: #fff; color: var(--bt-midnight);
   border-radius: 8px; box-shadow: 0 12px 28px rgba(0,0,0,0.18);
   padding: 6px 0;
@@ -6746,6 +6748,8 @@ button.jps-term-label { cursor: pointer; }
   color: var(--bt-midnight);
 }
 .sp-mass-action-dropdown-item:hover { background: var(--g50); }
+.sp-menu-group-label { padding: 8px 16px 3px; font-size: 11px; font-weight: 600; color: var(--g500); text-transform: uppercase; letter-spacing: 0.04em; }
+.sp-menu-divider { height: 1px; background: var(--g200); margin: 5px 0; }
 
 /* ══════════════ LINE ITEM STACKED INDICATOR ══════════════ */
 /* Mirrors the TimeClock stack pattern — multiple rows of the same cost code
@@ -6936,19 +6940,6 @@ button.jps-term-label { cursor: pointer; }
 .cpi-info { display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px; border-radius: 50%; border: 1px solid var(--g300); color: var(--g400); font-size: 9px; font-style: italic; font-weight: 700; cursor: help; }
 .cpi-check { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--g700); cursor: pointer; }
 .cpi-check input { width: 15px; height: 15px; accent-color: var(--bt-blue); cursor: pointer; }
-/* Sub-option nested under a parent checkbox (e.g. description position under Description) */
-.cpi-check-sub { margin-left: 24px; margin-top: -4px; font-size: 12px; color: var(--g600); }
-.cpi-check-sub.is-disabled { color: var(--g400); cursor: not-allowed; }
-.cpi-check-sub.is-disabled input { cursor: not-allowed; }
-
-/* Description-position radio group, nested under the Description checkbox */
-.cpi-subradio { margin-left: 24px; margin-top: 2px; display: flex; align-items: center; flex-wrap: wrap; gap: 6px 12px; }
-.cpi-subradio-lbl { font-size: 12px; color: var(--g600); margin-right: 2px; }
-.cpi-radio { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--g700); cursor: pointer; }
-.cpi-radio input { width: 14px; height: 14px; accent-color: var(--bt-blue); cursor: pointer; }
-.cpi-subradio.is-disabled { color: var(--g400); }
-.cpi-subradio.is-disabled .cpi-subradio-lbl, .cpi-subradio.is-disabled .cpi-radio { color: var(--g400); cursor: not-allowed; }
-.cpi-subradio.is-disabled .cpi-radio input { cursor: not-allowed; }
 
 /* Bill-to selector field */
 .cpi-field { display: flex; flex-direction: column; gap: 5px; padding: 12px; background: var(--g50); border: 1px solid var(--g200); border-radius: 8px; }

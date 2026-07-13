@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react';
+import { LineItem } from '../types';
+import { EXISTING_INVOICES } from '../mockData';
 
 const fmt = (n: number) =>
   n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -11,9 +13,18 @@ export interface OverageItem {
   overage: number;
 }
 
+// Where an approved change order should land when "Invoice client upon
+// approval" is checked. 'openbook' is the one progress invoice already
+// being built for this job (AIAPayApp/addedCOIds); 'existing' points at any
+// other in-progress progress invoice (EXISTING_INVOICES).
+export type COInvoiceTarget =
+  | { type: 'new'; invoiceType: 'invoice' | 'progress' }
+  | { type: 'existing'; invoiceNumber: string }
+  | { type: 'openbook' };
+
 interface Props {
   onBack: () => void;
-  onApprove?: () => void;
+  onApprove?: (invoiceTarget?: COInvoiceTarget, lineItems?: LineItem[], coTitle?: string) => void;
   overages?: OverageItem[];
   coId?: string | null;
 }
@@ -30,11 +41,16 @@ const CO3_LINE_ITEMS = [
   { id: '2', description: '2010 – Foundation (C)', costType: 'Materials', unitCost: -8500, quantity: 1, unit: 'LS', builderCost: -8500, markup: 0, clientPrice: -8500 },
 ];
 
+const progressInvoices = EXISTING_INVOICES.filter(inv => inv.type === 'progress');
+
 export default function ChangeOrderPage({ onBack, onApprove, overages, coId }: Props) {
   const [mode, setMode] = useState<'flatFee' | 'lineItems'>('lineItems');
   const [notesTab, setNotesTab] = useState<'internal' | 'subvendor' | 'client'>('internal');
   const [status, setStatus] = useState<'draft' | 'approved'>('draft');
   const [toast, setToast] = useState<string | null>(null);
+  const [invoiceUponApproval, setInvoiceUponApproval] = useState(false);
+  const [targetKind, setTargetKind] = useState<'new' | 'new-progress' | 'openbook' | 'existing'>('openbook');
+  const [existingInvoiceNumber, setExistingInvoiceNumber] = useState(progressInvoices[0]?.invoiceNumber ?? '');
 
   useEffect(() => {
     if (!toast) return;
@@ -44,8 +60,39 @@ export default function ChangeOrderPage({ onBack, onApprove, overages, coId }: P
 
   const handleApprove = () => {
     setStatus('approved');
-    setToast('Change order approved');
-    onApprove?.();
+
+    let invoiceTarget: COInvoiceTarget | undefined;
+    let toastMsg = 'Change order approved';
+    if (invoiceUponApproval) {
+      if (targetKind === 'new') {
+        invoiceTarget = { type: 'new', invoiceType: 'invoice' };
+        toastMsg = 'Change order approved — added to a new invoice';
+      } else if (targetKind === 'new-progress') {
+        invoiceTarget = { type: 'new', invoiceType: 'progress' };
+        toastMsg = 'Change order approved — added to a new progress invoice';
+      } else if (targetKind === 'openbook') {
+        invoiceTarget = { type: 'openbook' };
+        toastMsg = 'Change order approved — added to Progress Invoice - OpenBook';
+      } else if (targetKind === 'existing' && existingInvoiceNumber) {
+        invoiceTarget = { type: 'existing', invoiceNumber: existingInvoiceNumber };
+        const inv = progressInvoices.find(i => i.invoiceNumber === existingInvoiceNumber);
+        toastMsg = `Change order approved — added to #${existingInvoiceNumber}${inv ? ` — ${inv.title}` : ''}`;
+      }
+    }
+    setToast(toastMsg);
+
+    const coLineItems: LineItem[] = lineItems.map(item => ({
+      id: `co-${coId ?? '1'}-${item.id}`,
+      description: item.description,
+      costCode: item.description.match(/^\d{3,4}/)?.[0] ?? '',
+      costType: item.costType,
+      unitCost: item.unitCost,
+      quantity: item.quantity,
+      unit: item.unit,
+      markup: item.markup,
+    }));
+
+    onApprove?.(invoiceTarget, coLineItems, coTitle);
   };
 
   // Determine which CO to show
@@ -176,13 +223,59 @@ export default function ChangeOrderPage({ onBack, onApprove, overages, coId }: P
 
             <div style={{ fontSize: 13, fontWeight: 600, color: '#0f172a', marginBottom: 6 }}>Payment</div>
             <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#334155', cursor: 'pointer' }}>
-              <input type="checkbox" style={{ width: 16, height: 16, accentColor: '#0065db' }} />
+              <input
+                type="checkbox"
+                checked={invoiceUponApproval}
+                onChange={(e) => setInvoiceUponApproval(e.target.checked)}
+                style={{ width: 16, height: 16, accentColor: '#0065db' }}
+              />
               Invoice client upon approval
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ color: '#94a3b8' }}>
                 <circle cx="7" cy="7" r="5.5" stroke="currentColor" strokeWidth="1"/>
                 <path d="M7 5v2.5M7 9.5v.5" stroke="currentColor" strokeWidth="1" strokeLinecap="round"/>
               </svg>
             </label>
+
+            {invoiceUponApproval && (
+              <div style={{ marginTop: 10, marginLeft: 22, paddingLeft: 12, borderLeft: '2px solid #e2e8f0', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: '#334155' }}>Add to</div>
+
+                <label style={radioLbl}>
+                  <input type="radio" name="co-invoice-target" checked={targetKind === 'openbook'} onChange={() => setTargetKind('openbook')} style={radioInput} />
+                  Progress Invoice - OpenBook <span style={{ color: '#94a3b8' }}>(current draw)</span>
+                </label>
+
+                {progressInvoices.length > 0 && (
+                  <label style={radioLbl}>
+                    <input type="radio" name="co-invoice-target" checked={targetKind === 'existing'} onChange={() => setTargetKind('existing')} style={radioInput} />
+                    An existing progress invoice
+                  </label>
+                )}
+                {targetKind === 'existing' && progressInvoices.length > 0 && (
+                  <select
+                    value={existingInvoiceNumber}
+                    onChange={(e) => setExistingInvoiceNumber(e.target.value)}
+                    style={{ ...inp, width: 280, marginLeft: 22 }}
+                  >
+                    {progressInvoices.map(inv => (
+                      <option key={inv.invoiceNumber} value={inv.invoiceNumber}>
+                        #{inv.invoiceNumber} — {inv.title} ({inv.status})
+                      </option>
+                    ))}
+                  </select>
+                )}
+
+                <label style={radioLbl}>
+                  <input type="radio" name="co-invoice-target" checked={targetKind === 'new-progress'} onChange={() => setTargetKind('new-progress')} style={radioInput} />
+                  A new progress invoice
+                </label>
+
+                <label style={radioLbl}>
+                  <input type="radio" name="co-invoice-target" checked={targetKind === 'new'} onChange={() => setTargetKind('new')} style={radioInput} />
+                  A new invoice
+                </label>
+              </div>
+            )}
           </div>
 
           {/* Price Information */}
@@ -395,6 +488,8 @@ export default function ChangeOrderPage({ onBack, onApprove, overages, coId }: P
 }
 
 const lbl: React.CSSProperties = { display: 'block', fontSize: 12, fontWeight: 500, color: '#334155', marginBottom: 4 };
+const radioLbl: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#334155', cursor: 'pointer' };
+const radioInput: React.CSSProperties = { width: 14, height: 14, accentColor: '#0065db' };
 const inp: React.CSSProperties = { padding: '7px 10px', fontSize: 13, border: '1px solid #e2e8f0', borderRadius: 6, width: '100%', boxSizing: 'border-box', outline: 'none', color: '#0f172a', fontFamily: 'inherit' };
 const th: React.CSSProperties = { padding: '10px 12px', fontSize: 12, fontWeight: 500, color: '#64748b', textAlign: 'left', whiteSpace: 'nowrap' };
 const td: React.CSSProperties = { padding: '10px 12px', fontSize: 13, color: '#334155' };
