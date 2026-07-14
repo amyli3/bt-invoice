@@ -65,7 +65,7 @@ export const EXISTING_INVOICES: Invoice[] = [
   {
     ...defaultInvoice,
     invoiceNumber: '0042',
-    title: 'Draw 2 — May',
+    title: 'Progress invoice draw #1 - May 2026',
     status: 'Sent',
     type: 'progress',
     date: '2026-05-02',

@@ -41,7 +41,22 @@ const CO3_LINE_ITEMS = [
   { id: '2', description: '2010 – Foundation (C)', costType: 'Materials', unitCost: -8500, quantity: 1, unit: 'LS', builderCost: -8500, markup: 0, clientPrice: -8500 },
 ];
 
-const progressInvoices = EXISTING_INVOICES.filter(inv => inv.type === 'progress');
+// "Existing progress invoice" choices — the OpenBook draw already being
+// built plus any other progress invoice that hasn't gone out to the client
+// yet (once it's Sent, it's no longer a fit for tacking on a new CO).
+// OpenBook isn't a separate target; it's just the first entry in this list.
+const OPENBOOK_INVOICE_NUMBER = 'openbook';
+const progressInvoiceOptions = [
+  { invoiceNumber: OPENBOOK_INVOICE_NUMBER, title: 'Progress invoice 2', status: 'current draw' },
+  ...EXISTING_INVOICES.filter(inv => inv.type === 'progress' && inv.status !== 'Sent').map(inv => ({ invoiceNumber: inv.invoiceNumber, title: inv.title, status: inv.status })),
+];
+
+// Same idea, but for regular (non-progress) invoices that are still unsent.
+const existingInvoiceOptions = EXISTING_INVOICES
+  .filter(inv => inv.type !== 'progress' && inv.status !== 'Sent')
+  .map(inv => ({ invoiceNumber: inv.invoiceNumber, title: inv.title, status: inv.status }));
+
+const SHOW_EXISTING_INVOICE_OPTION = true;
 
 export default function ChangeOrderPage({ onBack, onApprove, overages, coId }: Props) {
   const [mode, setMode] = useState<'flatFee' | 'lineItems'>('lineItems');
@@ -49,8 +64,8 @@ export default function ChangeOrderPage({ onBack, onApprove, overages, coId }: P
   const [status, setStatus] = useState<'draft' | 'approved'>('draft');
   const [toast, setToast] = useState<string | null>(null);
   const [invoiceUponApproval, setInvoiceUponApproval] = useState(false);
-  const [targetKind, setTargetKind] = useState<'new' | 'new-progress' | 'openbook' | 'existing'>('openbook');
-  const [existingInvoiceNumber, setExistingInvoiceNumber] = useState(progressInvoices[0]?.invoiceNumber ?? '');
+  const [targetKind, setTargetKind] = useState<'new' | 'new-progress' | 'existing'>('existing');
+  const [existingInvoiceNumber, setExistingInvoiceNumber] = useState(OPENBOOK_INVOICE_NUMBER);
 
   useEffect(() => {
     if (!toast) return;
@@ -70,13 +85,15 @@ export default function ChangeOrderPage({ onBack, onApprove, overages, coId }: P
       } else if (targetKind === 'new-progress') {
         invoiceTarget = { type: 'new', invoiceType: 'progress' };
         toastMsg = 'Change order approved — added to a new progress invoice';
-      } else if (targetKind === 'openbook') {
-        invoiceTarget = { type: 'openbook' };
-        toastMsg = 'Change order approved — added to Progress Invoice - OpenBook';
       } else if (targetKind === 'existing' && existingInvoiceNumber) {
-        invoiceTarget = { type: 'existing', invoiceNumber: existingInvoiceNumber };
-        const inv = progressInvoices.find(i => i.invoiceNumber === existingInvoiceNumber);
-        toastMsg = `Change order approved — added to #${existingInvoiceNumber}${inv ? ` — ${inv.title}` : ''}`;
+        if (existingInvoiceNumber === OPENBOOK_INVOICE_NUMBER) {
+          invoiceTarget = { type: 'openbook' };
+          toastMsg = 'Change order approved — added to Progress invoice 2';
+        } else {
+          invoiceTarget = { type: 'existing', invoiceNumber: existingInvoiceNumber };
+          const inv = [...progressInvoiceOptions, ...existingInvoiceOptions].find(i => i.invoiceNumber === existingInvoiceNumber);
+          toastMsg = `Change order approved — added to #${existingInvoiceNumber}${inv ? ` — ${inv.title}` : ''}`;
+        }
       }
     }
     setToast(toastMsg);
@@ -240,29 +257,37 @@ export default function ChangeOrderPage({ onBack, onApprove, overages, coId }: P
               <div style={{ marginTop: 10, marginLeft: 22, paddingLeft: 12, borderLeft: '2px solid #e2e8f0', display: 'flex', flexDirection: 'column', gap: 8 }}>
                 <div style={{ fontSize: 12, fontWeight: 600, color: '#334155' }}>Add to</div>
 
-                <label style={radioLbl}>
-                  <input type="radio" name="co-invoice-target" checked={targetKind === 'openbook'} onChange={() => setTargetKind('openbook')} style={radioInput} />
-                  Progress Invoice - OpenBook <span style={{ color: '#94a3b8' }}>(current draw)</span>
-                </label>
-
-                {progressInvoices.length > 0 && (
-                  <label style={radioLbl}>
-                    <input type="radio" name="co-invoice-target" checked={targetKind === 'existing'} onChange={() => setTargetKind('existing')} style={radioInput} />
-                    An existing progress invoice
-                  </label>
-                )}
-                {targetKind === 'existing' && progressInvoices.length > 0 && (
-                  <select
-                    value={existingInvoiceNumber}
-                    onChange={(e) => setExistingInvoiceNumber(e.target.value)}
-                    style={{ ...inp, width: 280, marginLeft: 22 }}
-                  >
-                    {progressInvoices.map(inv => (
-                      <option key={inv.invoiceNumber} value={inv.invoiceNumber}>
-                        #{inv.invoiceNumber} — {inv.title} ({inv.status})
-                      </option>
-                    ))}
-                  </select>
+                {SHOW_EXISTING_INVOICE_OPTION && (
+                  <>
+                    <label style={radioLbl}>
+                      <input type="radio" name="co-invoice-target" checked={targetKind === 'existing'} onChange={() => setTargetKind('existing')} style={radioInput} />
+                      An existing invoice
+                    </label>
+                    {targetKind === 'existing' && (
+                      <select
+                        value={existingInvoiceNumber}
+                        onChange={(e) => setExistingInvoiceNumber(e.target.value)}
+                        style={{ ...targetSelect, width: 280 }}
+                      >
+                        <optgroup label="Progress invoice">
+                          {progressInvoiceOptions.map(inv => (
+                            <option key={inv.invoiceNumber} value={inv.invoiceNumber}>
+                              {inv.invoiceNumber === OPENBOOK_INVOICE_NUMBER ? inv.title : `#${inv.invoiceNumber} — ${inv.title} (${inv.status})`}
+                            </option>
+                          ))}
+                        </optgroup>
+                        {existingInvoiceOptions.length > 0 && (
+                          <optgroup label="Invoice">
+                            {existingInvoiceOptions.map(inv => (
+                              <option key={inv.invoiceNumber} value={inv.invoiceNumber}>
+                                #{inv.invoiceNumber} — {inv.title} ({inv.status})
+                              </option>
+                            ))}
+                          </optgroup>
+                        )}
+                      </select>
+                    )}
+                  </>
                 )}
 
                 <label style={radioLbl}>
@@ -491,5 +516,6 @@ const lbl: React.CSSProperties = { display: 'block', fontSize: 12, fontWeight: 5
 const radioLbl: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#334155', cursor: 'pointer' };
 const radioInput: React.CSSProperties = { width: 14, height: 14, accentColor: '#0065db' };
 const inp: React.CSSProperties = { padding: '7px 10px', fontSize: 13, border: '1px solid #e2e8f0', borderRadius: 6, width: '100%', boxSizing: 'border-box', outline: 'none', color: '#0f172a', fontFamily: 'inherit' };
+const targetSelect: React.CSSProperties = { ...inp, paddingRight: 28, marginLeft: 22 };
 const th: React.CSSProperties = { padding: '10px 12px', fontSize: 12, fontWeight: 500, color: '#64748b', textAlign: 'left', whiteSpace: 'nowrap' };
 const td: React.CSSProperties = { padding: '10px 12px', fontSize: 13, color: '#334155' };

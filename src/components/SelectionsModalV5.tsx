@@ -382,16 +382,14 @@ export default function SelectionsModalV5({ open, onClose, onAdd, addedChildIds 
                 <col />
                 <col />
                 <col style={{ width: 150 }} />
-                <col style={{ width: 110 }} />
                 <col style={{ width: 130 }} />
               </colgroup>
               <thead>
                 <tr>
                   <th></th>
-                  <th>Selection title</th>
                   <th>Selection line item</th>
+                  <th>Selection title</th>
                   <th>Cost code</th>
-                  <th>Cost type</th>
                   <th style={{ textAlign: 'right' }}>Amount</th>
                 </tr>
               </thead>
@@ -406,12 +404,11 @@ export default function SelectionsModalV5({ open, onClose, onAdd, addedChildIds 
                     <td>
                       <div className="selv2-cell-name">
                         <span className="selv2-row-icon"><SelectionIcon /></span>
-                        <span>{s.title}</span>
+                        <span>{s.name}</span>
                       </div>
                     </td>
-                    <td>{s.name}</td>
+                    <td>{s.title}</td>
                     <td className="selv2-cell-mono">{s.costCode}</td>
-                    <td className="selv2-cell-type">{s.costType}</td>
                     <td style={{ textAlign: 'right', fontWeight: 500 }}>${fmt(s.approvedPrice)}</td>
                   </tr>
                 ))}
@@ -429,11 +426,11 @@ export default function SelectionsModalV5({ open, onClose, onAdd, addedChildIds 
         <div className="est-modal-hdr">
           <div>
             <h2 className="selv2-title">
-              {targetInvoice ? `Add to Invoice #${targetInvoice.invoiceNumber}` : 'Add selections to invoice'}
+              {targetInvoice ? (targetInvoice.type === 'progress' ? 'Add to Progress Invoice' : 'Add to Invoice') : 'Add selections to invoice'}
             </h2>
             {targetInvoice && (
               <div style={{ fontSize: 12, color: 'var(--g500)', marginTop: 2 }}>
-                {targetInvoice.title} · {targetInvoice.type === 'progress' ? 'Progress invoice' : 'Invoice'}
+                {targetInvoice.title}
               </div>
             )}
           </div>
@@ -487,16 +484,16 @@ export default function SelectionsModalV5({ open, onClose, onAdd, addedChildIds 
                     <colgroup>
                       <col style={{ width: 40 }} />
                       <col />
+                      <col />
                       <col style={{ width: 150 }} />
-                      <col style={{ width: 110 }} />
                       <col style={{ width: 130 }} />
                     </colgroup>
                     <thead>
                       <tr>
                         <th><div className={"est-check" + (selSelState === 'all' ? ' on' : selSelState === 'partial' ? ' partial' : '')} onClick={toggleSel} style={{ cursor: 'pointer' }} title="Select all selections" /></th>
-                        <th>Line item</th>
+                        <th>Selection line item</th>
+                        <th>Selection title</th>
                         <th>Cost code</th>
-                        <th>Cost type</th>
                         <th style={{ textAlign: 'right' }}>Amount</th>
                       </tr>
                     </thead>
@@ -514,8 +511,8 @@ export default function SelectionsModalV5({ open, onClose, onAdd, addedChildIds 
                                 <span>{s.name}</span>
                               </div>
                             </td>
+                            <td>{s.title || <span style={{ color: 'var(--g400)' }}>—</span>}</td>
                             <td className="selv2-cell-mono">{s.costCode}</td>
-                            <td className="selv2-cell-type">{s.costType || 'Selection'}</td>
                             <td style={{ textAlign: 'right', fontWeight: 500 }}>${fmt(s.approvedPrice)}</td>
                           </tr>
                         );
@@ -539,7 +536,7 @@ export default function SelectionsModalV5({ open, onClose, onAdd, addedChildIds 
           <div className="selv2-footer-buttons">
             <button className="btn btn-s" onClick={onClose}>Cancel</button>
             <button className="btn btn-p" onClick={handleCreate} disabled={selectedCount === 0}>
-              {targetInvoice ? `Add to Invoice #${targetInvoice.invoiceNumber}` : 'Add line items'}
+              {targetInvoice ? (targetInvoice.type === 'progress' ? 'Add to Progress Invoice' : 'Add to Invoice') : 'Add line items'}
             </button>
           </div>
         </div>

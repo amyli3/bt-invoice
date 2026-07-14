@@ -44,6 +44,7 @@ select.fi {
 
 /* ── Buttons ── */
 .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 20px; font-size: 14px; font-weight: 600; font-family: inherit; border-radius: var(--radius); cursor: pointer; transition: all 0.15s; border: none; white-space: nowrap; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .btn-p { background: var(--bt-blue); color: white; }
 .btn-p:hover { background: var(--bt-blue-hover); }
 .btn-s { background: white; color: var(--g700); border: 1px solid var(--g200); }
@@ -2359,6 +2360,8 @@ button.jps-term-label { cursor: pointer; }
 }
 .sp-confirm-amount-label { font-size: 13px; color: var(--g700); font-weight: 500; }
 .sp-confirm-amount-value { font-size: 20px; font-weight: 700; color: var(--bt-blue); }
+.sp-confirm-amount-warning { background: #FEF2F2; }
+.sp-confirm-amount-warning .sp-confirm-amount-value { color: #B5254C; }
 .sp-confirm-options { display: flex; flex-direction: column; gap: 8px; }
 .sp-confirm-option {
   text-align: left; padding: 12px 14px; border-radius: 8px;
@@ -2482,7 +2485,8 @@ button.jps-term-label { cursor: pointer; }
   display: grid;
   grid-template-columns:
     40px
-    minmax(0, 2fr)
+    minmax(0, 1.7fr)
+    minmax(0, 1.3fr)
     minmax(0, 1fr)
     minmax(0, 1fr)
     minmax(0, 1fr)
@@ -2493,10 +2497,11 @@ button.jps-term-label { cursor: pointer; }
     minmax(0, 1.2fr)
     minmax(0, 0.9fr);
   align-items: center; border-bottom: 1px solid var(--g100);
-  min-width: 1300px;
+  min-width: 1440px;
   background: white;
 }
 .sp-col-remaining { text-align: right; color: var(--g700); }
+.sp-col-seltitle { color: var(--g600) !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* % invoiced — progress bar showing how much of the allowance has been billed */
 .sp-col-pct { display: flex; flex-direction: column; gap: 4px; }
@@ -2827,6 +2832,8 @@ button.jps-term-label { cursor: pointer; }
   background: var(--g50); padding: 12px 14px; border-radius: 8px;
   font-size: 13px; color: var(--g600); line-height: 1.5;
 }
+.sp-panel-note-warning { background: #FEF2F2; color: #8A1D3D; margin-top: 8px; }
+.sp-panel-note-warning strong { color: #B5254C; }
 
 /* Section header that sits inline (no caret toggle) */
 .sp-panel-section-title-row {
@@ -6578,7 +6585,7 @@ button.jps-term-label { cursor: pointer; }
 /* Per-section "Select all" placed under a section heading */
 .selv2-section-selectall { margin: 6px 0 10px; }
 /* Helper/explainer line under a section heading (e.g. Credits owed) */
-.selv2-section-help { font-size: 12px; color: var(--g600); line-height: 1.5; margin: 2px 0 10px; max-width: 640px; }
+.selv2-section-help { font-size: 12px; color: var(--g600); line-height: 1.5; margin: 2px 0 10px; }
 .selv2-group-meta { display: flex; align-items: center; gap: 24px; }
 .selv2-meta-item { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
 .selv2-meta-label { font-size: 11px; color: var(--g500); font-weight: 500; white-space: nowrap; }
@@ -6750,6 +6757,14 @@ button.jps-term-label { cursor: pointer; }
 .sp-mass-action-dropdown-item:hover { background: var(--g50); }
 .sp-menu-group-label { padding: 8px 16px 3px; font-size: 11px; font-weight: 600; color: var(--g500); text-transform: uppercase; letter-spacing: 0.04em; }
 .sp-menu-divider { height: 1px; background: var(--g200); margin: 5px 0; }
+
+/* Cascading "Add to" menu items — a row with a submenu opening to the side. */
+.sp-cascade-item {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 10px 16px; font-size: 14px; cursor: pointer; user-select: none;
+  color: var(--bt-midnight);
+}
+.sp-cascade-item:hover, .sp-cascade-item.active { background: var(--g50); }
 
 /* ══════════════ LINE ITEM STACKED INDICATOR ══════════════ */
 /* Mirrors the TimeClock stack pattern — multiple rows of the same cost code

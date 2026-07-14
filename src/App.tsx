@@ -623,43 +623,6 @@ export default function App() {
                 // SelectionsModalV5 mount below), not up front.
                 setSelV5ModalOpen(true);
               }}
-              onInvoiceSelected={(ids, _target) => {
-                // Map selected row IDs from the grid to invoice line items.
-                // Allowance rows match by group.id; selection/standalone rows
-                // match by child.id. Skip rows that aren't billable
-                // (already-invoiced selections, pre-invoiced allowance lines).
-                const idSet = new Set(ids);
-                const newItems = selectionsModalData.flatMap(group =>
-                  group.children
-                    .filter(child => {
-                      if (child.newInvoiceAmt === null) return false;
-                      if (child.selection === 'Allowance') return idSet.has(group.id);
-                      return idSet.has(child.id);
-                    })
-                    .map(child => {
-                      const isAllowanceLine = child.selection === 'Allowance';
-                      return {
-                        id: getNextId(),
-                        description: child.lineItem,
-                        costCode: child.costCode,
-                        costType: isAllowanceLine ? 'Allowance' : (child.costType || 'Selection'),
-                        unitCost: child.price,
-                        quantity: 1,
-                        unit: '--',
-                        markup: 0,
-                        relatedItem: {
-                          type: isAllowanceLine ? 'allowance' as const : 'selection' as const,
-                          name: isAllowanceLine ? group.name : child.selection,
-                          groupId: group.id,
-                        },
-                      };
-                    }),
-                );
-                if (newItems.length > 0) {
-                  setInvoice(inv => ({ ...inv, lineItems: [...inv.lineItems, ...newItems] }));
-                }
-                setActivePage('invoice-2');
-              }}
             />
           </div>
         </div>

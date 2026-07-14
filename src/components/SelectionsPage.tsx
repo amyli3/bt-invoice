@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { INVOICE_SELECTION_SCENARIOS, INVOICE_STANDALONE_SELECTIONS } from '../selectionsData';
 import { BTRelatedItemTag, RelatedItemType } from '../bds';
 import { EXISTING_INVOICES } from '../mockData';
@@ -6,6 +7,10 @@ import { EXISTING_INVOICES } from '../mockData';
 export type InvoiceWizardTarget =
   | { type: 'new'; invoiceType: 'invoice' | 'progress' }
   | { type: 'existing'; invoiceNumber: string };
+
+const CaretRight = () => (
+  <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M3.5 2L6.5 5L3.5 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
+);
 
 type RowStatus = 'Pending' | 'Approved' | 'Declined' | 'Draft';
 type ViewMode = 'allowance' | 'location' | 'vendor';
@@ -17,6 +22,7 @@ interface InvoiceRef { subject: string; }
 interface SelectionOption {
   id: string;
   title: string;
+  selTitle?: string;
   category?: string;
   location?: string;
   clientPrice: number;
@@ -63,6 +69,7 @@ const LOCATION_MAP: Record<string, string> = {
   'ma-1': 'Kitchen',
   'ma-2': 'Living areas',
   'ma-7': 'Master Bath',
+  'ma-14': 'Exterior',
   // Allowance children
   'ms-12': 'Master Bath',
   'ms-13': 'Master Bath',
@@ -76,6 +83,8 @@ const LOCATION_MAP: Record<string, string> = {
   'ms-16': 'Master Bath',
   'ms-17': 'Master Bath',
   'ms-18': 'Master Bath',
+  'ms-30': 'Exterior',
+  'ms-31': 'Exterior',
   // Standalones
   'ss-1': 'Front entry',
   'ss-2': 'Exterior',
@@ -93,6 +102,7 @@ const ALLOWANCE_DESCRIPTION: Record<string, string> = {
   'ma-9': 'Built-in refrigerator for the main kitchen.',
   'ma-7': 'Master bath vanity, tower cabinetry, and hardware.',
   'ma-10': 'Master bath floor and shower wall tile.',
+  'ma-14': 'Exterior sconces and landscape path lighting — the last allowance on this job.',
 };
 
 const ALLOWANCE_INTERNAL_NOTES: Record<string, string> = {
@@ -104,6 +114,7 @@ const ALLOWANCE_INTERNAL_NOTES: Record<string, string> = {
   'ma-9': 'Coordinate cabinet panel sizing with the millwork shop.',
   'ma-7': 'Handles bill under the new SKU after the mid-job substitution.',
   'ma-10': 'Confirm grout color with the client before mortar goes down.',
+  'ma-14': 'All other selections on this job are finalized — this is the last one to close out.',
 };
 
 // Sample due dates and pending overrides so the prototype shows the
@@ -118,6 +129,33 @@ const DUE_DATE_MAP: Record<string, string> = {
   'ss-1':  '2026-05-08', // Due soon (1 day)
 };
 
+// The parent selection each line item belongs to. The grid's first column
+// shows the chosen product (the line item); this is the selection/decision it
+// was picked for — e.g. line item "Kohler Farmhouse Sink" under selection
+// "Kitchen sink". Keyed by selection id. Real data comes from the selection
+// record; mocked here for the prototype.
+const SELECTION_TITLE_MAP: Record<string, string> = {
+  'ms-12': 'Master bath faucet',
+  'ms-13': 'Shower valve',
+  'ms-14': 'Kitchen pendants',
+  'ms-14c': 'Kitchen pendants',
+  'ms-19': 'Interior paint',
+  'ms-1':  'Kitchen sink',
+  'ms-2':  'Kitchen faucet',
+  'ms-4':  'Dishwasher',
+  'ms-5':  'Living room flooring',
+  'ms-6':  'Entryway flooring',
+  'ms-16': 'Master bath cabinets',
+  'ms-17': 'Cabinet installation',
+  'ms-18': 'Cabinet hardware',
+  'ms-25': 'Electrical panel',
+  'ms-26': 'Recessed lighting',
+  'ms-30': 'Exterior sconces',
+  'ms-31': 'Path lighting',
+  // Standalone selections (ss-*) source their title from the shared
+  // INVOICE_STANDALONE_SELECTIONS data instead of this map.
+};
+
 // Override status to Pending so the due-date logic has rows to surface.
 const PENDING_OVERRIDES = new Set(['ms-12', 'ms-13', 'ms-14', 'ss-1']);
 
@@ -129,6 +167,7 @@ const INVOICE_REF_SEED: Record<string, InvoiceRef> = {
   'ma-2':  { subject: '3' },       // Flooring Allowance placeholder
   'ms-16': { subject: '4' },       // Custom cabinetry
   'ms-17': { subject: 'Draft 1' }, // Cabinet install (still a draft)
+  'ma-14': { subject: '5' },       // Exterior Lighting Allowance deposit
 };
 
 function rollupInvoiceRef(refs: InvoiceRef[]): InvoiceRef | undefined {
@@ -151,6 +190,7 @@ const mockData: SelectionRow[] = [
   ...INVOICE_STANDALONE_SELECTIONS.map((ss): SelectionOption => ({
     id: ss.id,
     title: ss.name,
+    selTitle: ss.title,
     category: vendorFromCostCode(ss.costCode),
     location: LOCATION_MAP[ss.id] || '—',
     clientPrice: ss.approvedPrice,
@@ -167,6 +207,7 @@ const mockData: SelectionRow[] = [
       return {
         id: sel.id,
         title: sel.name,
+        selTitle: SELECTION_TITLE_MAP[sel.id],
         category: vendor,
         location: LOCATION_MAP[sel.id] || '—',
         clientPrice: sel.originalPrice,
@@ -363,7 +404,6 @@ interface SelectionsPageProps {
   onToggleAllowanceComplete?: (id: string) => void;
   onOpenInvoice?: () => void;
   onOpenReallocation?: () => void;
-  onInvoiceSelected?: (ids: string[], target: 'new' | 'existing') => void;
   onOpenInvoiceWizard?: (preselectIds?: string[], target?: InvoiceWizardTarget) => void;
 }
 
@@ -376,12 +416,19 @@ export default function SelectionsPage({
   onToggleAllowanceComplete,
   onOpenInvoice,
   onOpenReallocation,
-  onInvoiceSelected,
   onOpenInvoiceWizard,
 }: SelectionsPageProps) {
   const [moreActionsOpen, setMoreActionsOpen] = useState(false);
   const [optionMenuOpen, setOptionMenuOpen] = useState(false);
-  const [invoiceMenuOpen, setInvoiceMenuOpen] = useState(false);
+  const [addToOpen, setAddToOpen] = useState(false);
+  // Which top-level branch of the "Add to" menu is expanded to show New/Existing.
+  const [addToBranch, setAddToBranch] = useState<'invoice' | 'progress' | null>(null);
+  const closeAddToMenu = () => { setAddToOpen(false); setAddToBranch(null); };
+  // Set when "Existing" is picked under a branch — opens a modal listing that
+  // branch's existing invoices/progress invoices for the builder to choose from.
+  const [existingPickerType, setExistingPickerType] = useState<'invoice' | 'progress' | null>(null);
+  const [existingPickerSelection, setExistingPickerSelection] = useState('');
+  const openExistingPicker = (branch: 'invoice' | 'progress') => { setExistingPickerSelection(''); setExistingPickerType(branch); };
   const [viewMode, setViewMode] = useState<ViewMode>('allowance');
   const [viewLayout, setViewLayout] = useState<ViewLayout>('list');
   const [audience, setAudience] = useState<AudienceView>('builder');
@@ -401,10 +448,13 @@ export default function SelectionsPage({
   const requestComplete = (a: AllowanceGroup) => {
     const spent = a.options.reduce((s, o) => s + (o.approvedPrice || 0), 0);
     const remaining = a.clientPrice - spent;
+    const overInvoiced = a.invoicedAmount - spent;
     const isComplete = completedIds.has(a.id);
-    // Only prompt when marking complete (not reopening) AND there is unspent
-    // budget to hold. Overages and exact-budget allowances toggle silently.
-    if (!isComplete && remaining > 0) {
+    // Only prompt when marking complete (not reopening) AND either there's
+    // unspent budget to hold, or the client was already invoiced more than
+    // the approved selections came to (refund owed). Overages and
+    // exact-budget allowances toggle silently.
+    if (!isComplete && (remaining > 0 || overInvoiced > 0)) {
       setConfirmComplete(a);
     } else {
       toggleComplete(a.id);
@@ -527,6 +577,7 @@ export default function SelectionsPage({
               {rows.length} {rows.length === 1 ? 'item' : 'items'}
             </span>
           </div>
+          <div className="sp-col-seltitle"></div>
           <div className="sp-col-price">{fmt(groupBudget)}</div>
           <div className="sp-col-approved">{fmt(groupSpent)}</div>
           <div className={`sp-col-remaining sp-section-remaining${groupRemaining < 0 ? ' sp-section-remaining-over' : ''}`}>
@@ -573,6 +624,7 @@ export default function SelectionsPage({
               {row.name}
             </a>
           </div>
+          <div className="sp-col-seltitle"></div>
           <div className="sp-col-price">{fmt(row.clientPrice)}</div>
           <div className="sp-col-approved">{fmt(spent)}</div>
           <div className={`sp-col-remaining sp-remaining-amount${overBudget ? ' sp-remaining-over' : ''}`}>
@@ -606,6 +658,7 @@ export default function SelectionsPage({
                   <SelectionIcon />
                   <a href="#" className="sp-link" onClick={(e) => { e.preventDefault(); onOpenOption?.({ name: opt.title, category: '', price: opt.clientPrice, status: opt.status.toLowerCase() }); }}>{opt.title}</a>
                 </div>
+                <div className="sp-col-seltitle">{opt.selTitle || <span style={{ color: 'var(--g400)' }}>—</span>}</div>
                 <div className="sp-col-price">{fmt(opt.clientPrice)}</div>
                 <div className="sp-col-approved">{opt.approvedPrice !== null ? fmt(opt.approvedPrice) : ''}</div>
                 <div className="sp-col-remaining"></div>
@@ -708,6 +761,7 @@ export default function SelectionsPage({
         <SelectionIcon />
         <a href="#" className="sp-link" onClick={(e) => { e.preventDefault(); onOpenOption?.({ name: row.title, category: '', price: row.clientPrice, status: row.status.toLowerCase() }); }}>{row.title}</a>
       </div>
+      <div className="sp-col-seltitle">{row.selTitle || <span style={{ color: 'var(--g400)' }}>—</span>}</div>
       <div className="sp-col-price">{fmt(row.clientPrice)}</div>
       <div className="sp-col-approved">{row.approvedPrice !== null ? fmt(row.approvedPrice) : ''}</div>
       <div className="sp-col-remaining"></div>
@@ -736,6 +790,7 @@ export default function SelectionsPage({
   );
 
   return (
+    <>
     <div className="jps-page">
       <div className="pg-hdr">
         <div className="pg-accent"></div>
@@ -773,40 +828,48 @@ export default function SelectionsPage({
               </button>
             </div>
             <div style={{ position: 'relative' }}>
-              <button className="btn btn-s" style={{ gap: 4 }} onClick={() => setInvoiceMenuOpen(o => !o)} aria-expanded={invoiceMenuOpen}>
+              <button className="btn btn-s" style={{ gap: 4 }} onClick={() => setAddToOpen(o => !o)} aria-expanded={addToOpen}>
                 <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 2V12M2 7H12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
                 Invoice
                 <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{ marginLeft: 2 }}><path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
               </button>
-              {invoiceMenuOpen && (
+              {addToOpen && (
                 <>
-                  <div className="sp-menu-backdrop" onClick={() => setInvoiceMenuOpen(false)} />
-                  <div className="sp-mass-action-dropdown" style={{ bottom: 'auto', top: 'calc(100% + 6px)', right: 0, left: 'auto', minWidth: 260 }}>
-                    <div className="sp-menu-group-label">Create new</div>
-                    <button type="button" className="sp-mass-action-dropdown-item" onClick={() => { setInvoiceMenuOpen(false); onOpenInvoiceWizard?.(undefined, { type: 'new', invoiceType: 'invoice' }); }}>Invoice</button>
-                    <button type="button" className="sp-mass-action-dropdown-item" onClick={() => { setInvoiceMenuOpen(false); onOpenInvoiceWizard?.(undefined, { type: 'new', invoiceType: 'progress' }); }}>Progress invoice</button>
-                    {EXISTING_INVOICES.length > 0 && (
-                      <>
-                        <div className="sp-menu-divider" />
-                        <div className="sp-menu-group-label">Add to existing</div>
-                        {EXISTING_INVOICES.map(inv => {
-                          const total = inv.lineItems.reduce((s, li) => s + li.unitCost * li.quantity * (1 + li.markup / 100), 0);
-                          return (
-                            <button
-                              key={inv.invoiceNumber}
-                              type="button"
-                              className="sp-mass-action-dropdown-item"
-                              style={{ display: 'block', textAlign: 'left' }}
-                              onClick={() => { setInvoiceMenuOpen(false); onOpenInvoiceWizard?.(undefined, { type: 'existing', invoiceNumber: inv.invoiceNumber }); }}
-                            >
-                              <div>#{inv.invoiceNumber} — {inv.title}</div>
-                              <div style={{ fontSize: 11, color: 'var(--g500)', marginTop: 2 }}>
-                                {inv.type === 'progress' ? 'Progress invoice' : 'Invoice'} · {inv.status} · {fmt(total)}
-                              </div>
-                            </button>
-                          );
-                        })}
-                      </>
+                  <div className="sp-menu-backdrop" onClick={closeAddToMenu} />
+                  <div className="sp-mass-action-dropdown" style={{ bottom: 'auto', top: 'calc(100% + 6px)', right: 0, left: 'auto', minWidth: 170 }}>
+                    <div
+                      className={"sp-cascade-item" + (addToBranch === 'invoice' ? ' active' : '')}
+                      onMouseEnter={() => setAddToBranch('invoice')}
+                      onClick={() => setAddToBranch('invoice')}
+                    >
+                      <span>Invoice</span>
+                      <CaretRight />
+                    </div>
+                    <div
+                      className={"sp-cascade-item" + (addToBranch === 'progress' ? ' active' : '')}
+                      onMouseEnter={() => setAddToBranch('progress')}
+                      onClick={() => setAddToBranch('progress')}
+                    >
+                      <span>Progress invoice</span>
+                      <CaretRight />
+                    </div>
+                    {addToBranch && (
+                      <div className="sp-mass-action-dropdown" style={{ bottom: 'auto', top: addToBranch === 'invoice' ? -6 : 34, right: 'calc(100% + 4px)', left: 'auto', minWidth: 150 }}>
+                        <button
+                          type="button"
+                          className="sp-mass-action-dropdown-item"
+                          onClick={() => { const branch = addToBranch; closeAddToMenu(); onOpenInvoiceWizard?.(undefined, { type: 'new', invoiceType: branch }); }}
+                        >
+                          New
+                        </button>
+                        <button
+                          type="button"
+                          className="sp-mass-action-dropdown-item"
+                          onClick={() => { const branch = addToBranch; closeAddToMenu(); openExistingPicker(branch); }}
+                        >
+                          Existing
+                        </button>
+                      </div>
                     )}
                   </div>
                 </>
@@ -949,7 +1012,8 @@ export default function SelectionsPage({
               <div className="sp-col-check">
                 <div className={`sp-checkbox ${allChecked ? 'sp-checkbox-on' : ''}`} onClick={toggleAll} />
               </div>
-              <div className="sp-col-title">Title</div>
+              <div className="sp-col-title">Line item</div>
+              <div className="sp-col-seltitle">Selection title</div>
               <div className="sp-col-price">Budget</div>
               <div className="sp-col-approved">Spent</div>
               <div className="sp-col-remaining">Remaining</div>
@@ -986,6 +1050,7 @@ export default function SelectionsPage({
             <div className="sp-row sp-row-total">
               <div className="sp-col-check"></div>
               <div className="sp-col-title"><strong>Totals</strong></div>
+              <div className="sp-col-seltitle"></div>
               <div className="sp-col-price"><strong>{fmt(totalsClientPrice)}</strong></div>
               <div className="sp-col-approved"></div>
               <div className="sp-col-remaining"></div>
@@ -1034,6 +1099,11 @@ export default function SelectionsPage({
         const isComplete = completedIds.has(a.id);
         const overBudget = remaining < 0;
         const pct = a.clientPrice > 0 ? Math.min(100, Math.max(0, (spent / a.clientPrice) * 100)) : 0;
+        // Invoiced vs. remaining-to-invoice — distinct from the budget math
+        // above. A negative "remaining to invoice" means the client was
+        // already billed more than the finalized selections came to.
+        const remainingToInvoice = spent - a.invoicedAmount;
+        const isOverInvoiced = remainingToInvoice < 0;
         return (
           <div className="sp-panel-backdrop" onClick={(e) => { if (e.target === e.currentTarget) setOpenAllowance(null); }}>
             {/* BDS: replace with BdsPanel side variant */}
@@ -1086,6 +1156,28 @@ export default function SelectionsPage({
                       {ALLOWANCE_INTERNAL_NOTES[a.id] ?? 'No internal notes.'}
                     </div>
                   </div>
+                </section>
+
+                {/* Invoicing — what's been billed vs. what the finalized selections came to */}
+                <section className="sp-panel-section">
+                  <div className="sp-panel-section-title sp-panel-section-title-row">Invoiced vs. remaining to invoice</div>
+                  <div className="sp-panel-stat-row">
+                    <div className="sp-panel-stat">
+                      <div className="sp-panel-stat-label">Invoiced</div>
+                      <div className="sp-panel-stat-value">{fmt(a.invoicedAmount)}</div>
+                    </div>
+                    <div className="sp-panel-stat sp-panel-stat-right">
+                      <div className="sp-panel-stat-label">{isOverInvoiced ? 'Overinvoiced' : 'Remaining to invoice'}</div>
+                      <div className={`sp-panel-stat-value${isOverInvoiced ? ' sp-panel-row-value-over' : ''}`}>
+                        {fmt(Math.abs(remainingToInvoice))}
+                      </div>
+                    </div>
+                  </div>
+                  {isOverInvoiced && (
+                    <div className="sp-panel-note sp-panel-note-warning">
+                      Client was invoiced {fmt(a.invoicedAmount)} for this allowance, but approved selections only total {fmt(spent)}. A <strong>{fmt(Math.abs(remainingToInvoice))} refund</strong> is owed — marking this allowance complete will prompt you to issue it.
+                    </div>
+                  )}
                 </section>
 
                 {/* Price — collapsible budget breakdown */}
@@ -1179,8 +1271,47 @@ export default function SelectionsPage({
         const a = confirmComplete;
         const spent = a.options.reduce((s, o) => s + (o.approvedPrice || 0), 0);
         const remaining = a.clientPrice - spent;
+        const overInvoiced = a.invoicedAmount - spent;
         const close = () => setConfirmComplete(null);
         const finish = () => { toggleComplete(a.id); close(); };
+
+        // Client was already billed more than the finalized selections came
+        // to (e.g. a deposit-style allowance invoiced upfront) — surface a
+        // refund instead of the usual hold/reallocate choice.
+        if (overInvoiced > 0) {
+          return (
+            <div className="sp-confirm-backdrop" onClick={(e) => { if (e.target === e.currentTarget) close(); }}>
+              <div className="sp-confirm" role="dialog" aria-modal="true">
+                <div className="sp-confirm-header">
+                  <h3 className="sp-confirm-title">Mark {a.name} complete</h3>
+                  <p className="sp-confirm-sub">
+                    Client was invoiced {fmt(a.invoicedAmount)} for this allowance, but the approved selections only total {fmt(spent)}.
+                  </p>
+                </div>
+                <div className="sp-confirm-body">
+                  <div className="sp-confirm-amount sp-confirm-amount-warning">
+                    <span className="sp-confirm-amount-label">Client overinvoiced by</span>
+                    <span className="sp-confirm-amount-value">{fmt(overInvoiced)}</span>
+                  </div>
+                  <div className="sp-confirm-options">
+                    <button className="sp-confirm-option" onClick={() => { finish(); (onOpenReallocation ?? onOpenInvoice)?.(); }}>
+                      <div className="sp-confirm-option-title">Issue refund credit <span style={{color: 'var(--bt-blue)', fontWeight: 500, fontSize: 11, marginLeft: 6}}>RECOMMENDED</span></div>
+                      <div className="sp-confirm-option-desc">Open the invoice with a {fmt(overInvoiced)} credit applied so the client gets the difference back.</div>
+                    </button>
+                    <button className="sp-confirm-option" onClick={finish}>
+                      <div className="sp-confirm-option-title">Mark complete without a refund</div>
+                      <div className="sp-confirm-option-desc">Close out this allowance now and handle the overpayment separately.</div>
+                    </button>
+                  </div>
+                </div>
+                <div className="sp-confirm-footer">
+                  <button className="btn btn-s" onClick={close}>Cancel</button>
+                </div>
+              </div>
+            </div>
+          );
+        }
+
         return (
           <div className="sp-confirm-backdrop" onClick={(e) => { if (e.target === e.currentTarget) close(); }}>
             <div className="sp-confirm" role="dialog" aria-modal="true">
@@ -1261,22 +1392,11 @@ export default function SelectionsPage({
               </button>
               {moreActionsOpen && (
                 <div className="sp-mass-action-dropdown">
+                  <button type="button" className="sp-mass-action-dropdown-item">Approve</button>
                   <button type="button" className="sp-mass-action-dropdown-item">Decline</button>
-                  <button type="button" className="sp-mass-action-dropdown-item">Reset</button>
-                  <button
-                    type="button"
-                    className="sp-mass-action-dropdown-item"
-                    onClick={() => { setMoreActionsOpen(false); onInvoiceSelected?.(selectedIds, 'existing'); }}
-                  >
-                    Add to Existing Invoice
-                  </button>
-                  <button
-                    type="button"
-                    className="sp-mass-action-dropdown-item"
-                    onClick={() => { setMoreActionsOpen(false); onOpenInvoiceWizard?.(selectedIds); }}
-                  >
-                    New Invoice
-                  </button>
+                  <button type="button" className="sp-mass-action-dropdown-item">Recall</button>
+                  <button type="button" className="sp-mass-action-dropdown-item">Link Plans and Specs</button>
+                  <button type="button" className="sp-mass-action-dropdown-item">Save to catalog</button>
                 </div>
               )}
             </div>
@@ -1284,5 +1404,72 @@ export default function SelectionsPage({
         </div>
       )}
     </div>
+    {existingPickerType && createPortal(
+      <div className="modal-backdrop" onClick={e => { if (e.target === e.currentTarget) setExistingPickerType(null); }}>
+        <div className="est-modal" style={{ width: 460, maxWidth: '90vw', maxHeight: '70vh' }} onClick={e => e.stopPropagation()}>
+          <div className="est-modal-hdr">
+            <div>
+              <h2 className="selv2-title">
+                Add to existing {existingPickerType === 'progress' ? 'progress invoice' : 'invoice'}?
+              </h2>
+            </div>
+            <button className="est-modal-close" onClick={() => setExistingPickerType(null)}>&times;</button>
+          </div>
+          <div className="est-modal-body">
+            {(() => {
+              const matches = EXISTING_INVOICES.filter(inv => (inv.type ?? 'invoice') === existingPickerType);
+              const selected = matches.find(inv => inv.invoiceNumber === existingPickerSelection);
+              const total = selected ? selected.lineItems.reduce((s, li) => s + li.unitCost * li.quantity * (1 + li.markup / 100), 0) : 0;
+              return (
+                <>
+                  <label className="fl">Please select {existingPickerType === 'progress' ? 'a progress invoice' : 'an invoice'}:</label>
+                  {matches.length === 0 ? (
+                    <div style={{ color: 'var(--g500)', fontSize: 14 }}>
+                      No {existingPickerType === 'progress' ? 'progress invoices' : 'invoices'} yet.
+                    </div>
+                  ) : (
+                    <>
+                      <select
+                        className="fi"
+                        value={existingPickerSelection}
+                        onChange={e => setExistingPickerSelection(e.target.value)}
+                      >
+                        <option value="" disabled>Please select one</option>
+                        {matches.map(inv => (
+                          <option key={inv.invoiceNumber} value={inv.invoiceNumber}>
+                            {inv.invoiceNumber} — {inv.title}
+                          </option>
+                        ))}
+                      </select>
+                      {selected && (
+                        <div style={{ fontSize: 12, color: 'var(--g500)', marginTop: 8 }}>
+                          {selected.status} · {fmt(total)}
+                        </div>
+                      )}
+                    </>
+                  )}
+                </>
+              );
+            })()}
+          </div>
+          <div className="est-modal-footer">
+            <button className="btn btn-s" onClick={() => setExistingPickerType(null)}>Cancel</button>
+            <button
+              className="btn btn-p"
+              disabled={!existingPickerSelection}
+              onClick={() => {
+                const invoiceNumber = existingPickerSelection;
+                setExistingPickerType(null);
+                onOpenInvoiceWizard?.(undefined, { type: 'existing', invoiceNumber });
+              }}
+            >
+              Continue
+            </button>
+          </div>
+        </div>
+      </div>,
+      document.body,
+    )}
+    </>
   );
 }

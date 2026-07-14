@@ -131,6 +131,23 @@ export const INVOICE_SELECTION_SCENARIOS: InvoiceSelectionScenario[] = [
       { id: 'ms-26', name: 'Premium recessed lighting', costCode: '6020', costType: 'Material', originalPrice: 1500, approvedPrice: 1800, status: 'approved' },
     ],
   },
+  {
+    // Demo scenario for the "last allowance on the job" over-invoiced/refund
+    // prompt. Billed upfront as a deposit ($3,200); the finalized selections
+    // came in under that, so completing this allowance should surface a
+    // refund owed to the client rather than the usual hold/reallocate choice.
+    id: 'ma-14',
+    name: 'Exterior Lighting Allowance',
+    costCode: '8010 - Lighting',
+    budgetAmount: 3200,
+    previouslyInvoiced: 3200,
+    scenarioNote: 'Last allowance on the job — all other selections are finalized. Previously invoiced $3,200 upfront; selections finalized at $2,450, so the client was overinvoiced by $750. Marking this allowance complete should prompt a refund.',
+    scenarioNoteV3: 'Final allowance closing out the job\'s selections. The $3,200 deposit exceeds the $2,450 of approved selections — closing it out surfaces a $750 refund owed to the client instead of a hold/reallocate choice.',
+    selections: [
+      { id: 'ms-30', name: 'Exterior sconces', costCode: '8010', costType: 'Material', originalPrice: 1800, approvedPrice: 1450, status: 'approved' },
+      { id: 'ms-31', name: 'Landscape path lighting', costCode: '8010', costType: 'Material', originalPrice: 1200, approvedPrice: 1000, status: 'approved' },
+    ],
+  },
 ];
 
 /* ─────────────────────────────────────────────────────────────────────────
@@ -304,7 +321,8 @@ export const DEPOSIT_TRUEUP_ALLOWANCES: DepositTrueUpAllowance[] = [
 
 export type StandaloneSelection = {
   id: string;
-  name: string;
+  name: string;        // the chosen product — the invoice line item
+  title?: string;      // the parent selection/decision this was picked for
   costCode: string;
   costType: string;
   approvedPrice: number;
@@ -315,6 +333,7 @@ export const INVOICE_STANDALONE_SELECTIONS: StandaloneSelection[] = [
   {
     id: 'ss-1',
     name: 'Front door hardware',
+    title: 'Front entry hardware',
     costCode: '8020 - Hardware',
     costType: 'Material',
     approvedPrice: 850,
@@ -323,6 +342,7 @@ export const INVOICE_STANDALONE_SELECTIONS: StandaloneSelection[] = [
   {
     id: 'ss-2',
     name: 'Custom mailbox',
+    title: 'Mailbox',
     costCode: '2050 - Sitework',
     costType: 'Material',
     approvedPrice: 320,
