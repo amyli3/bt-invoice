@@ -649,6 +649,7 @@ export default function App() {
           }}
           addedChildIds={invoice.lineItems.flatMap(li => li.relatedItem?.childIds ?? [])}
           targetInvoice={wizardTargetInvoice}
+          newInvoiceType={invoice.type ?? 'invoice'}
         />
       </div>
     );
@@ -834,6 +835,7 @@ export default function App() {
         onAdd={handleAddFromSelections}
         addedChildIds={invoice.lineItems.flatMap(li => li.relatedItem?.childIds ?? [])}
         targetInvoice={wizardTargetInvoice}
+        newInvoiceType={invoice.type ?? 'invoice'}
       />
       <SelectionsModalV2
         open={selV2on3ModalOpen && activePage === 'invoice-3'}

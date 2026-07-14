@@ -8,10 +8,6 @@ export type InvoiceWizardTarget =
   | { type: 'new'; invoiceType: 'invoice' | 'progress' }
   | { type: 'existing'; invoiceNumber: string };
 
-const CaretRight = () => (
-  <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M3.5 2L6.5 5L3.5 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
-);
-
 type RowStatus = 'Pending' | 'Approved' | 'Declined' | 'Draft';
 type ViewMode = 'allowance' | 'location' | 'vendor';
 type ViewLayout = 'list' | 'grid';
@@ -22,7 +18,6 @@ interface InvoiceRef { subject: string; }
 interface SelectionOption {
   id: string;
   title: string;
-  selTitle?: string;
   category?: string;
   location?: string;
   clientPrice: number;
@@ -129,33 +124,6 @@ const DUE_DATE_MAP: Record<string, string> = {
   'ss-1':  '2026-05-08', // Due soon (1 day)
 };
 
-// The parent selection each line item belongs to. The grid's first column
-// shows the chosen product (the line item); this is the selection/decision it
-// was picked for — e.g. line item "Kohler Farmhouse Sink" under selection
-// "Kitchen sink". Keyed by selection id. Real data comes from the selection
-// record; mocked here for the prototype.
-const SELECTION_TITLE_MAP: Record<string, string> = {
-  'ms-12': 'Master bath faucet',
-  'ms-13': 'Shower valve',
-  'ms-14': 'Kitchen pendants',
-  'ms-14c': 'Kitchen pendants',
-  'ms-19': 'Interior paint',
-  'ms-1':  'Kitchen sink',
-  'ms-2':  'Kitchen faucet',
-  'ms-4':  'Dishwasher',
-  'ms-5':  'Living room flooring',
-  'ms-6':  'Entryway flooring',
-  'ms-16': 'Master bath cabinets',
-  'ms-17': 'Cabinet installation',
-  'ms-18': 'Cabinet hardware',
-  'ms-25': 'Electrical panel',
-  'ms-26': 'Recessed lighting',
-  'ms-30': 'Exterior sconces',
-  'ms-31': 'Path lighting',
-  // Standalone selections (ss-*) source their title from the shared
-  // INVOICE_STANDALONE_SELECTIONS data instead of this map.
-};
-
 // Override status to Pending so the due-date logic has rows to surface.
 const PENDING_OVERRIDES = new Set(['ms-12', 'ms-13', 'ms-14', 'ss-1']);
 
@@ -190,7 +158,6 @@ const mockData: SelectionRow[] = [
   ...INVOICE_STANDALONE_SELECTIONS.map((ss): SelectionOption => ({
     id: ss.id,
     title: ss.name,
-    selTitle: ss.title,
     category: vendorFromCostCode(ss.costCode),
     location: LOCATION_MAP[ss.id] || '—',
     clientPrice: ss.approvedPrice,
@@ -207,7 +174,6 @@ const mockData: SelectionRow[] = [
       return {
         id: sel.id,
         title: sel.name,
-        selTitle: SELECTION_TITLE_MAP[sel.id],
         category: vendor,
         location: LOCATION_MAP[sel.id] || '—',
         clientPrice: sel.originalPrice,
@@ -421,14 +387,14 @@ export default function SelectionsPage({
   const [moreActionsOpen, setMoreActionsOpen] = useState(false);
   const [optionMenuOpen, setOptionMenuOpen] = useState(false);
   const [addToOpen, setAddToOpen] = useState(false);
-  // Which top-level branch of the "Add to" menu is expanded to show New/Existing.
-  const [addToBranch, setAddToBranch] = useState<'invoice' | 'progress' | null>(null);
-  const closeAddToMenu = () => { setAddToOpen(false); setAddToBranch(null); };
-  // Set when "Existing" is picked under a branch — opens a modal listing that
-  // branch's existing invoices/progress invoices for the builder to choose from.
-  const [existingPickerType, setExistingPickerType] = useState<'invoice' | 'progress' | null>(null);
+  const closeAddToMenu = () => setAddToOpen(false);
+  // Opens a modal listing every existing invoice/progress invoice, grouped by
+  // type, for the builder to choose from.
+  const [existingPickerOpen, setExistingPickerOpen] = useState(false);
   const [existingPickerSelection, setExistingPickerSelection] = useState('');
-  const openExistingPicker = (branch: 'invoice' | 'progress') => { setExistingPickerSelection(''); setExistingPickerType(branch); };
+  const [existingPickerListOpen, setExistingPickerListOpen] = useState(false);
+  const openExistingPicker = () => { setExistingPickerSelection(EXISTING_INVOICES[0]?.invoiceNumber ?? ''); setExistingPickerListOpen(false); setExistingPickerOpen(true); };
+  const closeExistingPicker = () => { setExistingPickerOpen(false); setExistingPickerListOpen(false); };
   const [viewMode, setViewMode] = useState<ViewMode>('allowance');
   const [viewLayout, setViewLayout] = useState<ViewLayout>('list');
   const [audience, setAudience] = useState<AudienceView>('builder');
@@ -577,7 +543,6 @@ export default function SelectionsPage({
               {rows.length} {rows.length === 1 ? 'item' : 'items'}
             </span>
           </div>
-          <div className="sp-col-seltitle"></div>
           <div className="sp-col-price">{fmt(groupBudget)}</div>
           <div className="sp-col-approved">{fmt(groupSpent)}</div>
           <div className={`sp-col-remaining sp-section-remaining${groupRemaining < 0 ? ' sp-section-remaining-over' : ''}`}>
@@ -624,7 +589,6 @@ export default function SelectionsPage({
               {row.name}
             </a>
           </div>
-          <div className="sp-col-seltitle"></div>
           <div className="sp-col-price">{fmt(row.clientPrice)}</div>
           <div className="sp-col-approved">{fmt(spent)}</div>
           <div className={`sp-col-remaining sp-remaining-amount${overBudget ? ' sp-remaining-over' : ''}`}>
@@ -658,7 +622,6 @@ export default function SelectionsPage({
                   <SelectionIcon />
                   <a href="#" className="sp-link" onClick={(e) => { e.preventDefault(); onOpenOption?.({ name: opt.title, category: '', price: opt.clientPrice, status: opt.status.toLowerCase() }); }}>{opt.title}</a>
                 </div>
-                <div className="sp-col-seltitle">{opt.selTitle || <span style={{ color: 'var(--g400)' }}>—</span>}</div>
                 <div className="sp-col-price">{fmt(opt.clientPrice)}</div>
                 <div className="sp-col-approved">{opt.approvedPrice !== null ? fmt(opt.approvedPrice) : ''}</div>
                 <div className="sp-col-remaining"></div>
@@ -761,7 +724,6 @@ export default function SelectionsPage({
         <SelectionIcon />
         <a href="#" className="sp-link" onClick={(e) => { e.preventDefault(); onOpenOption?.({ name: row.title, category: '', price: row.clientPrice, status: row.status.toLowerCase() }); }}>{row.title}</a>
       </div>
-      <div className="sp-col-seltitle">{row.selTitle || <span style={{ color: 'var(--g400)' }}>—</span>}</div>
       <div className="sp-col-price">{fmt(row.clientPrice)}</div>
       <div className="sp-col-approved">{row.approvedPrice !== null ? fmt(row.approvedPrice) : ''}</div>
       <div className="sp-col-remaining"></div>
@@ -836,41 +798,28 @@ export default function SelectionsPage({
               {addToOpen && (
                 <>
                   <div className="sp-menu-backdrop" onClick={closeAddToMenu} />
-                  <div className="sp-mass-action-dropdown" style={{ bottom: 'auto', top: 'calc(100% + 6px)', right: 0, left: 'auto', minWidth: 170 }}>
-                    <div
-                      className={"sp-cascade-item" + (addToBranch === 'invoice' ? ' active' : '')}
-                      onMouseEnter={() => setAddToBranch('invoice')}
-                      onClick={() => setAddToBranch('invoice')}
+                  <div className="sp-mass-action-dropdown" style={{ bottom: 'auto', top: 'calc(100% + 6px)', right: 0, left: 'auto', minWidth: 190 }}>
+                    <button
+                      type="button"
+                      className="sp-mass-action-dropdown-item"
+                      onClick={() => { closeAddToMenu(); onOpenInvoiceWizard?.(undefined, { type: 'new', invoiceType: 'invoice' }); }}
                     >
-                      <span>Invoice</span>
-                      <CaretRight />
-                    </div>
-                    <div
-                      className={"sp-cascade-item" + (addToBranch === 'progress' ? ' active' : '')}
-                      onMouseEnter={() => setAddToBranch('progress')}
-                      onClick={() => setAddToBranch('progress')}
+                      New invoice
+                    </button>
+                    <button
+                      type="button"
+                      className="sp-mass-action-dropdown-item"
+                      onClick={() => { closeAddToMenu(); openExistingPicker(); }}
                     >
-                      <span>Progress invoice</span>
-                      <CaretRight />
-                    </div>
-                    {addToBranch && (
-                      <div className="sp-mass-action-dropdown" style={{ bottom: 'auto', top: addToBranch === 'invoice' ? -6 : 34, right: 'calc(100% + 4px)', left: 'auto', minWidth: 150 }}>
-                        <button
-                          type="button"
-                          className="sp-mass-action-dropdown-item"
-                          onClick={() => { const branch = addToBranch; closeAddToMenu(); onOpenInvoiceWizard?.(undefined, { type: 'new', invoiceType: branch }); }}
-                        >
-                          New
-                        </button>
-                        <button
-                          type="button"
-                          className="sp-mass-action-dropdown-item"
-                          onClick={() => { const branch = addToBranch; closeAddToMenu(); openExistingPicker(branch); }}
-                        >
-                          Existing
-                        </button>
-                      </div>
-                    )}
+                      Existing invoice
+                    </button>
+                    <button
+                      type="button"
+                      className="sp-mass-action-dropdown-item"
+                      onClick={() => { closeAddToMenu(); onOpenInvoiceWizard?.(undefined, { type: 'new', invoiceType: 'progress' }); }}
+                    >
+                      New progress invoice
+                    </button>
                   </div>
                 </>
               )}
@@ -1012,8 +961,7 @@ export default function SelectionsPage({
               <div className="sp-col-check">
                 <div className={`sp-checkbox ${allChecked ? 'sp-checkbox-on' : ''}`} onClick={toggleAll} />
               </div>
-              <div className="sp-col-title">Line item</div>
-              <div className="sp-col-seltitle">Selection title</div>
+              <div className="sp-col-title">Title</div>
               <div className="sp-col-price">Budget</div>
               <div className="sp-col-approved">Spent</div>
               <div className="sp-col-remaining">Remaining</div>
@@ -1050,7 +998,6 @@ export default function SelectionsPage({
             <div className="sp-row sp-row-total">
               <div className="sp-col-check"></div>
               <div className="sp-col-title"><strong>Totals</strong></div>
-              <div className="sp-col-seltitle"></div>
               <div className="sp-col-price"><strong>{fmt(totalsClientPrice)}</strong></div>
               <div className="sp-col-approved"></div>
               <div className="sp-col-remaining"></div>
@@ -1404,62 +1351,77 @@ export default function SelectionsPage({
         </div>
       )}
     </div>
-    {existingPickerType && createPortal(
-      <div className="modal-backdrop" onClick={e => { if (e.target === e.currentTarget) setExistingPickerType(null); }}>
+    {existingPickerOpen && createPortal(
+      <div className="modal-backdrop" onClick={e => { if (e.target === e.currentTarget) closeExistingPicker(); }}>
         <div className="est-modal" style={{ width: 460, maxWidth: '90vw', maxHeight: '70vh' }} onClick={e => e.stopPropagation()}>
           <div className="est-modal-hdr">
             <div>
-              <h2 className="selv2-title">
-                Add to existing {existingPickerType === 'progress' ? 'progress invoice' : 'invoice'}?
-              </h2>
+              <h2 className="selv2-title">Add to existing invoice?</h2>
             </div>
-            <button className="est-modal-close" onClick={() => setExistingPickerType(null)}>&times;</button>
+            <button className="est-modal-close" onClick={closeExistingPicker}>&times;</button>
           </div>
-          <div className="est-modal-body">
+          <div className="est-modal-body" style={{ overflow: 'visible' }}>
             {(() => {
-              const matches = EXISTING_INVOICES.filter(inv => (inv.type ?? 'invoice') === existingPickerType);
-              const selected = matches.find(inv => inv.invoiceNumber === existingPickerSelection);
-              const total = selected ? selected.lineItems.reduce((s, li) => s + li.unitCost * li.quantity * (1 + li.markup / 100), 0) : 0;
+              const progressInvoices = EXISTING_INVOICES.filter(inv => (inv.type ?? 'invoice') === 'progress');
+              const regularInvoices = EXISTING_INVOICES.filter(inv => (inv.type ?? 'invoice') === 'invoice');
+              const selected = EXISTING_INVOICES.find(inv => inv.invoiceNumber === existingPickerSelection);
+              const renderGroup = (label: string, invoices: typeof EXISTING_INVOICES) => (
+                <div key={label}>
+                  <div className="sp-menu-group-label">{label}</div>
+                  {invoices.map(inv => (
+                    <button
+                      key={inv.invoiceNumber}
+                      type="button"
+                      className="sp-mass-action-dropdown-item"
+                      style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}
+                      onClick={() => { setExistingPickerSelection(inv.invoiceNumber); setExistingPickerListOpen(false); }}
+                    >
+                      <span>{inv.invoiceNumber} — {inv.title}</span>
+                      {inv.invoiceNumber === existingPickerSelection && <span>✓</span>}
+                    </button>
+                  ))}
+                </div>
+              );
               return (
                 <>
-                  <label className="fl">Please select {existingPickerType === 'progress' ? 'a progress invoice' : 'an invoice'}:</label>
-                  {matches.length === 0 ? (
-                    <div style={{ color: 'var(--g500)', fontSize: 14 }}>
-                      No {existingPickerType === 'progress' ? 'progress invoices' : 'invoices'} yet.
-                    </div>
+                  <label className="fl">Select an invoice</label>
+                  {EXISTING_INVOICES.length === 0 ? (
+                    <div style={{ color: 'var(--g500)', fontSize: 14 }}>No existing invoices yet.</div>
                   ) : (
-                    <>
-                      <select
+                    <div style={{ position: 'relative' }}>
+                      <button
+                        type="button"
                         className="fi"
-                        value={existingPickerSelection}
-                        onChange={e => setExistingPickerSelection(e.target.value)}
+                        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', textAlign: 'left' }}
+                        onClick={() => setExistingPickerListOpen(o => !o)}
+                        aria-expanded={existingPickerListOpen}
                       >
-                        <option value="" disabled>Please select one</option>
-                        {matches.map(inv => (
-                          <option key={inv.invoiceNumber} value={inv.invoiceNumber}>
-                            {inv.invoiceNumber} — {inv.title}
-                          </option>
-                        ))}
-                      </select>
-                      {selected && (
-                        <div style={{ fontSize: 12, color: 'var(--g500)', marginTop: 8 }}>
-                          {selected.status} · {fmt(total)}
-                        </div>
+                        <span>{selected ? `${selected.invoiceNumber} — ${selected.title}` : 'Select an invoice'}</span>
+                        <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{ flexShrink: 0, transform: existingPickerListOpen ? 'rotate(180deg)' : 'none' }}><path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                      </button>
+                      {existingPickerListOpen && (
+                        <>
+                          <div className="sp-menu-backdrop" onClick={() => setExistingPickerListOpen(false)} />
+                          <div className="sp-mass-action-dropdown" style={{ position: 'absolute', bottom: 'auto', top: 'calc(100% + 4px)', left: 0, right: 'auto', width: '100%', minWidth: 'auto', maxHeight: 240, overflowY: 'auto' }}>
+                            {progressInvoices.length > 0 && renderGroup('Progress invoice', progressInvoices)}
+                            {regularInvoices.length > 0 && renderGroup('Invoice', regularInvoices)}
+                          </div>
+                        </>
                       )}
-                    </>
+                    </div>
                   )}
                 </>
               );
             })()}
           </div>
           <div className="est-modal-footer">
-            <button className="btn btn-s" onClick={() => setExistingPickerType(null)}>Cancel</button>
+            <button className="btn btn-s" onClick={closeExistingPicker}>Cancel</button>
             <button
               className="btn btn-p"
               disabled={!existingPickerSelection}
               onClick={() => {
                 const invoiceNumber = existingPickerSelection;
-                setExistingPickerType(null);
+                closeExistingPicker();
                 onOpenInvoiceWizard?.(undefined, { type: 'existing', invoiceNumber });
               }}
             >

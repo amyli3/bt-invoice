@@ -56,6 +56,12 @@ const existingInvoiceOptions = EXISTING_INVOICES
   .filter(inv => inv.type !== 'progress' && inv.status !== 'Sent')
   .map(inv => ({ invoiceNumber: inv.invoiceNumber, title: inv.title, status: inv.status }));
 
+const allExistingInvoiceOptions = [...progressInvoiceOptions, ...existingInvoiceOptions];
+
+function formatInvoiceOption(inv: { invoiceNumber: string; title: string; status: string }) {
+  return inv.invoiceNumber === OPENBOOK_INVOICE_NUMBER ? inv.title : `${inv.invoiceNumber} — ${inv.title}`;
+}
+
 const SHOW_EXISTING_INVOICE_OPTION = true;
 
 export default function ChangeOrderPage({ onBack, onApprove, overages, coId }: Props) {
@@ -66,6 +72,7 @@ export default function ChangeOrderPage({ onBack, onApprove, overages, coId }: P
   const [invoiceUponApproval, setInvoiceUponApproval] = useState(false);
   const [targetKind, setTargetKind] = useState<'new' | 'new-progress' | 'existing'>('existing');
   const [existingInvoiceNumber, setExistingInvoiceNumber] = useState(OPENBOOK_INVOICE_NUMBER);
+  const [existingInvoiceMenuOpen, setExistingInvoiceMenuOpen] = useState(false);
 
   useEffect(() => {
     if (!toast) return;
@@ -91,8 +98,8 @@ export default function ChangeOrderPage({ onBack, onApprove, overages, coId }: P
           toastMsg = 'Change order approved — added to Progress invoice 2';
         } else {
           invoiceTarget = { type: 'existing', invoiceNumber: existingInvoiceNumber };
-          const inv = [...progressInvoiceOptions, ...existingInvoiceOptions].find(i => i.invoiceNumber === existingInvoiceNumber);
-          toastMsg = `Change order approved — added to #${existingInvoiceNumber}${inv ? ` — ${inv.title}` : ''}`;
+          const inv = allExistingInvoiceOptions.find(i => i.invoiceNumber === existingInvoiceNumber);
+          toastMsg = `Change order approved — added to ${inv ? formatInvoiceOption(inv) : existingInvoiceNumber}`;
         }
       }
     }
@@ -239,7 +246,7 @@ export default function ChangeOrderPage({ onBack, onApprove, overages, coId }: P
             </div>
 
             <div style={{ fontSize: 13, fontWeight: 600, color: '#0f172a', marginBottom: 6 }}>Payment</div>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#334155', cursor: 'pointer' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 500, color: 'var(--g800)', cursor: 'pointer' }}>
               <input
                 type="checkbox"
                 checked={invoiceUponApproval}
@@ -247,58 +254,94 @@ export default function ChangeOrderPage({ onBack, onApprove, overages, coId }: P
                 style={{ width: 16, height: 16, accentColor: '#0065db' }}
               />
               Invoice client upon approval
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ color: '#94a3b8' }}>
+              <svg width="15" height="15" viewBox="0 0 14 14" fill="none" style={{ color: 'var(--g400)' }}>
                 <circle cx="7" cy="7" r="5.5" stroke="currentColor" strokeWidth="1"/>
                 <path d="M7 5v2.5M7 9.5v.5" stroke="currentColor" strokeWidth="1" strokeLinecap="round"/>
               </svg>
             </label>
 
             {invoiceUponApproval && (
-              <div style={{ marginTop: 10, marginLeft: 22, paddingLeft: 12, borderLeft: '2px solid #e2e8f0', display: 'flex', flexDirection: 'column', gap: 8 }}>
-                <div style={{ fontSize: 12, fontWeight: 600, color: '#334155' }}>Add to</div>
+              <div style={{ marginTop: 12, marginLeft: 22, maxWidth: 360, background: 'var(--g50)', border: '1px solid var(--g200)', borderRadius: 'var(--radius)', padding: '12px 14px' }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--g500)', letterSpacing: 0.4, marginBottom: 8 }}>Add to</div>
 
-                {SHOW_EXISTING_INVOICE_OPTION && (
-                  <>
-                    <label style={radioLbl}>
-                      <input type="radio" name="co-invoice-target" checked={targetKind === 'existing'} onChange={() => setTargetKind('existing')} style={radioInput} />
-                      An existing invoice
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {SHOW_EXISTING_INVOICE_OPTION && (
+                    <div
+                      onClick={() => setTargetKind('existing')}
+                      style={targetKind === 'existing' ? optionRowSelected : optionRow}
+                    >
+                      <label style={optionLabel(targetKind === 'existing')}>
+                        <input type="radio" name="co-invoice-target" checked={targetKind === 'existing'} onChange={() => setTargetKind('existing')} style={radioInput} />
+                        Existing invoice
+                      </label>
+                      {targetKind === 'existing' && (
+                        <div style={{ position: 'relative', marginTop: 8, marginLeft: 22, width: 280 }} onClick={(e) => e.stopPropagation()}>
+                          <button
+                            type="button"
+                            className="fi"
+                            onClick={() => setExistingInvoiceMenuOpen(o => !o)}
+                            aria-expanded={existingInvoiceMenuOpen}
+                            style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', textAlign: 'left' }}
+                          >
+                            <span>{formatInvoiceOption(allExistingInvoiceOptions.find(i => i.invoiceNumber === existingInvoiceNumber)!)}</span>
+                            <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{ flexShrink: 0, transform: existingInvoiceMenuOpen ? 'rotate(180deg)' : 'none' }}><path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                          </button>
+                          {existingInvoiceMenuOpen && (
+                            <>
+                              <div className="sp-menu-backdrop" onClick={() => setExistingInvoiceMenuOpen(false)} />
+                              <div className="sp-mass-action-dropdown" style={{ position: 'absolute', bottom: 'auto', top: 'calc(100% + 4px)', left: 0, right: 'auto', width: '100%', minWidth: 'auto', maxHeight: 240, overflowY: 'auto' }}>
+                                <div className="sp-menu-group-label">Progress invoice</div>
+                                {progressInvoiceOptions.map(inv => (
+                                  <button
+                                    key={inv.invoiceNumber}
+                                    type="button"
+                                    className="sp-mass-action-dropdown-item"
+                                    style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}
+                                    onClick={() => { setExistingInvoiceNumber(inv.invoiceNumber); setExistingInvoiceMenuOpen(false); }}
+                                  >
+                                    <span>{formatInvoiceOption(inv)}</span>
+                                    {inv.invoiceNumber === existingInvoiceNumber && <span>✓</span>}
+                                  </button>
+                                ))}
+                                {existingInvoiceOptions.length > 0 && (
+                                  <div>
+                                    <div className="sp-menu-group-label">Invoice</div>
+                                    {existingInvoiceOptions.map(inv => (
+                                      <button
+                                        key={inv.invoiceNumber}
+                                        type="button"
+                                        className="sp-mass-action-dropdown-item"
+                                        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}
+                                        onClick={() => { setExistingInvoiceNumber(inv.invoiceNumber); setExistingInvoiceMenuOpen(false); }}
+                                      >
+                                        <span>{formatInvoiceOption(inv)}</span>
+                                        {inv.invoiceNumber === existingInvoiceNumber && <span>✓</span>}
+                                      </button>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  <div onClick={() => setTargetKind('new-progress')} style={targetKind === 'new-progress' ? optionRowSelected : optionRow}>
+                    <label style={optionLabel(targetKind === 'new-progress')}>
+                      <input type="radio" name="co-invoice-target" checked={targetKind === 'new-progress'} onChange={() => setTargetKind('new-progress')} style={radioInput} />
+                      New progress invoice
                     </label>
-                    {targetKind === 'existing' && (
-                      <select
-                        value={existingInvoiceNumber}
-                        onChange={(e) => setExistingInvoiceNumber(e.target.value)}
-                        style={{ ...targetSelect, width: 280 }}
-                      >
-                        <optgroup label="Progress invoice">
-                          {progressInvoiceOptions.map(inv => (
-                            <option key={inv.invoiceNumber} value={inv.invoiceNumber}>
-                              {inv.invoiceNumber === OPENBOOK_INVOICE_NUMBER ? inv.title : `#${inv.invoiceNumber} — ${inv.title} (${inv.status})`}
-                            </option>
-                          ))}
-                        </optgroup>
-                        {existingInvoiceOptions.length > 0 && (
-                          <optgroup label="Invoice">
-                            {existingInvoiceOptions.map(inv => (
-                              <option key={inv.invoiceNumber} value={inv.invoiceNumber}>
-                                #{inv.invoiceNumber} — {inv.title} ({inv.status})
-                              </option>
-                            ))}
-                          </optgroup>
-                        )}
-                      </select>
-                    )}
-                  </>
-                )}
+                  </div>
 
-                <label style={radioLbl}>
-                  <input type="radio" name="co-invoice-target" checked={targetKind === 'new-progress'} onChange={() => setTargetKind('new-progress')} style={radioInput} />
-                  A new progress invoice
-                </label>
-
-                <label style={radioLbl}>
-                  <input type="radio" name="co-invoice-target" checked={targetKind === 'new'} onChange={() => setTargetKind('new')} style={radioInput} />
-                  A new invoice
-                </label>
+                  <div onClick={() => setTargetKind('new')} style={targetKind === 'new' ? optionRowSelected : optionRow}>
+                    <label style={optionLabel(targetKind === 'new')}>
+                      <input type="radio" name="co-invoice-target" checked={targetKind === 'new'} onChange={() => setTargetKind('new')} style={radioInput} />
+                      New invoice
+                    </label>
+                  </div>
+                </div>
               </div>
             )}
           </div>
@@ -513,9 +556,10 @@ export default function ChangeOrderPage({ onBack, onApprove, overages, coId }: P
 }
 
 const lbl: React.CSSProperties = { display: 'block', fontSize: 12, fontWeight: 500, color: '#334155', marginBottom: 4 };
-const radioLbl: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#334155', cursor: 'pointer' };
 const radioInput: React.CSSProperties = { width: 14, height: 14, accentColor: '#0065db' };
 const inp: React.CSSProperties = { padding: '7px 10px', fontSize: 13, border: '1px solid #e2e8f0', borderRadius: 6, width: '100%', boxSizing: 'border-box', outline: 'none', color: '#0f172a', fontFamily: 'inherit' };
-const targetSelect: React.CSSProperties = { ...inp, paddingRight: 28, marginLeft: 22 };
+const optionRow: React.CSSProperties = { border: '1px solid var(--g200)', borderRadius: 'var(--radius)', padding: '10px 12px', cursor: 'pointer', background: 'white' };
+const optionRowSelected: React.CSSProperties = { ...optionRow, border: '1.5px solid var(--bt-blue)', background: 'var(--bt-blue-light)' };
+const optionLabel = (selected: boolean): React.CSSProperties => ({ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 500, color: selected ? 'var(--g800)' : 'var(--g700)', cursor: 'pointer' });
 const th: React.CSSProperties = { padding: '10px 12px', fontSize: 12, fontWeight: 500, color: '#64748b', textAlign: 'left', whiteSpace: 'nowrap' };
 const td: React.CSSProperties = { padding: '10px 12px', fontSize: 13, color: '#334155' };

@@ -66,10 +66,12 @@ interface Props {
   addedChildIds?: string[];
   /** Set when adding to a pre-existing invoice rather than a brand-new one. */
   targetInvoice?: { invoiceNumber: string; title: string; type: 'invoice' | 'progress' } | null;
+  /** Type of the brand-new invoice being built, when targetInvoice isn't set. */
+  newInvoiceType?: 'invoice' | 'progress';
 }
 
 /* ─── Component ─── */
-export default function SelectionsModalV5({ open, onClose, onAdd, addedChildIds = [], targetInvoice = null }: Props) {
+export default function SelectionsModalV5({ open, onClose, onAdd, addedChildIds = [], targetInvoice = null, newInvoiceType = 'invoice' }: Props) {
   // Which allowances the builder has marked complete in this session. Marking
   // complete is the hinge of the deposit/true-up model: it LOCKS the variance
   // so the over/under can settle on this invoice.
@@ -419,7 +421,9 @@ export default function SelectionsModalV5({ open, onClose, onAdd, addedChildIds 
         <div className="est-modal-hdr">
           <div>
             <h2 className="selv2-title">
-              {targetInvoice ? (targetInvoice.type === 'progress' ? 'Add to Progress Invoice' : 'Add to Invoice') : 'Add selections to invoice'}
+              {targetInvoice
+                ? (targetInvoice.type === 'progress' ? 'Add to Progress Invoice' : 'Add to Invoice')
+                : (newInvoiceType === 'progress' ? 'Add selections to progress invoice' : 'Add selections to invoice')}
             </h2>
             {targetInvoice && (
               <div style={{ fontSize: 12, color: 'var(--g500)', marginTop: 2 }}>
