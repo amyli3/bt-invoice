@@ -5,7 +5,7 @@ import { fmt, parseTaxRate } from '../utils';
 import { costCodeLabel } from '../selectionsData';
 import { BdsBadge } from '../bds';
 
-function AddFromDropdown({ onOpenEstimate, onOpenSelections2b }: { onOpenEstimate?: () => void; onOpenSelections?: () => void; onOpenSelections2?: () => void; onOpenSelections2b?: () => void; onOpenSelections3?: () => void; onOpenAll?: () => void }) {
+function AddFromDropdown({ onOpenEstimate, onOpenSelections2b, onOpenSelections3 }: { onOpenEstimate?: () => void; onOpenSelections?: () => void; onOpenSelections2?: () => void; onOpenSelections2b?: () => void; onOpenSelections3?: () => void; onOpenAll?: () => void }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -37,10 +37,12 @@ function AddFromDropdown({ onOpenEstimate, onOpenSelections2b }: { onOpenEstimat
           <button className="add-from-option" onClick={() => { setOpen(false); onOpenSelections2b?.(); }}>
             <span style={{ fontWeight: 500 }}>Selections</span>
           </button>
-          {/*
-          <button className="add-from-option" onClick={() => { setOpen(false); onOpenSelections2?.(); }}>
-            <span style={{ fontWeight: 500 }}>Selections 2 (allowance)</span>
+          {/* The pre-redesign wizard, kept for reference — groups by allowance
+              and lets the builder check individual selections to invoice. */}
+          <button className="add-from-option" onClick={() => { setOpen(false); onOpenSelections3?.(); }}>
+            <span style={{ fontWeight: 500 }}>Selections 2 (old)</span>
           </button>
+          {/*
           <button className="add-from-option" onClick={() => { setOpen(false); onOpenSelections3?.(); }}>
             <span style={{ fontWeight: 500 }}>Selection 3</span>
           </button>

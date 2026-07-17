@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Subtotals — proposed (option B + Amount due + grey)</title>
+  <link rel="stylesheet" href="https://unpkg.com/antd@4.16.12/dist/antd.min.css" />
+  <style>
+    body { margin: 0; font-family: -apple-system, Segoe UI, Roboto, sans-serif; background: #f0f0f0; }
+    .invoice-body { width: 820px; margin: 20px auto; background: #fff; padding: 20px 32px; box-shadow: 0 1px 4px rgba(0,0,0,.15); }
+    .heading { font-size: 13px; font-weight: 700; color: #1b2a4a; margin: 20px 0 2px; }
+    .sub { font-size: 11px; color: #888; margin-bottom: 6px; }
+    .lbl { font-size: 11px; color: #aaa; }
+
+    /* base PrintTable.less */
+    .PrintTable .ant-table-small { border: 1px solid #d9d9d9; }
+    .PrintTable .ant-table-small .ant-table-cell { padding: 6px; }
+
+    /* OwnerInvoicePrint.less current PR (borderless) — remove ALL borders incl. outer container */
+    .OwnerInvoicePrint--subtotals.PrintTable .ant-table,
+    .OwnerInvoicePrint--subtotals.PrintTable .ant-table-small,
+    .OwnerInvoicePrint--subtotals.PrintTable .ant-table-container,
+    .OwnerInvoicePrint--subtotals.PrintTable .ant-table-content,
+    .OwnerInvoicePrint--subtotals.PrintTable .ant-table-cell { border: none; }
+    .OwnerInvoicePrint--subtotals.PrintTable .PrintTableSummaryRow { background: transparent; }
+    .OwnerInvoicePrint--subtotals.PrintTable .ant-table-tbody .ant-table-cell:last-child { text-align: right; white-space: nowrap; }
+
+    /* B) fixed width, grouped right */
+    .OwnerInvoicePrint--subtotals.PrintTable { width: 340px; margin-left: auto; }
+
+    /* Amount-due row highlight (mirrors PR 106517 bg-gray-15 + bold) */
+    .OwnerInvoicePrint--subtotals.PrintTable .ant-table-tbody tr:last-child .ant-table-cell {
+      background: #eef0f4;
+      font-weight: 700;
+      color: #1b2a4a;
+    }
+    .OwnerInvoicePrint--subtotals.PrintTable .ant-table-tbody tr:last-child .ant-table-cell:first-child { border-radius: 6px 0 0 6px; }
+    .OwnerInvoicePrint--subtotals.PrintTable .ant-table-tbody tr:last-child .ant-table-cell:last-child { border-radius: 0 6px 6px 0; }
+  </style>
+</head>
+<body>
+  <div class="invoice-body">
+    <div class="heading">Proposed: option B (340px, right) + "Amount due" + grey highlight</div>
+    <div class="sub">Short labels — the common case.</div>
+    <div class="lbl">— invoice line items above —</div>
+    <div id="short"></div>
+
+    <div class="heading">Same, with long tax labels (wrap behavior)</div>
+    <div class="lbl">— invoice line items above —</div>
+    <div id="long"></div>
+  </div>
+
+  <script>
+    function table(rows){
+      return `
+      <div class="ant-table-wrapper PrintTable OwnerInvoicePrint--subtotals">
+        <div class="ant-spin-nested-loading"><div class="ant-spin-container">
+          <div class="ant-table ant-table-small ant-table-bordered">
+            <div class="ant-table-container"><div class="ant-table-content">
+              <table style="table-layout:auto;"><colgroup></colgroup><tbody class="ant-table-tbody">
+                ${rows.map(([l,a,s])=>`<tr class="ant-table-row${s?' PrintTableSummaryRow':''}"><td class="ant-table-cell">${l}</td><td class="ant-table-cell">${a}</td></tr>`).join('')}
+              </tbody></table>
+            </div></div>
+          </div>
+        </div></div>
+      </div>`;
+    }
+    document.getElementById('short').innerHTML = table([
+      ['Subtotal', '$49,447.00', true],
+      ['Nebraska State: 5.5% tax on $49,447.00', '$2,719.59', false],
+      ['Nebraska, Omaha City: 1.5% tax on $49,447.00', '$741.71', false],
+      ['Total tax', '$3,461.29', true],
+      ['Amount due', '$52,908.29', true],
+    ]);
+    document.getElementById('long').innerHTML = table([
+      ['Subtotal', '$49,447.00', true],
+      ['Nebraska State Department of Revenue Special Improvement District: 5.5% tax on $49,447.00', '$2,719.59', false],
+      ['Total tax', '$3,461.29', true],
+      ['Amount due', '$52,908.29', true],
+    ]);
+  </script>
+</body>
+</html>

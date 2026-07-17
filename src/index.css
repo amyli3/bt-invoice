@@ -1998,14 +1998,14 @@ button.jps-term-label { cursor: pointer; }
   color: var(--g500); margin: 18px 0 6px;
 }
 
-/* Subtotal footer row under each allowance sub-section. */
-.jps-allowance-subtotal-row { margin-top: 4px; }
-.jps-cat-header-subtotal {
-  background: transparent;
-  border-top: 1px solid var(--g200);
-  cursor: default;
+/* Subtotal text under each allowance status group — plain text, not a card. */
+.jps-allowance-subtotal-text {
+  text-align: right; font-size: 13px; color: var(--bt-midnight);
+  margin: 8px 4px 0;
 }
-.jps-cat-header-subtotal .jps-cat-name { color: var(--g700); font-weight: 700; }
+.jps-allowance-subtotal-text .jps-subtotal-label {
+  font-weight: 600; color: var(--g500); margin-right: 8px;
+}
 
 /* Sub-group header rows inside allowance tables — splits approved vs. pending within a single allowance */
 .jps-row-subgroup { background: var(--g50); pointer-events: none; }

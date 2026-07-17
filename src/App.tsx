@@ -24,7 +24,6 @@ import JobDetailsClients from './components/JobDetailsClients';
 import SelectionsPage from './components/SelectionsPage';
 import OptionDetailPage from './components/OptionDetailPage';
 import AIAPayApp, { type OverageInfo } from './components/AIAPayApp';
-import AIAPayApp2 from './components/AIAPayApp2';
 import { INVOICE_SELECTION_SCENARIOS, INVOICE_STANDALONE_SELECTIONS } from './selectionsData';
 import ChangeOrderPage, { type COInvoiceTarget } from './components/ChangeOrderPage';
 import ChangeOrderListPage from './components/ChangeOrderListPage';
@@ -39,9 +38,9 @@ import UnderageFlows from './components/UnderageFlows';
 import { JOBS } from './mockData';
 import { getNextId } from './mockData';
 
-type PageType = 'invoice' | 'invoice-2' | 'invoice-3' | 'client-preview-invoice' | 'job-price-summary' | 'selections' | 'option-detail' | 'progress-invoice' | 'progress-invoice-2' | 'change-order' | 'change-order-list' | 'client-portal' | 'client-jps' | 'estimate' | 'client-selections' | 'client-selections-2' | 'client-selections-3' | 'job-costing-budget' | 'underage-flows' | 'job-details-clients';
+type PageType = 'invoice' | 'invoice-2' | 'invoice-3' | 'client-preview-invoice' | 'job-price-summary' | 'selections' | 'option-detail' | 'progress-invoice' | 'change-order' | 'change-order-list' | 'client-portal' | 'client-jps' | 'estimate' | 'client-selections' | 'client-selections-2' | 'client-selections-3' | 'job-costing-budget' | 'underage-flows' | 'job-details-clients';
 
-const validPages: PageType[] = ['invoice', 'invoice-2', 'invoice-3', 'client-preview-invoice', 'job-price-summary', 'selections', 'option-detail', 'progress-invoice', 'progress-invoice-2', 'change-order', 'change-order-list', 'client-portal', 'client-jps', 'estimate', 'client-selections', 'client-selections-2', 'client-selections-3', 'job-costing-budget', 'underage-flows', 'job-details-clients'];
+const validPages: PageType[] = ['invoice', 'invoice-2', 'invoice-3', 'client-preview-invoice', 'job-price-summary', 'selections', 'option-detail', 'progress-invoice', 'change-order', 'change-order-list', 'client-portal', 'client-jps', 'estimate', 'client-selections', 'client-selections-2', 'client-selections-3', 'job-costing-budget', 'underage-flows', 'job-details-clients'];
 
 function getInitialPage(): PageType {
   // Support ?page=X query param (used when hash is occupied by Figma capture)
@@ -65,13 +64,6 @@ export default function App() {
   const [piGroupBy, setPiGroupBy] = useState<'estimate' | 'costcode'>('estimate');
   const [currentOverages, setCurrentOverages] = useState<OverageInfo[]>([]);
   const [selectedCOId, setSelectedCOId] = useState<string | null>(null);
-  // Progress Invoice 2 — a standalone copy of the progress invoice page/state
-  // so it can be edited without touching the original 'progress-invoice' page.
-  // (No change-order approval flow is wired up for the copy yet, so there's no
-  // approvedCOIds/overages state to track — those props aren't used here.)
-  const [addedCostIds2, setAddedCostIds2] = useState<string[]>(['cost-1', 'cost-2', 'cost-3', 'cost-6', 'cost-7', 'cost-8']);
-  const [addedCOIds2, setAddedCOIds2] = useState<string[]>([]);
-  const [piGroupBy2, setPiGroupBy2] = useState<'estimate' | 'costcode'>('estimate');
 
   const setActivePage = (page: PageType | string) => {
     // Handle change-order:id navigation
@@ -549,17 +541,6 @@ export default function App() {
         <TopNav onNavigate={(page) => setActivePage(page as PageType)} />
         <div style={{flex: 1, overflowY: 'auto'}}>
           <AIAPayApp onNavigate={(page) => setActivePage(page as PageType)} approvedCOIds={approvedCOIds} addedCostIds={addedCostIds} onCostIdsChange={setAddedCostIds} addedCOIds={addedCOIds} onCOIdsChange={setAddedCOIds} groupBy={piGroupBy} onGroupByChange={setPiGroupBy} onOveragesChange={setCurrentOverages} />
-        </div>
-      </div>
-    );
-  }
-
-  if (activePage === 'progress-invoice-2') {
-    return (
-      <div style={{display: 'flex', flexDirection: 'column', height: '100vh'}}>
-        <TopNav onNavigate={(page) => setActivePage(page as PageType)} />
-        <div style={{flex: 1, overflowY: 'auto'}}>
-          <AIAPayApp2 onNavigate={(page) => setActivePage(page as PageType)} addedCostIds={addedCostIds2} onCostIdsChange={setAddedCostIds2} addedCOIds={addedCOIds2} onCOIdsChange={setAddedCOIds2} groupBy={piGroupBy2} onGroupByChange={setPiGroupBy2} />
         </div>
       </div>
     );
