@@ -334,7 +334,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
     setNotesSnapshot(JSON.stringify(categoryNotes));
     setNotesSavedAt(new Date());
   };
-  const [activeSlice, setActiveSlice] = useState<'slice1' | 'slice2' | 'slice3' | 'slice4' | 'slice5'>('slice1');
+  const [activeSlice, setActiveSlice] = useState<'slice1' | 'slice1v2' | 'slice2' | 'slice3' | 'slice4' | 'slice5'>('slice1');
   // Slice 4 = sandbox for Kendall's open book client financials brief (page 7003570340).
   // v1 inline expandable, v2 always-on list, v3 drill-through, v4 grouped sections,
   // v5 visual contribution bar — iteration of v2 that swaps three nested rows for a stacked
@@ -384,6 +384,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
     changeOrders: true,
     payments: true,
     expandAllowances: true,
+    allowanceSubtotalTax: true,
   });
   type SortColumn = 'title' | 'date' | 'price' | 'origPrice' | 'tax' | 'total' | 'impact' | 'budget' | 'spent' | 'remaining' | 'status';
   type SortDir = 'asc' | 'desc';
@@ -884,6 +885,10 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
             <input type="checkbox" checked={printOptions.expandAllowances} onChange={e => setPrintOptions({ ...printOptions, expandAllowances: e.target.checked })} />
             Expand allowances with selections
           </label>
+          <label className="jps-print-checkbox">
+            <input type="checkbox" checked={printOptions.allowanceSubtotalTax} onChange={e => setPrintOptions({ ...printOptions, allowanceSubtotalTax: e.target.checked })} />
+            Show subtotal and tax columns on allowances
+          </label>
           <div className="jps-print-controls-actions">
             <BdsButton text="Cancel" displayType="secondary" onClick={() => setShowPrint(false)} />
             <BdsButton text="Print" displayType="primary" onClick={() => window.print()} />
@@ -946,6 +951,8 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
               if (alSort.column === 'status') return sign * ((a.group.complete ? 1 : 0) - (b.group.complete ? 1 : 0));
               if (alSort.column === 'budget') return sign * (a.group.budget - b.group.budget);
               if (alSort.column === 'spent') return sign * (a.spent - b.spent);
+              if (alSort.column === 'tax') return sign * (taxOf(a.spent) - taxOf(b.spent));
+              if (alSort.column === 'total') return sign * (withTax(a.spent) - withTax(b.spent));
               if (alSort.column === 'remaining') return sign * (a.remaining - b.remaining);
               if (alSort.column === 'date') {
                 // Allowances with no items (no date) always fall to the bottom regardless of asc/desc.
@@ -957,17 +964,21 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
             });
             const renderPrintAllowanceTable = (rows: typeof sortedAllowances, sectionTitle: string) => {
               if (rows.length === 0) return null;
-              const diffSum = rows.reduce((s, r) => s + (r.spent - r.group.budget), 0);
+              const totalBudget = rows.reduce((s, r) => s + r.group.budget, 0);
+              const totalSpent = rows.reduce((s, r) => s + r.spent, 0);
+              const showSubtotalTax = printOptions.allowanceSubtotalTax;
               return (
                 <section className="jps-print-section">
                   <h3 className="jps-print-section-title">{sectionTitle}</h3>
-                  <table className="jps-print-table">
+                  <table className={`jps-print-table jps-print-table-allowance ${showSubtotalTax ? '' : 'jps-print-table-allowance-compact'}`}>
                     <thead>
                       <tr>
                         {printSortableHeader(gridId, 'title', 'Title')}
                         {printSortableHeader(gridId, 'date', 'Date', 'jps-print-th-date')}
                         {printSortableHeader(gridId, 'budget', 'Allowance', 'jps-print-th-right')}
-                        {printSortableHeader(gridId, 'spent', 'Price', 'jps-print-th-right')}
+                        {showSubtotalTax && printSortableHeader(gridId, 'spent', 'Subtotal', 'jps-print-th-right')}
+                        {showSubtotalTax && printSortableHeader(gridId, 'tax', 'Tax', 'jps-print-th-right')}
+                        {printSortableHeader(gridId, 'total', 'Total price', 'jps-print-th-right')}
                         {printSortableHeader(gridId, 'remaining', 'Difference', 'jps-print-th-right')}
                       </tr>
                     </thead>
@@ -981,7 +992,9 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                               <td><strong>{g.name}</strong></td>
                               <td></td>
                               <td className="jps-print-td-right"><strong>{fmt(g.budget)}</strong></td>
-                              <td className="jps-print-td-right"><strong>{fmt(spent)}</strong></td>
+                              {showSubtotalTax && <td className="jps-print-td-right"><strong>{fmt(spent)}</strong></td>}
+                              {showSubtotalTax && <td className="jps-print-td-right"><strong>{fmt(taxOf(spent))}</strong></td>}
+                              <td className="jps-print-td-right"><strong>{fmt(withTax(spent))}</strong></td>
                               <td className="jps-print-td-right"><strong>{fmtSigned(spent - g.budget)}</strong></td>
                             </tr>
                             {showNested && nestedItems.map((it, j) => (
@@ -992,7 +1005,9 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                                 </td>
                                 <td className="jps-print-td-date">{it.date || '—'}</td>
                                 <td></td>
-                                <td className="jps-print-td-right">{fmt(it.price)}</td>
+                                {showSubtotalTax && <td className="jps-print-td-right">{fmt(it.price)}</td>}
+                                {showSubtotalTax && <td className="jps-print-td-right">{fmt(taxOf(it.price))}</td>}
+                                <td className="jps-print-td-right">{fmt(withTax(it.price))}</td>
                                 <td></td>
                               </tr>
                             ))}
@@ -1000,8 +1015,13 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                         );
                       })}
                       <tr className="jps-print-total-row">
-                        <td colSpan={4}><strong>Subtotal</strong></td>
-                        <td className="jps-print-td-right"><strong>{fmtSigned(diffSum)}</strong></td>
+                        <td><strong>Subtotal</strong></td>
+                        <td></td>
+                        <td className="jps-print-td-right"><strong>{fmt(totalBudget)}</strong></td>
+                        {showSubtotalTax && <td className="jps-print-td-right"><strong>{fmt(totalSpent)}</strong></td>}
+                        {showSubtotalTax && <td className="jps-print-td-right"><strong>{fmt(taxOf(totalSpent))}</strong></td>}
+                        <td className="jps-print-td-right"><strong>{fmt(withTax(totalSpent))}</strong></td>
+                        <td className="jps-print-td-right"><strong>{fmtSigned(totalSpent - totalBudget)}</strong></td>
                       </tr>
                     </tbody>
                   </table>
@@ -1416,7 +1436,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                 setShareLog(prev => [{
                   at: new Date(),
                   channels: [sendEmail ? 'Email' : null, sendSms ? 'SMS' : null].filter(Boolean) as string[],
-                  view: activeSlice === 'slice1' ? 'Fixed price' : 'Openbook',
+                  view: (activeSlice === 'slice1' || activeSlice === 'slice1v2') ? 'Fixed price' : 'Openbook',
                   budgetShared: shareBudgetDiff,
                 }, ...prev]);
                 setShowSend(false);
@@ -1529,19 +1549,22 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
             ariaLabel="Slice view"
             activeKey={activeSlice}
             onChange={(k) => {
-              const next = k as 'slice1' | 'slice2' | 'slice3' | 'slice4' | 'slice5';
+              const next = k as 'slice1' | 'slice1v2' | 'slice2' | 'slice3' | 'slice4' | 'slice5';
               setActiveSlice(next);
               if (next === 'slice5') setSlice4Version('v41');
             }}
             tabs={[
               { key: 'slice1', label: 'Fixed price' },
+              { key: 'slice1v2', label: 'Fixed Price Grid V2' },
               { key: 'slice5', label: 'Openbook' },
             ]}
           />
         </div>
 
         {/* ═══ SLICE 1 — simplified view: revised price + balance due, allowances grouped by allowance, no pending data ═══ */}
-        {activeSlice === 'slice1' && (
+        {/* slice1v2 is a copy of this tab kept for comparison — same content, but the Allowances
+            section renders with the pre-single-grid-experiment expandable cards instead of the flat grid. */}
+        {(activeSlice === 'slice1' || activeSlice === 'slice1v2') && (
           <>
             <div className="jps-panes-row">
               {/* Card 1: Total price */}
@@ -1599,7 +1622,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
             <div className="jps-breakdown-section" id="jps-sec-allowances">
               <div className="jps-section-header">
                 <BdsText as="h2" size="heavy-lg" className="jps-section-title">Allowances</BdsText>
-                {allowanceSortControl}
+                {activeSlice === 'slice1v2' && allowanceSortControl}
               <BdsButton
                 displayType="secondary"
                 onClick={toggleAll}
@@ -1704,22 +1727,139 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                     </div>
                   );
                 };
+                // Experiment: allowances as a single sortable grid (mirrors the Selections
+                // grid's jps-table/sortableHeader/jps-row-total idiom) with each allowance's
+                // approved items nested underneath it, instead of expandable cards. Used for
+                // both In progress and Completed groups; gridId keeps their sort state separate.
+                const renderAllowanceFlatGrid = (groups: typeof sortedAllowanceGroups, gridId: string) => {
+                  if (groups.length === 0) return null;
+                  const rows = groups.map(g => {
+                    const approvedItems = g.items.filter(i => i.status === 'approved');
+                    const approvedUsed = approvedItems.reduce((s, i) => s + i.price, 0);
+                    const latestDate = approvedItems.reduce((latest, i) => (!latest || dateToTs(i.date) > dateToTs(latest) ? i.date : latest), '');
+                    const impact = g.complete ? (approvedUsed === 0 ? 0 : approvedUsed - g.budget) : (approvedUsed - g.budget);
+                    return {
+                      group: g,
+                      approvedItems,
+                      name: g.name,
+                      price: approvedUsed,
+                      originalPrice: g.budget,
+                      impact,
+                      date: latestDate || undefined,
+                    };
+                  });
+                  // Custom comparator (not the generic sortItems) — row.originalPrice means
+                  // "allowance budget" here, which would collide with sortItems' tax/total
+                  // base-amount logic if reused.
+                  const alSort = getSort(gridId);
+                  const sortedRows = [...rows].sort((a, b) => {
+                    const sign = alSort.direction === 'asc' ? 1 : -1;
+                    switch (alSort.column) {
+                      case 'title': return sign * a.name.localeCompare(b.name);
+                      case 'date': {
+                        if (!a.date && b.date) return 1;
+                        if (!b.date && a.date) return -1;
+                        return sign * (dateToTs(a.date) - dateToTs(b.date));
+                      }
+                      case 'origPrice': return sign * (a.originalPrice - b.originalPrice);
+                      case 'price': return sign * (a.price - b.price);
+                      case 'tax': return sign * (taxOf(a.price) - taxOf(b.price));
+                      case 'total': return sign * (withTax(a.price) - withTax(b.price));
+                      case 'impact': return sign * (a.impact - b.impact);
+                      default: return 0;
+                    }
+                  });
+                  const totalBudget = rows.reduce((s, r) => s + r.originalPrice, 0);
+                  const totalApproved = rows.reduce((s, r) => s + r.price, 0);
+                  const totalDiff = rows.reduce((s, r) => s + r.impact, 0);
+                  const impactCell = (value: number) => value !== 0
+                    ? <span className="jps-impact-up">{fmtSigned(value)}</span>
+                    : <span className="jps-impact-neutral">—</span>;
+                  return (
+                    <div className="jps-table">
+                      <div className="jps-table-header jps-table-allowance-flat">
+                        {sortableHeader(gridId, 'title', 'Title', 'jps-col-title')}
+                        {sortableHeader(gridId, 'date', 'Date', 'jps-col-date')}
+                        {sortableHeader(gridId, 'origPrice', 'Allowance', 'jps-col-price-orig')}
+                        {sortableHeader(gridId, 'price', 'Subtotal', 'jps-col-price')}
+                        {sortableHeader(gridId, 'tax', 'Tax', 'jps-col-tax')}
+                        {sortableHeader(gridId, 'total', 'Total price', 'jps-col-total')}
+                        {sortableHeader(gridId, 'impact', (
+                          <span className="jps-term">
+                            <span className="jps-term-label" tabIndex={0}>Difference</span>
+                            <span className="jps-term-tip jps-term-tip-right" role="tooltip">Subtotal − Allowance</span>
+                          </span>
+                        ), 'jps-col-impact')}
+                      </div>
+                      {sortedRows.map(row => {
+                        const hasItems = row.approvedItems.length > 0;
+                        const isOpen = hasItems && !!expandedGroups[row.name];
+                        return (
+                          <Fragment key={row.name}>
+                            <div
+                              className={`jps-table-row jps-table-allowance-flat ${hasItems ? 'jps-row-allowance-toggle' : ''}`}
+                              onClick={hasItems ? () => toggleGroup(row.name) : undefined}
+                              role={hasItems ? 'button' : undefined}
+                              tabIndex={hasItems ? 0 : undefined}
+                            >
+                              <div className="jps-col-title">
+                                {hasItems && <BdsIcon name={isOpen ? 'chevron-down' : 'chevron-right'} size={14} />}
+                                <span className="jps-item-name" style={{ cursor: 'default' }}>{row.name}</span>
+                              </div>
+                              <div className="jps-col-date"></div>
+                              <div className="jps-col-price-orig">{fmt(row.originalPrice)}</div>
+                              <div className="jps-col-price">{fmt(row.price)}</div>
+                              <div className="jps-col-tax">{fmt(taxOf(row.price))}</div>
+                              <div className="jps-col-total">{fmt(withTax(row.price))}</div>
+                              <div className="jps-col-impact">{impactCell(row.impact)}</div>
+                            </div>
+                            {isOpen && row.approvedItems.map((item, j) => (
+                              <div key={j} className="jps-table-row jps-table-allowance-flat jps-row-nested">
+                                <div className="jps-col-title">
+                                  <span className="jps-item-name" onClick={() => onOpenSelection?.({ name: item.name, category: item.category, price: item.price, allowanceName: item.allowanceName, status: item.status })}>{item.name}</span>
+                                </div>
+                                <div className="jps-col-date">{item.date || '—'}</div>
+                                <div className="jps-col-price-orig"></div>
+                                <div className="jps-col-price">{fmt(item.price)}</div>
+                                <div className="jps-col-tax">{fmt(taxOf(item.price))}</div>
+                                <div className="jps-col-total">{fmt(withTax(item.price))}</div>
+                                <div className="jps-col-impact"></div>
+                              </div>
+                            ))}
+                          </Fragment>
+                        );
+                      })}
+                      <div className="jps-table-row jps-table-allowance-flat jps-row-total">
+                        <div className="jps-col-title">Subtotal</div>
+                        <div className="jps-col-date"></div>
+                        <div className="jps-col-price-orig">{fmt(totalBudget)}</div>
+                        <div className="jps-col-price">{fmt(totalApproved)}</div>
+                        <div className="jps-col-tax">{fmt(taxOf(totalApproved))}</div>
+                        <div className="jps-col-total">{fmt(withTax(totalApproved))}</div>
+                        <div className="jps-col-impact">{impactCell(totalDiff)}</div>
+                      </div>
+                    </div>
+                  );
+                };
                 const inProgressGroups = sortedAllowanceGroups.filter(g => !g.complete);
                 const completedGroups = sortedAllowanceGroups.filter(g => g.complete);
+                const useOldCardStyle = activeSlice === 'slice1v2';
                 return (
                   <>
                     {inProgressGroups.length > 0 && (
                       <>
                         <BdsText as="h3" size="heavy-sm" className="jps-allowance-divider">In progress</BdsText>
-                        {inProgressGroups.map(renderAllowanceGroup)}
-                        {renderSubtotal(inProgressGroups)}
+                        {useOldCardStyle
+                          ? <>{inProgressGroups.map(renderAllowanceGroup)}{renderSubtotal(inProgressGroups)}</>
+                          : renderAllowanceFlatGrid(inProgressGroups, 'al-inprogress')}
                       </>
                     )}
                     {completedGroups.length > 0 && (
                       <>
                         <BdsText as="h3" size="heavy-sm" className="jps-allowance-divider">Completed</BdsText>
-                        {completedGroups.map(renderAllowanceGroup)}
-                        {renderSubtotal(completedGroups)}
+                        {useOldCardStyle
+                          ? <>{completedGroups.map(renderAllowanceGroup)}{renderSubtotal(completedGroups)}</>
+                          : renderAllowanceFlatGrid(completedGroups, 'al-completed')}
                       </>
                     )}
                   </>

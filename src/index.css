@@ -1468,6 +1468,10 @@ button.jps-term-label { cursor: pointer; }
 }
 .jps-term:hover .jps-term-tip,
 .jps-term:focus-within .jps-term-tip { opacity: 1; visibility: visible; }
+/* For terms near the right edge of a container (e.g. the last column in a grid) —
+   anchor the tip to the right of the label instead, so it opens leftward and
+   doesn't get clipped by an ancestor's overflow: hidden. */
+.jps-term-tip-right { left: auto; right: 0; }
 
 /* Status column header — dotted-underline term + richer tooltip */
 .sp-status-head { gap: 4px; }
@@ -1613,6 +1617,30 @@ button.jps-term-label { cursor: pointer; }
 /* Nested allowance grid — title, approved date, price (pre-tax), tax, total price */
 .jps-table-allowance-dated { display: grid; grid-template-columns: 2.4fr 0.9fr 0.8fr 0.7fr 0.9fr; }
 .jps-table-allowance-dated-no-impact { display: grid; grid-template-columns: 2.6fr 0.9fr 0.7fr; }
+/* Single-grid allowance list (experiment) — title, date, allowance, subtotal, tax, total price,
+   difference, with nested approved items indented under each allowance row using the same columns. */
+.jps-table-allowance-flat { display: grid; grid-template-columns: 1.8fr 0.7fr 0.7fr 0.7fr 0.6fr 0.7fr 0.7fr; }
+.jps-table-allowance-flat .jps-col-title { display: flex; align-items: center; gap: 6px; }
+/* Scoped to this grid only (Fixed price tab) — light header/footer, black column titles,
+   white allowance rows with a divider line marking each new allowance section. */
+.jps-table-header.jps-table-allowance-flat { background: var(--g50); }
+.jps-table > .jps-table-header.jps-table-allowance-flat > div { color: var(--bt-midnight); }
+.jps-table-row.jps-table-allowance-flat.jps-row-total,
+.jps-table-row.jps-table-allowance-flat.jps-row-total:hover { background: var(--g50); }
+.jps-table-row.jps-table-allowance-flat:not(.jps-row-nested):not(.jps-row-total) {
+  background: #fff;
+  border-top: 1px solid var(--g200);
+}
+.jps-table-row.jps-table-allowance-flat:not(.jps-row-nested):not(.jps-row-total) > div {
+  font-weight: 700; color: var(--bt-midnight);
+}
+.jps-table-row.jps-table-allowance-flat:not(.jps-row-nested):not(.jps-row-total) .jps-item-name {
+  font-weight: 700; color: var(--bt-midnight);
+}
+.jps-table-row.jps-table-allowance-flat:not(.jps-row-nested):not(.jps-row-total):hover { background: var(--g50); }
+.jps-row-allowance-toggle { cursor: pointer; }
+.jps-row-nested > div { font-size: 12.5px; color: var(--g600); }
+.jps-row-nested .jps-col-title { padding-left: 40px; }
 /* Sortable header cell */
 .jps-col-sortable { cursor: pointer; user-select: none; display: flex; align-items: center; gap: 4px; line-height: 1; }
 .jps-col-sortable svg { margin-top: 1px; }
@@ -1874,6 +1902,20 @@ button.jps-term-label { cursor: pointer; }
 .jps-print-table thead th.jps-print-th-date,
 .jps-print-table tbody td.jps-print-td-date { white-space: nowrap; width: 1%; }
 .jps-print-table tbody td:first-child { word-break: break-word; overflow-wrap: anywhere; }
+/* Allowance print table has 7 columns (Title, Date, Allowance, Subtotal, Tax, Total price,
+   Difference) — fix column widths so Title keeps enough room instead of being squeezed. */
+.jps-print-table-allowance { table-layout: fixed; }
+.jps-print-table-allowance th,
+.jps-print-table-allowance td { overflow: hidden; }
+.jps-print-table-allowance th:nth-child(1),
+.jps-print-table-allowance td:nth-child(1) { width: 26%; }
+.jps-print-table.jps-print-table-allowance th.jps-print-th-date,
+.jps-print-table.jps-print-table-allowance td.jps-print-td-date { width: 11%; }
+.jps-print-table-allowance th:nth-child(n+3),
+.jps-print-table-allowance td:nth-child(n+3) { width: 12.6%; }
+/* Compact variant — Subtotal + Tax columns hidden, 5 columns total instead of 7. */
+.jps-print-table-allowance.jps-print-table-allowance-compact th:nth-child(n+3),
+.jps-print-table-allowance.jps-print-table-allowance-compact td:nth-child(n+3) { width: 21%; }
 /* Sortable print header: click to toggle sort, icon inline with label */
 .jps-print-table thead th.jps-print-th-sortable { cursor: pointer; user-select: none; }
 .jps-print-table thead th.jps-print-th-sortable:hover { color: var(--bt-blue); }
