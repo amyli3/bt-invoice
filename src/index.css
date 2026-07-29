@@ -6646,7 +6646,7 @@ button.jps-term-label { cursor: pointer; }
 
 .selv2-cell-name { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .selv2-row-icon { display: inline-flex; align-items: center; color: var(--g500); flex-shrink: 0; }
-.selv2-cell-mono { color: var(--g600); }
+.selv2-cell-mono { color: var(--g600); white-space: nowrap; }
 .selv2-cell-type { color: var(--g600); }
 
 .selv2-row-disabled { opacity: 0.55; }

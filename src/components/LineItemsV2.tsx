@@ -5,7 +5,7 @@ import { fmt, parseTaxRate } from '../utils';
 import { costCodeLabel } from '../selectionsData';
 import { BdsBadge } from '../bds';
 
-function AddFromDropdown({ onOpenEstimate, onOpenSelections2b, onOpenSelections3 }: { onOpenEstimate?: () => void; onOpenSelections?: () => void; onOpenSelections2?: () => void; onOpenSelections2b?: () => void; onOpenSelections3?: () => void; onOpenAll?: () => void }) {
+function AddFromDropdown({ onOpenEstimate, onOpenSelections2b, onOpenSelections3, onOpenAll }: { onOpenEstimate?: () => void; onOpenSelections?: () => void; onOpenSelections2?: () => void; onOpenSelections2b?: () => void; onOpenSelections3?: () => void; onOpenAll?: () => void }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -42,14 +42,9 @@ function AddFromDropdown({ onOpenEstimate, onOpenSelections2b, onOpenSelections3
           <button className="add-from-option" onClick={() => { setOpen(false); onOpenSelections3?.(); }}>
             <span style={{ fontWeight: 500 }}>Selections 2 (old)</span>
           </button>
-          {/*
-          <button className="add-from-option" onClick={() => { setOpen(false); onOpenSelections3?.(); }}>
-            <span style={{ fontWeight: 500 }}>Selection 3</span>
-          </button>
           <button className="add-from-option" onClick={() => { setOpen(false); onOpenAll?.(); }} style={{ borderTop: '1px solid var(--g200)' }}>
             <span style={{ fontWeight: 600 }}>All sources</span>
           </button>
-          */}
         </div>
       )}
     </div>

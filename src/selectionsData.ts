@@ -350,6 +350,57 @@ export const INVOICE_STANDALONE_SELECTIONS: StandaloneSelection[] = [
 ];
 
 /* ─────────────────────────────────────────────────────────────────────────
+   Standalone selections, grouped — a selection can have multiple approved
+   line items under it (e.g. a "Flooring Tile" selection with 4 approved
+   options), and they invoice together as ONE line, the same way an
+   allowance's selections net into one line. This is the grouped/nested
+   sibling of INVOICE_STANDALONE_SELECTIONS above (which stays flat for its
+   existing consumers — invoice-2's wizard, the Selections grid).
+   ───────────────────────────────────────────────────────────────────────── */
+export type SelectionGroupOption = {
+  id: string;
+  name: string;        // the specific chosen product/line item
+  costCode: string;
+  costType: string;
+  approvedPrice: number;
+};
+export type StandaloneSelectionGroup = {
+  id: string;
+  title: string;        // the selection/decision, e.g. "Flooring Tile"
+  scenarioNote?: string;
+  options: SelectionGroupOption[];
+};
+
+export const INVOICE_STANDALONE_SELECTION_GROUPS: StandaloneSelectionGroup[] = [
+  {
+    id: 'selg-1',
+    title: 'Front entry hardware',
+    scenarioNote: 'No allowance backing — invoices the approved price directly.',
+    options: [
+      { id: 'ss-1', name: 'Front door hardware', costCode: '8020 - Hardware', costType: 'Material', approvedPrice: 850 },
+    ],
+  },
+  {
+    id: 'selg-2',
+    title: 'Mailbox',
+    options: [
+      { id: 'ss-2', name: 'Custom mailbox', costCode: '2050 - Sitework', costType: 'Material', approvedPrice: 320 },
+    ],
+  },
+  {
+    id: 'selg-3',
+    title: 'Flooring Tile',
+    scenarioNote: 'One selection, four approved line items across different cost codes — they still invoice together as a single line, not separately.',
+    options: [
+      { id: 'ss-3a', name: 'Porcelain Tile — Living Room', costCode: '9070 - Tile', costType: 'Material', approvedPrice: 2400 },
+      { id: 'ss-3b', name: 'Mosaic Accent — Entryway', costCode: '9075 - Decorative Tile', costType: 'Material', approvedPrice: 650 },
+      { id: 'ss-3c', name: 'Grout & Sealant', costCode: '9072 - Tile Supplies', costType: 'Material', approvedPrice: 180 },
+      { id: 'ss-3d', name: 'Tile Installation Labor', costCode: '6030 - Flooring Labor', costType: 'Labor', approvedPrice: 3200 },
+    ],
+  },
+];
+
+/* ─────────────────────────────────────────────────────────────────────────
    Standalone allowances — allowances with no selections chosen yet. There's
    no variance to reconcile, so they bill as a single flat line (the allowance
    amount) and render as a lightweight row, exactly like a standalone

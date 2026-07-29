@@ -75,9 +75,10 @@ const fmt = (n: number) => n.toLocaleString('en-US', { minimumFractionDigits: 2,
 interface Props {
   jobOpen?: boolean;
   onToggleJob?: () => void;
+  onBuildProposal?: () => void;
 }
 
-export default function EstimatePage({ jobOpen, onToggleJob }: Props) {
+export default function EstimatePage({ jobOpen, onToggleJob, onBuildProposal }: Props) {
   const [groupBy, setGroupBy] = useState<'proposal' | 'costcode'>('proposal');
   const estimateData = groupBy === 'proposal' ? proposalData : costCodeData;
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set(proposalData.map(g => g.group)));
@@ -164,7 +165,7 @@ export default function EstimatePage({ jobOpen, onToggleJob }: Props) {
         <div className="ep-actions-right">
           <button className="btn btn-s">Lock estimate</button>
           <button className="btn btn-s">Send to budget</button>
-          <button className="btn btn-p">Build proposal</button>
+          <button className="btn btn-p" onClick={onBuildProposal}>Build proposal</button>
           <button className="btn btn-s">Export</button>
         </div>
       </div>

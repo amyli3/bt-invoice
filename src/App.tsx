@@ -28,6 +28,7 @@ import { INVOICE_SELECTION_SCENARIOS, INVOICE_STANDALONE_SELECTIONS } from './se
 import ChangeOrderPage, { type COInvoiceTarget } from './components/ChangeOrderPage';
 import ChangeOrderListPage from './components/ChangeOrderListPage';
 import EstimatePage from './components/EstimatePage';
+import ProposalPage from './components/ProposalPage';
 import ClientSelections from './components/ClientSelections';
 import ClientSelections2 from './components/ClientSelections2';
 import ClientSelections3 from './components/ClientSelections3';
@@ -38,9 +39,9 @@ import UnderageFlows from './components/UnderageFlows';
 import { JOBS } from './mockData';
 import { getNextId } from './mockData';
 
-type PageType = 'invoice' | 'invoice-2' | 'invoice-3' | 'client-preview-invoice' | 'job-price-summary' | 'selections' | 'option-detail' | 'progress-invoice' | 'change-order' | 'change-order-list' | 'client-portal' | 'client-jps' | 'estimate' | 'client-selections' | 'client-selections-2' | 'client-selections-3' | 'job-costing-budget' | 'underage-flows' | 'job-details-clients';
+type PageType = 'invoice' | 'invoice-2' | 'invoice-3' | 'invoice-3-modal' | 'client-preview-invoice' | 'job-price-summary' | 'selections' | 'option-detail' | 'progress-invoice' | 'change-order' | 'change-order-list' | 'client-portal' | 'client-jps' | 'estimate' | 'job-proposal' | 'client-selections' | 'client-selections-2' | 'client-selections-3' | 'job-costing-budget' | 'underage-flows' | 'job-details-clients';
 
-const validPages: PageType[] = ['invoice', 'invoice-2', 'invoice-3', 'client-preview-invoice', 'job-price-summary', 'selections', 'option-detail', 'progress-invoice', 'change-order', 'change-order-list', 'client-portal', 'client-jps', 'estimate', 'client-selections', 'client-selections-2', 'client-selections-3', 'job-costing-budget', 'underage-flows', 'job-details-clients'];
+const validPages: PageType[] = ['invoice', 'invoice-2', 'invoice-3', 'invoice-3-modal', 'client-preview-invoice', 'job-price-summary', 'selections', 'option-detail', 'progress-invoice', 'change-order', 'change-order-list', 'client-portal', 'client-jps', 'estimate', 'job-proposal', 'client-selections', 'client-selections-2', 'client-selections-3', 'job-costing-budget', 'underage-flows', 'job-details-clients'];
 
 function getInitialPage(): PageType {
   // Support ?page=X query param (used when hash is occupied by Figma capture)
@@ -553,8 +554,19 @@ export default function App() {
         <div style={{display: 'flex', flex: 1, minHeight: 0}}>
           <JobSidebar open={jobOpen} onToggle={() => setJobOpen(false)} selectedJob={selectedJob} onSelectJob={(id) => { setSelectedJob(id); if (isNarrow) setJobOpen(false); }} onHomeClick={() => setActivePage('client-portal')} />
           <div className="content-area">
-            <EstimatePage jobOpen={jobOpen} onToggleJob={() => setJobOpen(true)} />
+            <EstimatePage jobOpen={jobOpen} onToggleJob={() => setJobOpen(true)} onBuildProposal={() => setActivePage('job-proposal')} />
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (activePage === 'job-proposal') {
+    return (
+      <div style={{display: 'flex', flexDirection: 'column', height: '100vh'}}>
+        <TopNav onNavigate={(page) => setActivePage(page as PageType)} />
+        <div style={{flex: 1, overflowY: 'auto'}}>
+          <ProposalPage onBack={() => setActivePage('estimate')} />
         </div>
       </div>
     );
@@ -692,7 +704,88 @@ export default function App() {
     );
   }
 
-  const isInvoiceV2Like = activePage === 'invoice-2' || activePage === 'invoice-3';
+  const isInvoiceV2Like = activePage === 'invoice-2' || activePage === 'invoice-3' || activePage === 'invoice-3-modal';
+  // 'invoice-3' and 'invoice-3-modal' are the same reimagine content — the
+  // latter is just presented as a modal over Job Price Summary instead of a
+  // full page. Wizards launched from the "Add from" dropdown need to open in
+  // both.
+  const isInvoice3Family = activePage === 'invoice-3' || activePage === 'invoice-3-modal';
+  const showInvoiceAsModal = activePage === 'invoice-3-modal';
+
+  const renderInvoiceBuilder = () => (
+    <>
+      <PageHeader invoice={invoice} jobOpen={jobOpen} onToggleJob={() => setJobOpen(true)} />
+
+      <div className="view-toggle">
+        <div className="tabs">
+          <button className={"tab" + (activeView === 'builder' ? ' on' : '')} onClick={() => setActiveView('builder')}>Builder</button>
+          <button className={"tab" + (activeView === 'preview' ? ' on' : '')} onClick={() => setActiveView('preview')}>Preview</button>
+        </div>
+      </div>
+
+      <div className="split">
+        <div
+          className={"builder" + (previewHidden && isInvoiceV2Like && !isNarrow ? ' builder-full' : '')}
+          style={isNarrow && activeView !== 'builder' ? {display: 'none'} : {}}
+        >
+          <InvoiceInfo invoice={invoice} onChange={setInvoice} />
+          <OwnerPrice invoice={invoice} onChange={setInvoice} />
+          {invoice.mode === 'lineItems' && (isInvoiceV2Like
+            ? <LineItemsV2 invoice={invoice} onChange={setInvoice} vis={vis} onVisChange={setVis} stackView={stackView} onStackViewChange={setStackView} onOpenEstimate={() => setEstModalOpen(true)} onOpenSelections={() => setSelV2ModalOpen(true)} onOpenSelections2={() => setSelV4ModalOpen(true)} onOpenSelections2b={() => setSelV5ModalOpen(true)} onOpenSelections3={() => setSelV2on3ModalOpen(true)} onOpenAll={() => setAddAllModalOpen(true)} />
+            : <LineItems invoice={invoice} onChange={setInvoice} vis={vis} onVisChange={setVis} onOpenEstimate={() => setEstModalOpen(true)} onOpenSelections={() => setSelModalOpen(true)} />)}
+          <Notes invoice={invoice} onChange={setInvoice} />
+        </div>
+        <div className="preview" style={{
+          ...(isNarrow && activeView !== 'preview' ? {display: 'none'} : {}),
+          padding: 0,
+          display: (isNarrow && activeView !== 'preview') || (previewHidden && isInvoiceV2Like && !isNarrow) ? 'none' : 'flex',
+          flexDirection: 'column',
+        }}>
+          <div className="preview-tabs">
+            <div className="preview-tabs-left">
+              <button className={"preview-tab" + (previewTab === 'client' ? ' on' : '')} onClick={() => setPreviewTab('client')}>Client preview</button>
+              <button className={"preview-tab" + (previewTab === 'email' ? ' on' : '')} onClick={() => setPreviewTab('email')}>Email preview</button>
+            </div>
+            <div className="preview-tabs-right">
+              {previewTab === 'client' && (
+                <>
+                  {isInvoiceV2Like && (
+                    <div className="client-group-toggle" role="tablist" aria-label="Group line items for client">
+                      <button type="button" className={"client-group-tab" + (clientGroupBy === 'estimate' ? ' on' : '')} onClick={() => setClientGroupBy('estimate')} aria-selected={clientGroupBy === 'estimate'}>By estimate</button>
+                      <button type="button" className={"client-group-tab" + (clientGroupBy === 'costcode' ? ' on' : '')} onClick={() => setClientGroupBy('costcode')} aria-selected={clientGroupBy === 'costcode'}>By cost code</button>
+                      <button type="button" className={"client-group-tab" + (clientGroupBy === 'all' ? ' on' : '')} onClick={() => setClientGroupBy('all')} aria-selected={clientGroupBy === 'all'}>All line items</button>
+                    </div>
+                  )}
+                  <ClientColumnToggle columns={clientVis} onChange={setClientVis} />
+                </>
+              )}
+            </div>
+          </div>
+          <div style={{flex: 1, overflowY: 'auto', padding: 24, background: 'var(--g50)'}}>
+            {previewTab === 'client' && <ClientPreview invoice={invoice} clientVis={clientVis} groupBy={isInvoiceV2Like ? clientGroupBy : 'estimate'} />}
+            {previewTab === 'email' && <EmailPreview invoice={invoice} />}
+          </div>
+        </div>
+      </div>
+
+      <div className="bbar">
+        <button className="btn btn-s" onClick={() => showInvoiceAsModal ? setActivePage('job-price-summary') : setInvoice(defaultInvoice)}>Cancel</button>
+        {isInvoiceV2Like && !isNarrow && (
+          <button
+            type="button"
+            className="btn btn-s"
+            onClick={() => setPreviewHidden(h => !h)}
+            title={previewHidden ? 'Show client preview' : 'Hide client preview'}
+            aria-pressed={!previewHidden}
+          >
+            Client preview
+          </button>
+        )}
+        <button className="btn btn-s">Save</button>
+        <button className="btn btn-p">Send</button>
+      </div>
+    </>
+  );
 
   return (
     <div style={{display: 'flex', flexDirection: 'column', height: '100vh'}}>
@@ -700,78 +793,26 @@ export default function App() {
       <div style={{display: 'flex', flex: 1, minHeight: 0}}>
         <JobSidebar open={jobOpen} onToggle={() => setJobOpen(false)} selectedJob={selectedJob} onSelectJob={(id) => { setSelectedJob(id); if (isNarrow) setJobOpen(false); }} onHomeClick={() => setActivePage('client-portal')} />
         <div className="content-area">
-          <PageHeader invoice={invoice} jobOpen={jobOpen} onToggleJob={() => setJobOpen(true)} />
-
-          <div className="view-toggle">
-            <div className="tabs">
-              <button className={"tab" + (activeView === 'builder' ? ' on' : '')} onClick={() => setActiveView('builder')}>Builder</button>
-              <button className={"tab" + (activeView === 'preview' ? ' on' : '')} onClick={() => setActiveView('preview')}>Preview</button>
-            </div>
-          </div>
-
-          <div className="split">
-            <div
-              className={"builder" + (previewHidden && isInvoiceV2Like && !isNarrow ? ' builder-full' : '')}
-              style={isNarrow && activeView !== 'builder' ? {display: 'none'} : {}}
-            >
-              <InvoiceInfo invoice={invoice} onChange={setInvoice} />
-              <OwnerPrice invoice={invoice} onChange={setInvoice} />
-              {invoice.mode === 'lineItems' && (isInvoiceV2Like
-                ? <LineItemsV2 invoice={invoice} onChange={setInvoice} vis={vis} onVisChange={setVis} stackView={stackView} onStackViewChange={setStackView} onOpenEstimate={() => setEstModalOpen(true)} onOpenSelections={() => setSelV2ModalOpen(true)} onOpenSelections2={() => setSelV4ModalOpen(true)} onOpenSelections2b={() => setSelV5ModalOpen(true)} onOpenSelections3={() => setSelV2on3ModalOpen(true)} onOpenAll={() => setAddAllModalOpen(true)} />
-                : <LineItems invoice={invoice} onChange={setInvoice} vis={vis} onVisChange={setVis} onOpenEstimate={() => setEstModalOpen(true)} onOpenSelections={() => setSelModalOpen(true)} />)}
-              <Notes invoice={invoice} onChange={setInvoice} />
-            </div>
-            <div className="preview" style={{
-              ...(isNarrow && activeView !== 'preview' ? {display: 'none'} : {}),
-              padding: 0,
-              display: (isNarrow && activeView !== 'preview') || (previewHidden && isInvoiceV2Like && !isNarrow) ? 'none' : 'flex',
-              flexDirection: 'column',
-            }}>
-              <div className="preview-tabs">
-                <div className="preview-tabs-left">
-                  <button className={"preview-tab" + (previewTab === 'client' ? ' on' : '')} onClick={() => setPreviewTab('client')}>Client preview</button>
-                  <button className={"preview-tab" + (previewTab === 'email' ? ' on' : '')} onClick={() => setPreviewTab('email')}>Email preview</button>
-                </div>
-                <div className="preview-tabs-right">
-                  {previewTab === 'client' && (
-                    <>
-                      {isInvoiceV2Like && (
-                        <div className="client-group-toggle" role="tablist" aria-label="Group line items for client">
-                          <button type="button" className={"client-group-tab" + (clientGroupBy === 'estimate' ? ' on' : '')} onClick={() => setClientGroupBy('estimate')} aria-selected={clientGroupBy === 'estimate'}>By estimate</button>
-                          <button type="button" className={"client-group-tab" + (clientGroupBy === 'costcode' ? ' on' : '')} onClick={() => setClientGroupBy('costcode')} aria-selected={clientGroupBy === 'costcode'}>By cost code</button>
-                          <button type="button" className={"client-group-tab" + (clientGroupBy === 'all' ? ' on' : '')} onClick={() => setClientGroupBy('all')} aria-selected={clientGroupBy === 'all'}>All line items</button>
-                        </div>
-                      )}
-                      <ClientColumnToggle columns={clientVis} onChange={setClientVis} />
-                    </>
-                  )}
-                </div>
-              </div>
-              <div style={{flex: 1, overflowY: 'auto', padding: 24, background: 'var(--g50)'}}>
-                {previewTab === 'client' && <ClientPreview invoice={invoice} clientVis={clientVis} groupBy={isInvoiceV2Like ? clientGroupBy : 'estimate'} />}
-                {previewTab === 'email' && <EmailPreview invoice={invoice} />}
-              </div>
-            </div>
-          </div>
-
-          <div className="bbar">
-            <button className="btn btn-s" onClick={() => setInvoice(defaultInvoice)}>Cancel</button>
-            {isInvoiceV2Like && !isNarrow && (
-              <button
-                type="button"
-                className="btn btn-s"
-                onClick={() => setPreviewHidden(h => !h)}
-                title={previewHidden ? 'Show client preview' : 'Hide client preview'}
-                aria-pressed={!previewHidden}
-              >
-                Client preview
-              </button>
-            )}
-            <button className="btn btn-s">Save</button>
-            <button className="btn btn-p">Send</button>
-          </div>
+          {showInvoiceAsModal
+            ? <JobPriceSummary jobOpen={jobOpen} onToggleJob={() => setJobOpen(true)} shareBudgetDiff={shareBudgetDiff} onShareBudgetDiffChange={setShareBudgetDiff} onOpenSelection={(sel) => { setSelectedOption(sel); setOptionOpenedFrom('job-price-summary'); setActivePage('option-detail'); }} onOpenJCB={() => setActivePage('job-costing-budget')} onOpenClientPermissions={() => setActivePage('job-details-clients')} />
+            : renderInvoiceBuilder()}
         </div>
       </div>
+      {showInvoiceAsModal && (
+        <div className="modal-backdrop" onClick={() => setActivePage('job-price-summary')}>
+          <div className="est-modal" style={{height: '88vh', position: 'relative'}} onClick={e => e.stopPropagation()}>
+            <button
+              className="est-modal-close"
+              onClick={() => setActivePage('job-price-summary')}
+              aria-label="Close"
+              style={{ position: 'absolute', top: 14, right: 16, zIndex: 1 }}
+            >
+              &times;
+            </button>
+            {renderInvoiceBuilder()}
+          </div>
+        </div>
+      )}
       <EstimateModal
         open={estModalOpen}
         onClose={() => setEstModalOpen(false)}
@@ -798,20 +839,20 @@ export default function App() {
         data={selectionsModalData}
       />
       <SelectionsModalV3
-        open={selV2ModalOpen && activePage === 'invoice-3'}
+        open={selV2ModalOpen && isInvoice3Family}
         onClose={() => setSelV2ModalOpen(false)}
         onAdd={handleAddFromSelections}
         addedChildIds={invoice.lineItems.flatMap(li => li.relatedItem?.childIds ?? [])}
         data={selection3Data}
       />
       <SelectionsModalV4
-        open={selV4ModalOpen && activePage === 'invoice-3'}
+        open={selV4ModalOpen && isInvoice3Family}
         onClose={() => setSelV4ModalOpen(false)}
         onAdd={handleAddFromSelections}
         addedChildIds={invoice.lineItems.flatMap(li => li.relatedItem?.childIds ?? [])}
       />
       <SelectionsModalV5
-        open={selV5ModalOpen && activePage === 'invoice-3'}
+        open={selV5ModalOpen && isInvoice3Family}
         onClose={() => setSelV5ModalOpen(false)}
         onAdd={handleAddFromSelections}
         addedChildIds={invoice.lineItems.flatMap(li => li.relatedItem?.childIds ?? [])}
@@ -819,14 +860,14 @@ export default function App() {
         newInvoiceType={invoice.type ?? 'invoice'}
       />
       <SelectionsModalV2
-        open={selV2on3ModalOpen && activePage === 'invoice-3'}
+        open={selV2on3ModalOpen && isInvoice3Family}
         onClose={() => setSelV2on3ModalOpen(false)}
         onAdd={handleAddFromSelections}
         addedChildIds={invoice.lineItems.flatMap(li => li.relatedItem?.childIds ?? [])}
         data={selection3Data}
       />
       <AddFromAllModal
-        open={addAllModalOpen && activePage === 'invoice-3'}
+        open={addAllModalOpen && isInvoice3Family}
         onClose={() => setAddAllModalOpen(false)}
         onAdd={(items) => setInvoice(inv => ({ ...inv, lineItems: [...inv.lineItems, ...items] }))}
       />

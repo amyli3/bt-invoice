@@ -33,6 +33,12 @@ const AllowanceIcon = () => (
   </svg>
 );
 
+const SelectionIcon = () => (
+  <svg width="13" height="13" viewBox="0 0 13 13" fill="none" style={{ flexShrink: 0 }}>
+    <path fillRule="evenodd" clipRule="evenodd" d="M1.55443 0.826519C1.64598 0.307348 2.12272 -0.0471547 2.63892 0.00510098L2.71289 0.0153593L6.15972 0.623128C6.67889 0.714673 7.03339 1.19141 6.98113 1.70761L6.97088 1.78158L6.278 5.708L10.025 4.34428C10.5192 4.16438 11.0633 4.39852 11.2771 4.86954L11.3067 4.94195L12.5038 8.23088C12.5877 8.46141 12.5837 8.71404 12.4939 8.94088L12.4932 11.6711C12.4932 12.1983 12.0853 12.6302 11.5679 12.6684L11.4932 12.6711H2.74322C2.60006 12.6711 2.45964 12.6602 2.31842 12.6381C0.836606 12.406 -0.176726 10.9928 0.025735 9.50854L0.0427299 9.39982L1.55443 0.826519ZM11.493 9.663L5.975 11.671L11.4932 11.6711L11.493 9.663ZM1.02754 9.57347L2.53924 1.00017L5.98607 1.60794L4.46664 10.225L4.44771 10.3178C4.24197 11.2051 3.38338 11.7924 2.47301 11.6501C1.51423 11.4999 0.855115 10.5513 1.02754 9.57347ZM10.367 5.28397L6.0775 6.845L5.45145 10.3987C5.42454 10.5513 5.38551 10.6987 5.33552 10.8402L11.5641 8.5729L10.367 5.28397ZM3.49324 9.92112C3.49324 9.50691 3.15745 9.17112 2.74324 9.17112C2.32902 9.17112 1.99324 9.50691 1.99324 9.92112C1.99324 10.3353 2.32902 10.6711 2.74324 10.6711C3.15745 10.6711 3.49324 10.3353 3.49324 9.92112Z" fill="currentColor"/>
+  </svg>
+);
+
 function fmtCurrency(v: number) {
   const abs = Math.abs(v);
   const s = '$' + fmt(abs);
@@ -66,14 +72,21 @@ export interface Selections2Allowance {
   requiresManualComplete?: boolean;
   selections: Selections2Selection[];
 }
-export interface Selections2Standalone {
+// A selection can have multiple approved line items under it (e.g. a
+// "Flooring Tile" selection with 4 approved options); they invoice together
+// as ONE line, same as an allowance's selections net into one line.
+export interface Selections2StandaloneOption {
   id: string;
-  title?: string;
   name: string;
   costCode: string;
   costType: string;
   approvedPrice: number;
+}
+export interface Selections2Standalone {
+  id: string;
+  title: string;
   scenarioNote?: string;
+  options: Selections2StandaloneOption[];
 }
 
 /* ─── Outgoing payload shape (matches handleSelectionsWizardAdd in AIAPayApp) ─── */
@@ -124,7 +137,9 @@ export default function SelectionsModal2({ open, onClose, onAdd, data: allData, 
     !a.selections.some(s => addedSet.has(s.id)) &&
     !a.selections.some(s => s.status === 'pending'),
   );
-  const standalone = allStandalone.filter(s => !addedSet.has(s.id));
+  // Hide a standalone selection once any of its options is already added —
+  // its options invoice together, so partial hiding would be misleading.
+  const standalone = allStandalone.filter(g => !g.options.some(o => addedSet.has(o.id)));
 
   useEffect(() => {
     if (!open) return;
@@ -136,6 +151,7 @@ export default function SelectionsModal2({ open, onClose, onAdd, data: allData, 
       if (hasPend) return;
       done[a.id] = a.requiresManualComplete ? !!completedIds?.has(a.id) : true;
     });
+    standalone.forEach(g => { e[g.id] = true; });
     setCompleted(done);
     setChecked({});
     setExpanded(e);
@@ -163,7 +179,13 @@ export default function SelectionsModal2({ open, onClose, onAdd, data: allData, 
     setChecked(c => ({ ...c, [a.id]: !c[a.id] }));
   };
   const toggleExpand = (id: string) => setExpanded(e => ({ ...e, [id]: !e[id] }));
-  const toggleStandalone = (id: string) => setChecked(c => ({ ...c, [id]: !c[id] }));
+  // Total across a standalone selection's approved options — this is what
+  // invoices as ONE line, whether it has one option or several.
+  const standaloneTotal = (g: Selections2Standalone) => g.options.reduce((s, o) => s + o.approvedPrice, 0);
+  const toggleStandaloneGroup = (g: Selections2Standalone) => {
+    if (standaloneTotal(g) === 0) return;
+    setChecked(c => ({ ...c, [g.id]: !c[g.id] }));
+  };
 
   const catOf = (cc: string) => { const i = cc.indexOf(' - '); return i >= 0 ? cc.slice(i + 3).trim() : cc; };
 
@@ -177,9 +199,7 @@ export default function SelectionsModal2({ open, onClose, onAdd, data: allData, 
   const creditCards = data.filter(a => variance(a) < 0);
   const chargeIds = chargeCards.filter(a => isTrueable(a) && variance(a) !== 0).map(a => a.id);
   const creditIds = creditCards.filter(a => isTrueable(a)).map(a => a.id);
-  const selKeys = standalone.map(s => s.id);
-  const selSelState = triState(selKeys);
-  const toggleSel = () => setMany(selKeys, selSelState !== 'all');
+  const selKeys = standalone.map(g => g.id);
   const allBillableIds = [...chargeIds, ...creditIds, ...selKeys];
   const allSelState = triState(allBillableIds);
   const toggleAll = () => setMany(allBillableIds, allSelState !== 'all');
@@ -228,20 +248,25 @@ export default function SelectionsModal2({ open, onClose, onAdd, data: allData, 
       };
     });
 
+  // Standalone selections → ONE net line per selection, carrying every
+  // approved option in rolledUp — same "net into one line, break out on
+  // demand" pattern as allowances. sourceChildIds carries the real option
+  // ids so the SOV lookup resolves all of them and they land together.
   const outgoingStandalone: OutGroup[] = standalone
-    .filter(s => checked[s.id])
-    .map(s => ({
-      id: s.id,
+    .filter(g => checked[g.id])
+    .map(g => ({
+      id: g.id,
       type: 'selection' as const,
-      name: s.name,
+      name: g.title,
       children: [{
-        id: s.id,
-        lineItem: s.name,
-        costCode: s.costCode,
-        costType: s.costType,
-        selection: s.name,
-        newInvoiceAmt: s.approvedPrice,
-        sourceChildIds: [s.id],
+        id: `${g.id}-sel`,
+        lineItem: g.title,
+        costCode: g.options[0]?.costCode ?? '',
+        costType: g.options[0]?.costType,
+        selection: g.title,
+        newInvoiceAmt: standaloneTotal(g),
+        sourceChildIds: g.options.map(o => o.id),
+        rolledUp: g.options.map(o => ({ name: o.name, amount: o.approvedPrice, costCode: o.costCode })),
       }],
     }));
 
@@ -260,10 +285,16 @@ export default function SelectionsModal2({ open, onClose, onAdd, data: allData, 
     <span className={"est-group-chevron" + (isOpen ? " open" : "")}>&#9654;</span>
   );
 
-  const allExpanded = data.length > 0 && data.every(a => expanded[a.id]);
+  const allExpanded = (data.length > 0 || standalone.length > 0)
+    && data.every(a => expanded[a.id]) && standalone.every(g => expanded[g.id]);
   const toggleExpandAll = () => {
     const next = !allExpanded;
-    setExpanded(e => { const v = { ...e }; data.forEach(a => { v[a.id] = next; }); return v; });
+    setExpanded(e => {
+      const v = { ...e };
+      data.forEach(a => { v[a.id] = next; });
+      standalone.forEach(g => { v[g.id] = next; });
+      return v;
+    });
   };
 
   const renderAllowance = (a: Selections2Allowance) => {
@@ -343,13 +374,13 @@ export default function SelectionsModal2({ open, onClose, onAdd, data: allData, 
                 <col style={{ width: 40 }} />
                 <col />
                 <col />
-                <col style={{ width: 150 }} />
+                <col style={{ width: 190 }} />
                 <col style={{ width: 130 }} />
               </colgroup>
               <thead>
                 <tr>
                   <th></th>
-                  <th>Selection line item</th>
+                  <th>Option line item</th>
                   <th>Selection title</th>
                   <th>Cost code</th>
                   <th style={{ textAlign: 'right' }}>Amount</th>
@@ -367,6 +398,78 @@ export default function SelectionsModal2({ open, onClose, onAdd, data: allData, 
                     <td>{s.title}</td>
                     <td className="selv2-cell-mono">{s.costCode}</td>
                     <td style={{ textAlign: 'right', fontWeight: 500 }}>${fmt(s.approvedPrice)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // A standalone selection — same card shell as an allowance (single
+  // checkbox, expandable breakdown), but no deposit/variance concept: just a
+  // decision with one or more approved options that invoice together as one line.
+  const renderStandaloneGroup = (g: Selections2Standalone) => {
+    const isOpen = !!expanded[g.id];
+    const isOn = !!checked[g.id];
+    const total = standaloneTotal(g);
+
+    return (
+      <div key={g.id} className="selv2-group">
+        <div className="selv2-group-header">
+          <div className="selv2-group-left">
+            <div
+              className={"est-check" + (isOn ? ' on' : '')}
+              onClick={() => toggleStandaloneGroup(g)}
+              title={isOn ? 'Will be added to this invoice' : 'Add to this invoice'}
+            />
+            <button type="button" className="selv2-chev-btn" onClick={() => toggleExpand(g.id)}>
+              {chevron(isOpen)}
+            </button>
+            <span className="selv2-group-icon"><SelectionIcon /></span>
+            <span className="selv2-group-name">{g.title}</span>
+            {g.scenarioNote && <ScenarioTooltip note={g.scenarioNote} />}
+          </div>
+          <div className="selv2-group-meta">
+            <div className="selv2-meta-item">
+              <div className="selv2-meta-label">Invoice amount</div>
+              <div className="selv2-meta-value selv2-meta-value-total">
+                {fmtCurrency(total)}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {isOpen && (
+          <div className="selv2-children">
+            <table className="selv2-table">
+              <colgroup>
+                <col style={{ width: 40 }} />
+                <col />
+                <col style={{ width: 190 }} />
+                <col style={{ width: 130 }} />
+              </colgroup>
+              <thead>
+                <tr>
+                  <th></th>
+                  <th>Option line item</th>
+                  <th>Cost code</th>
+                  <th style={{ textAlign: 'right' }}>Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                {g.options.map(o => (
+                  <tr key={o.id}>
+                    <td></td>
+                    <td>
+                      <div className="selv2-cell-name">
+                        <span>{o.name}</span>
+                      </div>
+                    </td>
+                    <td className="selv2-cell-mono">{o.costCode}</td>
+                    <td style={{ textAlign: 'right', fontWeight: 500 }}>${fmt(o.approvedPrice)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -429,46 +532,7 @@ export default function SelectionsModal2({ open, onClose, onAdd, data: allData, 
             {standalone.length > 0 && (
               <>
                 <div className="selv2-section-label" style={{ marginTop: data.length > 0 ? 24 : 0 }}>Selections</div>
-                <div className="selv2-children" style={{ background: 'white', border: '1px solid var(--g200)', borderRadius: 8, overflow: 'hidden' }}>
-                  <table className="selv2-table">
-                    <colgroup>
-                      <col style={{ width: 40 }} />
-                      <col />
-                      <col />
-                      <col style={{ width: 150 }} />
-                      <col style={{ width: 130 }} />
-                    </colgroup>
-                    <thead>
-                      <tr>
-                        <th><div className={"est-check" + (selSelState === 'all' ? ' on' : selSelState === 'partial' ? ' partial' : '')} onClick={toggleSel} style={{ cursor: 'pointer' }} title="Select all selections" /></th>
-                        <th>Selection line item</th>
-                        <th>Selection title</th>
-                        <th>Cost code</th>
-                        <th style={{ textAlign: 'right' }}>Amount</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {standalone.map(s => {
-                        const isOn = !!checked[s.id];
-                        return (
-                          <tr key={s.id}>
-                            <td>
-                              <div className={"est-check" + (isOn ? ' on' : '')} onClick={() => toggleStandalone(s.id)} />
-                            </td>
-                            <td>
-                              <div className="selv2-cell-name">
-                                <span>{s.name}</span>
-                              </div>
-                            </td>
-                            <td>{s.title || <span style={{ color: 'var(--g400)' }}>—</span>}</td>
-                            <td className="selv2-cell-mono">{s.costCode}</td>
-                            <td style={{ textAlign: 'right', fontWeight: 500 }}>${fmt(s.approvedPrice)}</td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
+                {standalone.map(renderStandaloneGroup)}
               </>
             )}
             {data.length === 0 && standalone.length === 0 && (

@@ -82,6 +82,14 @@ const ESTIMATE_LINES = {
   exterior: [
     { id: 'ee1', selId: 'ss-1', desc: '2060 - Exterior Hardware', estimate: 850, approved: 850, allowanceCode: '', selectionCode: '2060' },
   ],
+  // Standalone selection with multiple approved options under one decision —
+  // all four bill together as a brand-new contract line item.
+  flooringTile: [
+    { id: 'fte1', selId: 'ss-2a', desc: '9070 - Porcelain Tile — Living Room', estimate: 2400, approved: 2400, allowanceCode: '', selectionCode: '9070' },
+    { id: 'fte2', selId: 'ss-2b', desc: '9070 - Mosaic Accent — Entryway', estimate: 650, approved: 650, allowanceCode: '', selectionCode: '9070' },
+    { id: 'fte3', selId: 'ss-2c', desc: '9070 - Grout & Sealant', estimate: 180, approved: 180, allowanceCode: '', selectionCode: '9070' },
+    { id: 'fte4', selId: 'ss-2d', desc: '9070 - Tile Installation Labor', estimate: 3200, approved: 3200, allowanceCode: '', selectionCode: '9070' },
+  ],
 };
 
 // ─── "Add from Selections" modal data ─────────────────────────────
@@ -214,24 +222,42 @@ export const MODAL_ALLOWANCES: ModalAllowance[] = [
 ];
 
 // Standalone selection — no allowance backing at all, so there's nothing to
-// reconcile; it just bills at its approved price like a brand-new contract line.
-export interface ModalStandaloneSelection {
+// reconcile. A selection can have multiple approved line items under it (e.g.
+// a "Flooring Tile" selection with 4 approved options); they invoice together
+// as ONE line, the same way an allowance's selections net into one line.
+export interface ModalSelectionOption {
   id: string;
   name: string;
   costCode: string;
   costType: string;
   approvedPrice: number;
+}
+export interface ModalStandaloneSelectionGroup {
+  id: string;
+  title: string;
   scenarioNote?: string;
+  options: ModalSelectionOption[];
 }
 
-export const MODAL_STANDALONE_SELECTIONS: ModalStandaloneSelection[] = [
+export const MODAL_STANDALONE_SELECTIONS: ModalStandaloneSelectionGroup[] = [
   {
-    id: 'ss-1',
-    name: 'Exterior Hardware',
-    costCode: '2060 - Exterior Hardware',
-    costType: 'Material',
-    approvedPrice: 850,
+    id: 'selg-1',
+    title: 'Exterior Hardware',
     scenarioNote: 'Scenario · No allowance backing — invoices the approved price directly as a new line item',
+    options: [
+      { id: 'ss-1', name: 'Exterior Hardware', costCode: '2060 - Exterior Hardware', costType: 'Material', approvedPrice: 850 },
+    ],
+  },
+  {
+    id: 'selg-2',
+    title: 'Flooring Tile',
+    scenarioNote: 'Scenario · One selection, four approved line items — they invoice together as a single line, not separately',
+    options: [
+      { id: 'ss-2a', name: 'Porcelain Tile — Living Room', costCode: '9070 - Tile', costType: 'Material', approvedPrice: 2400 },
+      { id: 'ss-2b', name: 'Mosaic Accent — Entryway', costCode: '9070 - Tile', costType: 'Material', approvedPrice: 650 },
+      { id: 'ss-2c', name: 'Grout & Sealant', costCode: '9070 - Tile', costType: 'Material', approvedPrice: 180 },
+      { id: 'ss-2d', name: 'Tile Installation Labor', costCode: '9070 - Tile', costType: 'Labor', approvedPrice: 3200 },
+    ],
   },
 ];
 
@@ -407,6 +433,12 @@ function makeEstimateGroups() {
     // added, same as any brand-new/unbudgeted contract line item.
     exterior: {
       id: 'g13', label: 'Exterior Hardware',
+      lines: [] as SOVLine[],
+    },
+    // Standalone selection with multiple approved options — same idea, but
+    // all four options bill together as one group once added.
+    flooringTile: {
+      id: 'g14', label: 'Flooring Tile',
       lines: [] as SOVLine[],
     },
   };
@@ -645,8 +677,23 @@ function getCostCodeViewGroups(addedIds: string[], completedIds: Set<string> = n
     isFromSelection: true,
   } as SOVLine));
 
+  // Flooring Tile (standalone selection, multiple approved options) — same
+  // treatment, one new line per option, all under the one group heading.
+  const addedFlooringTileCO = ESTIMATE_LINES.flooringTile.filter(i => addedIds.includes(i.selId));
+  est.flooringTile.lines = addedFlooringTileCO.map(item => ({
+    id: `child-${item.id}`,
+    description: item.desc,
+    budget: item.approved,
+    previousInvoice: 0,
+    thisInvoice: item.approved,
+    storedMaterials: 0,
+    retainage: 0,
+    isFromSelection: true,
+  } as SOVLine));
+
   const groups: CostGroup[] = [est.electrical, est.masonry, est.framing, est.kitchen, est.flooring, est.plumbing, est.drywall, est.hardware, est.appliances];
   if (est.exterior.lines.length > 0) groups.push(est.exterior);
+  if (est.flooringTile.lines.length > 0) groups.push(est.flooringTile);
   return groups;
 }
 
@@ -662,11 +709,13 @@ function buildAdjLines(items: typeof ESTIMATE_LINES.kitchen, addedIds: string[],
   const matchedItems = addedItems.filter(item => item.selectionCode === item.allowanceCode);
   const mismatchedItems = addedItems.filter(item => item.selectionCode !== item.allowanceCode);
 
-  // Flat rows for mismatched items
+  // Flat rows for mismatched items — these cost codes weren't in the original
+  // contract, so nothing was scheduled there. Budget stays $0; the full price
+  // shows as This period, same as it's booked in the cost-code view.
   const flatLines: SOVLine[] = mismatchedItems.map(item => ({
     id: `adj-${item.id}`,
     description: item.desc,
-    budget: item.approved,
+    budget: 0,
     previousInvoice: 0,
     thisInvoice: item.approved,
     storedMaterials: 0,
@@ -813,7 +862,10 @@ function getSelAdjGroups(addedIds: string[], completedIds: Set<string> = new Set
 
   // Drywall: allowance was already invoiced ($11,000) in a prior application.
   // Reverse the approved amount of each selection, but cap at the allowance budget.
-  // Grid shows $0 budget for the allowance row when selections are added.
+  // Scheduled value stays $11,000 — that budget was genuinely part of the
+  // original contract at this code; only the balance/completion sides show
+  // it's been reversed. The new cost-code lines (Approved changes below) carry
+  // the shifted dollars instead, at $0 scheduled since they weren't original.
   const addedDrywallItems = ESTIMATE_LINES.drywall.filter(i => addedIds.includes(i.selId));
   const drywallApprovedSum = addedDrywallItems.reduce((s, i) => s + i.approved, 0);
   const drywallReversal = Math.min(drywallApprovedSum, 11000);
@@ -821,7 +873,7 @@ function getSelAdjGroups(addedIds: string[], completedIds: Set<string> = new Set
   est.drywall.lines = [{
     id: 'drywall-allowance',
     description: '5003 - Lighting Allowance',
-    budget: addedDrywallItems.length > 0 ? 0 : 11000,
+    budget: 11000,
     previousInvoice: 11000,
     thisInvoice: drywallReversal > 0 ? -drywallReversal : 0,
     storedMaterials: 0,
@@ -953,8 +1005,23 @@ function getSelAdjGroups(addedIds: string[], completedIds: Set<string> = new Set
     isFromSelection: true,
   } as SOVLine));
 
+  // Flooring Tile (standalone selection, multiple approved options) — same
+  // treatment, one new line per option, all under the one group heading.
+  const addedFlooringTileItems = ESTIMATE_LINES.flooringTile.filter(i => addedIds.includes(i.selId));
+  est.flooringTile.lines = addedFlooringTileItems.map(item => ({
+    id: `child-${item.id}`,
+    description: item.desc,
+    budget: item.approved,
+    previousInvoice: 0,
+    thisInvoice: item.approved,
+    storedMaterials: 0,
+    retainage: 0,
+    isFromSelection: true,
+  } as SOVLine));
+
   const groups: CostGroup[] = [est.electrical, est.masonry, est.framing, est.kitchen, est.flooring, est.plumbing, est.drywall, est.hardware, est.appliances];
   if (est.exterior.lines.length > 0) groups.push(est.exterior);
+  if (est.flooringTile.lines.length > 0) groups.push(est.flooringTile);
 
   // Kitchen/Flooring/Plumbing (same-cost-code cases) now show their full net
   // delta directly on the main allowance row's "This invoice" above — a
@@ -2109,14 +2176,10 @@ export default function AIAPayApp({ onNavigate, approvedCOIds, addedCostIds: ext
     })),
   }));
 
-  const progressStandaloneData: Selections2Standalone[] = MODAL_STANDALONE_SELECTIONS.map(ss => ({
-    id: ss.id,
-    name: ss.name,
-    costCode: ss.costCode,
-    costType: ss.costType,
-    approvedPrice: ss.approvedPrice,
-    scenarioNote: ss.scenarioNote,
-  }));
+  // MODAL_STANDALONE_SELECTIONS is already shaped as grouped selections
+  // (title + nested approved options) — Selections2Standalone matches that
+  // shape directly, so no remapping needed here.
+  const progressStandaloneData: Selections2Standalone[] = MODAL_STANDALONE_SELECTIONS;
 
   const handleSelectionsWizardAdd = (items: any[]) => {
     const newIds: string[] = [];

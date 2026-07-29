@@ -1,8 +1,6 @@
 import { useMemo, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { INVOICE_SELECTION_SCENARIOS, INVOICE_STANDALONE_SELECTIONS } from '../selectionsData';
 import { BTRelatedItemTag, RelatedItemType } from '../bds';
-import { EXISTING_INVOICES } from '../mockData';
 
 export type InvoiceWizardTarget =
   | { type: 'new'; invoiceType: 'invoice' | 'progress' }
@@ -388,13 +386,6 @@ export default function SelectionsPage({
   const [optionMenuOpen, setOptionMenuOpen] = useState(false);
   const [addToOpen, setAddToOpen] = useState(false);
   const closeAddToMenu = () => setAddToOpen(false);
-  // Opens a modal listing every existing invoice/progress invoice, grouped by
-  // type, for the builder to choose from.
-  const [existingPickerOpen, setExistingPickerOpen] = useState(false);
-  const [existingPickerSelection, setExistingPickerSelection] = useState('');
-  const [existingPickerListOpen, setExistingPickerListOpen] = useState(false);
-  const openExistingPicker = () => { setExistingPickerSelection(EXISTING_INVOICES[0]?.invoiceNumber ?? ''); setExistingPickerListOpen(false); setExistingPickerOpen(true); };
-  const closeExistingPicker = () => { setExistingPickerOpen(false); setExistingPickerListOpen(false); };
   const [viewMode, setViewMode] = useState<ViewMode>('allowance');
   const [viewLayout, setViewLayout] = useState<ViewLayout>('list');
   const [audience, setAudience] = useState<AudienceView>('builder');
@@ -789,11 +780,17 @@ export default function SelectionsPage({
                 Client view
               </button>
             </div>
-            <div style={{ position: 'relative' }}>
-              <button className="btn btn-s" style={{ gap: 4 }} onClick={() => setAddToOpen(o => !o)} aria-expanded={addToOpen}>
-                <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 2V12M2 7H12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+            <div className="od-split-btn" style={{ position: 'relative' }}>
+              <button
+                className="od-split-main"
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                onClick={() => onOpenInvoiceWizard?.(undefined, { type: 'new', invoiceType: 'invoice' })}
+              >
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 2V12M2 7H12" stroke="white" strokeWidth="1.5" strokeLinecap="round"/></svg>
                 Invoice
-                <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{ marginLeft: 2 }}><path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              </button>
+              <button className="od-split-caret" onClick={() => setAddToOpen(o => !o)} aria-label="Invoice types" aria-expanded={addToOpen}>
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 3.5L5 6.5L8 3.5" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
               </button>
               {addToOpen && (
                 <>
@@ -802,23 +799,9 @@ export default function SelectionsPage({
                     <button
                       type="button"
                       className="sp-mass-action-dropdown-item"
-                      onClick={() => { closeAddToMenu(); onOpenInvoiceWizard?.(undefined, { type: 'new', invoiceType: 'invoice' }); }}
-                    >
-                      New invoice
-                    </button>
-                    <button
-                      type="button"
-                      className="sp-mass-action-dropdown-item"
-                      onClick={() => { closeAddToMenu(); openExistingPicker(); }}
-                    >
-                      Existing invoice
-                    </button>
-                    <button
-                      type="button"
-                      className="sp-mass-action-dropdown-item"
                       onClick={() => { closeAddToMenu(); onOpenInvoiceWizard?.(undefined, { type: 'new', invoiceType: 'progress' }); }}
                     >
-                      New progress invoice
+                      Progress invoice
                     </button>
                   </div>
                 </>
@@ -1351,87 +1334,6 @@ export default function SelectionsPage({
         </div>
       )}
     </div>
-    {existingPickerOpen && createPortal(
-      <div className="modal-backdrop" onClick={e => { if (e.target === e.currentTarget) closeExistingPicker(); }}>
-        <div className="est-modal" style={{ width: 460, maxWidth: '90vw', maxHeight: '70vh' }} onClick={e => e.stopPropagation()}>
-          <div className="est-modal-hdr">
-            <div>
-              <h2 className="selv2-title">Add to existing invoice?</h2>
-            </div>
-            <button className="est-modal-close" onClick={closeExistingPicker}>&times;</button>
-          </div>
-          <div className="est-modal-body" style={{ overflow: 'visible' }}>
-            {(() => {
-              const progressInvoices = EXISTING_INVOICES.filter(inv => (inv.type ?? 'invoice') === 'progress');
-              const regularInvoices = EXISTING_INVOICES.filter(inv => (inv.type ?? 'invoice') === 'invoice');
-              const selected = EXISTING_INVOICES.find(inv => inv.invoiceNumber === existingPickerSelection);
-              const renderGroup = (label: string, invoices: typeof EXISTING_INVOICES) => (
-                <div key={label}>
-                  <div className="sp-menu-group-label">{label}</div>
-                  {invoices.map(inv => (
-                    <button
-                      key={inv.invoiceNumber}
-                      type="button"
-                      className="sp-mass-action-dropdown-item"
-                      style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}
-                      onClick={() => { setExistingPickerSelection(inv.invoiceNumber); setExistingPickerListOpen(false); }}
-                    >
-                      <span>{inv.invoiceNumber} — {inv.title}</span>
-                      {inv.invoiceNumber === existingPickerSelection && <span>✓</span>}
-                    </button>
-                  ))}
-                </div>
-              );
-              return (
-                <>
-                  <label className="fl">Select an invoice</label>
-                  {EXISTING_INVOICES.length === 0 ? (
-                    <div style={{ color: 'var(--g500)', fontSize: 14 }}>No existing invoices yet.</div>
-                  ) : (
-                    <div style={{ position: 'relative' }}>
-                      <button
-                        type="button"
-                        className="fi"
-                        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', textAlign: 'left' }}
-                        onClick={() => setExistingPickerListOpen(o => !o)}
-                        aria-expanded={existingPickerListOpen}
-                      >
-                        <span>{selected ? `${selected.invoiceNumber} — ${selected.title}` : 'Select an invoice'}</span>
-                        <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{ flexShrink: 0, transform: existingPickerListOpen ? 'rotate(180deg)' : 'none' }}><path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                      </button>
-                      {existingPickerListOpen && (
-                        <>
-                          <div className="sp-menu-backdrop" onClick={() => setExistingPickerListOpen(false)} />
-                          <div className="sp-mass-action-dropdown" style={{ position: 'absolute', bottom: 'auto', top: 'calc(100% + 4px)', left: 0, right: 'auto', width: '100%', minWidth: 'auto', maxHeight: 240, overflowY: 'auto' }}>
-                            {progressInvoices.length > 0 && renderGroup('Progress invoice', progressInvoices)}
-                            {regularInvoices.length > 0 && renderGroup('Invoice', regularInvoices)}
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  )}
-                </>
-              );
-            })()}
-          </div>
-          <div className="est-modal-footer">
-            <button className="btn btn-s" onClick={closeExistingPicker}>Cancel</button>
-            <button
-              className="btn btn-p"
-              disabled={!existingPickerSelection}
-              onClick={() => {
-                const invoiceNumber = existingPickerSelection;
-                closeExistingPicker();
-                onOpenInvoiceWizard?.(undefined, { type: 'existing', invoiceNumber });
-              }}
-            >
-              Continue
-            </button>
-          </div>
-        </div>
-      </div>,
-      document.body,
-    )}
     </>
   );
 }
