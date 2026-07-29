@@ -1654,7 +1654,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                               const over = approvedUsed > group.budget;
                               return (
                                 <span className="jps-allowance-flow">
-                                  <span className="jps-flow-part"><span>Approved price</span><strong>{fmt(approvedUsed)}</strong></span>
+                                  <span className="jps-flow-part"><span>Approved subtotal</span><strong>{fmt(approvedUsed)}</strong></span>
                                   <span className="jps-flow-part"><span>Allowance</span><strong>{fmt(group.budget)}</strong></span>
                                   <span className="jps-flow-sep">·</span>
                                   <span className={over ? 'jps-flow-over' : 'jps-flow-remaining'}>
