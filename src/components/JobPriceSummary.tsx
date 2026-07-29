@@ -334,7 +334,7 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
     setNotesSnapshot(JSON.stringify(categoryNotes));
     setNotesSavedAt(new Date());
   };
-  const [activeSlice, setActiveSlice] = useState<'slice1' | 'slice1v2' | 'slice2' | 'slice3' | 'slice4' | 'slice5'>('slice1');
+  const [activeSlice, setActiveSlice] = useState<'slice1' | 'slice1v2' | 'slice2' | 'slice3' | 'slice4' | 'slice5'>('slice1v2');
   // Slice 4 = sandbox for Kendall's open book client financials brief (page 7003570340).
   // v1 inline expandable, v2 always-on list, v3 drill-through, v4 grouped sections,
   // v5 visual contribution bar — iteration of v2 that swaps three nested rows for a stacked
@@ -1654,13 +1654,13 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                               const over = approvedUsed > group.budget;
                               return (
                                 <span className="jps-allowance-flow">
-                                  <span className="jps-flow-part"><span>Approved price</span><strong>{fmt(withTax(approvedUsed))}</strong></span>
-                                  <span className="jps-flow-part"><span>Allowance</span><strong>{fmt(withTax(group.budget))}</strong></span>
+                                  <span className="jps-flow-part"><span>Approved price</span><strong>{fmt(approvedUsed)}</strong></span>
+                                  <span className="jps-flow-part"><span>Allowance</span><strong>{fmt(group.budget)}</strong></span>
                                   <span className="jps-flow-sep">·</span>
                                   <span className={over ? 'jps-flow-over' : 'jps-flow-remaining'}>
                                     {group.complete
-                                      ? <><span>Difference</span><VarianceValue value={approvedUsed === 0 ? 0 : withTax(approvedUsed - group.budget)} /></>
-                                      : <><span>Difference</span><VarianceValue value={withTax(approvedUsed - group.budget)} /></>
+                                      ? <><span>Difference (excl. tax)</span><VarianceValue value={approvedUsed === 0 ? 0 : approvedUsed - group.budget} /></>
+                                      : <><span>Difference (excl. tax)</span><VarianceValue value={approvedUsed - group.budget} /></>
                                     }
                                   </span>
                                 </span>
