@@ -145,7 +145,8 @@ export default function TopNav({ onNavigate }: TopNavProps) {
           <button className="topnav-item" onClick={() => { setFinancialOpen(!financialOpen); setJobsOpen(false); setPmOpen(false); }}>Financial {caretDown}</button>
           {financialOpen && (
             <div className="topnav-dropdown">
-              <button className="topnav-dropdown-item" onClick={() => { setFinancialOpen(false); onNavigate?.('invoice-3'); }}>Invoice</button>
+              <button className="topnav-dropdown-item" onClick={() => { setFinancialOpen(false); onNavigate?.('owner-invoices'); }}>Invoice</button>
+              <button className="topnav-dropdown-item" onClick={() => { setFinancialOpen(false); onNavigate?.('invoice-3-modal'); }}>Invoice (modal)</button>
               <button className="topnav-dropdown-item" onClick={() => { setFinancialOpen(false); onNavigate?.('client-preview-invoice'); }}>Client preview invoice</button>
               <button className="topnav-dropdown-item" onClick={() => { setFinancialOpen(false); onNavigate?.('progress-invoice'); }}>Progress Invoice</button>
               <button className="topnav-dropdown-item" onClick={() => { setFinancialOpen(false); onNavigate?.('estimate'); }}>Estimate</button>
@@ -309,6 +310,7 @@ export default function TopNav({ onNavigate }: TopNavProps) {
                 <div style={{fontWeight: 600, fontSize: 13, color: 'var(--g800)'}}>Mike Rodriguez</div>
                 <div style={{fontSize: 12, color: 'var(--g400)'}}>Builder</div>
               </div>
+              <button className="topnav-dropdown-item" onClick={() => { setProfileOpen(false); onNavigate?.('company-settings'); }}>Company settings</button>
               <button className="topnav-dropdown-item" onClick={() => { setProfileOpen(false); onNavigate?.('client-portal'); }}>Switch to client view</button>
             </div>
           )}

@@ -12,6 +12,25 @@ interface Props {
   invoice: Invoice;
   clientVis: ClientColumnVisibility;
   groupBy?: 'estimate' | 'costcode' | 'all';
+  // "Invoice (modal)" customize panel only — hides the itemized breakdown
+  // while keeping the subtotal/tax/total box. Defaults to shown everywhere else.
+  hideLineItems?: boolean;
+  // "Invoice (modal)" customize panel only — "General information" toggles.
+  // Defaults preserve prior behavior for the full-page Invoice route, which
+  // doesn't pass these props.
+  showQrCode?: boolean;
+  showCustomFields?: boolean;
+  showDescription?: boolean;
+  // Nested under "Description" — which parts of it show. Defaults preserve
+  // prior behavior (the existing description block always showed as "intro").
+  showIntroText?: boolean;
+  showClosingText?: boolean;
+  // "Invoice (modal)" only — widens the "paper" preview beyond its default
+  // 680px cap. Defaults to unset, preserving the existing width everywhere else.
+  maxWidth?: number;
+  // "Invoice (modal)" only — gives the paper more vertical whitespace so it
+  // reads like a fuller printed page. Defaults to unset (natural content height).
+  minHeight?: number | string;
 }
 
 // Reallocation lines (the negative source) get re-attributed to the
@@ -173,7 +192,7 @@ function expandAllLineItems(lineItems: LineItem[]): LineItem[] {
   return out;
 }
 
-export default function ClientPreview({ invoice, clientVis, groupBy = 'estimate' }: Props) {
+export default function ClientPreview({ invoice, clientVis, groupBy = 'estimate', hideLineItems = false, showQrCode = false, showCustomFields = false, showDescription = true, showIntroText = true, showClosingText = false, maxWidth, minHeight }: Props) {
   const isFlatFee = invoice.mode === 'flatFee';
   const displayLineItems = (() => {
     if (isFlatFee) return invoice.lineItems;
@@ -251,9 +270,9 @@ export default function ClientPreview({ invoice, clientVis, groupBy = 'estimate'
   };
 
   return (
-    <div className="paper">
+    <div className="paper" style={{ ...(maxWidth ? {maxWidth} : {}), ...(minHeight ? {minHeight, display: 'flex', flexDirection: 'column'} : {}) }}>
       <div className="paper-sec" style={{padding: '24px 28px'}}>
-        <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24}}>
+        <div style={{display: 'grid', gridTemplateColumns: showQrCode ? '1fr 1fr auto' : '1fr 1fr', gap: 24}}>
           <div>
             <div className="paper-logo" style={{marginBottom: 12}}>
               <div className="paper-logo-icon">b</div>
@@ -274,6 +293,17 @@ export default function ClientPreview({ invoice, clientVis, groupBy = 'estimate'
               {invoice.to.city}, {invoice.to.state} {invoice.to.zip}
             </div>
           </div>
+          {showQrCode && (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+              <svg width="64" height="64" viewBox="0 0 64 64" style={{ border: '1px solid var(--g200)', borderRadius: 4 }}>
+                <rect width="64" height="64" fill="white" />
+                {[[0,0],[8,0],[16,0],[0,8],[16,8],[0,16],[8,16],[16,16],[32,0],[40,8],[48,0],[32,16],[48,16],[8,32],[24,32],[40,32],[0,40],[16,40],[32,40],[48,40],[8,48],[24,48],[40,48],[56,48],[0,56],[16,56],[32,56],[48,56]].map(([x,y], i) => (
+                  <rect key={i} x={x + 4} y={y + 4} width="8" height="8" fill="var(--bt-midnight, #14213d)" />
+                ))}
+              </svg>
+              <span style={{ fontSize: 9, color: 'var(--g400)' }}>Scan to pay</span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -300,35 +330,49 @@ export default function ClientPreview({ invoice, clientVis, groupBy = 'estimate'
         </div>
       </div>
 
-      {invoice.invoiceDescription && (
+      {showDescription && showIntroText && invoice.invoiceDescription && (
         <div className="paper-sec" style={{padding: '14px 28px'}}>
           <div className="paper-lbl">Description of invoice</div>
           <div style={{fontSize: 11, color: 'var(--g600)', lineHeight: 1.6, whiteSpace: 'pre-wrap', marginTop: 4}}>{invoice.invoiceDescription}</div>
         </div>
       )}
 
+      {showCustomFields && (
+        <div className="paper-sec" style={{padding: '14px 28px'}}>
+          <div className="paper-lbl">Custom fields</div>
+          <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 24px', marginTop: 6}}>
+            <div style={{fontSize: 11, color: 'var(--g500)'}}>Permit #</div>
+            <div style={{fontSize: 11, color: 'var(--g700)', fontWeight: 500}}>2026-4471</div>
+            <div style={{fontSize: 11, color: 'var(--g500)'}}>Job start date</div>
+            <div style={{fontSize: 11, color: 'var(--g700)', fontWeight: 500}}>03/10/2026</div>
+          </div>
+        </div>
+      )}
+
       {!isFlatFee && (
         <div className="paper-sec">
-          <div style={{overflowX: 'auto'}}>
-            <table className="paper-tbl">
-              <thead><tr>{cols.map(c => <th key={c.key} style={{textAlign: c.align as 'left'|'right'|'center'}}>{c.label}</th>)}</tr></thead>
-              <tbody>
-                {groupBy === 'estimate'
-                  ? estimateGroups.flatMap(g => [
-                      <tr key={`grp-${g.name}`} style={{background: 'var(--g50)'}}>
-                        {cols.map(c => (
-                          <td key={c.key} style={{fontWeight: 700, color: 'var(--bt-midnight)', textAlign: (c.align as 'left'|'right'|'center'), borderTop: '1px solid var(--g200)'}}>
-                            {c.key === 'desc' ? g.name : c.key === 'amount' ? `$${fmt(g.subtotal)}` : ''}
-                          </td>
-                        ))}
-                      </tr>,
-                      ...g.items.map(item => <tr key={item.id}>{cols.map(c => renderCell(item, c, true))}</tr>),
-                    ])
-                  : displayLineItems.map(item => <tr key={item.id}>{cols.map(c => renderCell(item, c))}</tr>)}
-                {displayLineItems.length === 0 && <tr><td colSpan={cols.length} style={{padding: 24, textAlign: 'center', color: 'var(--g300)', fontStyle: 'italic'}}>No line items</td></tr>}
-              </tbody>
-            </table>
-          </div>
+          {!hideLineItems && (
+            <div style={{overflowX: 'auto'}}>
+              <table className="paper-tbl">
+                <thead><tr>{cols.map(c => <th key={c.key} style={{textAlign: c.align as 'left'|'right'|'center'}}>{c.label}</th>)}</tr></thead>
+                <tbody>
+                  {groupBy === 'estimate'
+                    ? estimateGroups.flatMap(g => [
+                        <tr key={`grp-${g.name}`} style={{background: 'var(--g50)'}}>
+                          {cols.map(c => (
+                            <td key={c.key} style={{fontWeight: 700, color: 'var(--bt-midnight)', textAlign: (c.align as 'left'|'right'|'center'), borderTop: '1px solid var(--g200)'}}>
+                              {c.key === 'desc' ? g.name : c.key === 'amount' ? `$${fmt(g.subtotal)}` : ''}
+                            </td>
+                          ))}
+                        </tr>,
+                        ...g.items.map(item => <tr key={item.id}>{cols.map(c => renderCell(item, c, true))}</tr>),
+                      ])
+                    : displayLineItems.map(item => <tr key={item.id}>{cols.map(c => renderCell(item, c))}</tr>)}
+                  {displayLineItems.length === 0 && <tr><td colSpan={cols.length} style={{padding: 24, textAlign: 'center', color: 'var(--g300)', fontStyle: 'italic'}}>No line items</td></tr>}
+                </tbody>
+              </table>
+            </div>
+          )}
           <div className="paper-totals">
             <div className="paper-totals-box" style={{width: 200}}>
               <div className="paper-t-row"><span>Subtotal</span><span>${fmt(subtotal)}</span></div>
@@ -376,6 +420,13 @@ export default function ClientPreview({ invoice, clientVis, groupBy = 'estimate'
         <div className="paper-sec" style={{padding: '14px 28px'}}>
           <div className="paper-lbl">Notes</div>
           <div style={{fontSize: 11, color: 'var(--g500)', lineHeight: 1.6, whiteSpace: 'pre-wrap', marginTop: 2}}>{invoice.notes}</div>
+        </div>
+      )}
+
+      {showDescription && showClosingText && (
+        <div className="paper-sec" style={{padding: '14px 28px'}}>
+          <div className="paper-lbl">Closing message</div>
+          <div style={{fontSize: 11, color: 'var(--g600)', lineHeight: 1.6, marginTop: 4}}>Thank you for choosing us for your project. We appreciate your business and look forward to completing your home.</div>
         </div>
       )}
 

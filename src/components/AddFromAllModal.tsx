@@ -10,16 +10,14 @@ import { BdsButton, BdsText, BdsIcon, BdsPill } from '../bds';
      • Estimate / Change Orders → Client price · Invoice overview · New invoice % · amount
        (with an Adjust Invoice % / Apply all control)
      • Selections → Selection · Price · New invoice amount
-     • Costs → Builder cost · % Markup · Invoice amount
    Styled with BDS components + design tokens.
    ───────────────────────────────────────────────────────────────────────── */
 
-type SourceKey = 'Estimate' | 'Change Orders' | 'Selections' | 'Costs';
-const SOURCE_ORDER: SourceKey[] = ['Estimate', 'Change Orders', 'Selections', 'Costs'];
+type SourceKey = 'Estimate' | 'Change Orders' | 'Selections';
+const SOURCE_ORDER: SourceKey[] = ['Estimate', 'Change Orders', 'Selections'];
 
 interface PctRow { id: string; title: string; costCode: string; costType: string; clientPrice: number; prevPct: number; }
 interface SelRow { id: string; lineItem: string; costCode: string; selection: string; price: number; }
-interface CostRow { id: string; item: string; costCode: string; costType: string; builderCost: number; }
 // Allowance group: a header + nested selection rows. prevInvoiced = the
 // allowance amount already billed on a prior invoice (0 = none).
 interface AllowanceGroup { id: string; name: string; prevInvoiced: number; children: SelRow[]; }
@@ -28,10 +26,19 @@ const ESTIMATE_ROWS: PctRow[] = [
   { id: 'est-1', title: 'Framing labor', costCode: '03.10 - Framing', costType: 'Labor', clientPrice: 8500, prevPct: 60 },
   { id: 'est-2', title: 'Exterior paint', costCode: '09.30 - Painting', costType: 'Materials', clientPrice: 2100, prevPct: 0 },
   { id: 'est-3', title: 'Plumbing rough-in', costCode: '06.15 - Plumbing', costType: 'Subcontractor', clientPrice: 4750, prevPct: 80 },
+  { id: 'est-4', title: 'Site excavation', costCode: '02.20 - Sitework', costType: 'Subcontractor', clientPrice: 6200, prevPct: 100 },
+  { id: 'est-5', title: 'Foundation pour', costCode: '02.30 - Concrete', costType: 'Subcontractor', clientPrice: 15400, prevPct: 40 },
+  { id: 'est-6', title: 'Roofing - architectural shingle', costCode: '07.10 - Roofing', costType: 'Subcontractor', clientPrice: 9800, prevPct: 0 },
+  { id: 'est-7', title: 'HVAC rough-in', costCode: '15.10 - Mechanical', costType: 'Subcontractor', clientPrice: 7100, prevPct: 25 },
+  { id: 'est-8', title: 'Drywall hang & finish', costCode: '09.20 - Drywall', costType: 'Labor', clientPrice: 5600, prevPct: 0 },
+  { id: 'est-9', title: 'Interior trim & doors', costCode: '06.20 - Finish Carpentry', costType: 'Labor', clientPrice: 4300, prevPct: 0 },
 ];
 const CO_ROWS: PctRow[] = [
   { id: 'co-1', title: 'CO-0001 · Stone veneer', costCode: '4100 - Stone Masonry', costType: 'Materials', clientPrice: 13600, prevPct: 0 },
   { id: 'co-2', title: 'CO-0002 · Engineered beam', costCode: '3100 - Framing', costType: 'Labor', clientPrice: 10000, prevPct: 99 },
+  { id: 'co-3', title: 'CO-0003 · Basement egress window', costCode: '02.20 - Sitework', costType: 'Subcontractor', clientPrice: 4200, prevPct: 0 },
+  { id: 'co-4', title: 'CO-0004 · Upgrade to tankless water heater', costCode: '15.10 - Mechanical', costType: 'Materials', clientPrice: 2850, prevPct: 50 },
+  { id: 'co-5', title: 'CO-0005 · Add covered back patio', costCode: '06.10 - Rough Carpentry', costType: 'Subcontractor', clientPrice: 11200, prevPct: 0 },
 ];
 // Allowances with their selections nested underneath.
 const ALLOWANCE_GROUPS: AllowanceGroup[] = [
@@ -49,19 +56,38 @@ const ALLOWANCE_GROUPS: AllowanceGroup[] = [
       { id: 'alw-2b', lineItem: 'Soft-close hardware', costCode: '9040 - Cabinets', selection: 'Premium package', price: 1800 },
     ],
   },
+  {
+    id: 'alw-3', name: 'Plumbing Fixtures Allowance', prevInvoiced: 2200,
+    children: [
+      { id: 'alw-3a', lineItem: 'Kitchen faucet', costCode: '6015 - Plumbing', selection: 'Delta Trinsic', price: 620 },
+      { id: 'alw-3b', lineItem: 'Master bath shower system', costCode: '6015 - Plumbing', selection: 'Kohler Statement', price: 1950 },
+      { id: 'alw-3c', lineItem: 'Powder room sink', costCode: '9040 - Cabinets', selection: 'Vessel sink - white', price: 340 },
+    ],
+  },
+  {
+    id: 'alw-4', name: 'Flooring Allowance', prevInvoiced: 0,
+    children: [
+      { id: 'alw-4a', lineItem: 'Engineered hardwood - main level', costCode: '9640 - Flooring', selection: 'White oak, wide plank', price: 8200 },
+      { id: 'alw-4b', lineItem: 'Tile - bathrooms', costCode: '9640 - Flooring', selection: 'Porcelain 12x24', price: 1650 },
+    ],
+  },
+  {
+    id: 'alw-5', name: 'Lighting Fixtures Allowance', prevInvoiced: 1100,
+    children: [
+      { id: 'alw-5a', lineItem: 'Kitchen pendant lights (3)', costCode: 'Electrical', selection: 'Brass schoolhouse', price: 780 },
+      { id: 'alw-5b', lineItem: 'Dining room chandelier', costCode: 'Electrical', selection: 'Modern linear', price: 610 },
+    ],
+  },
 ];
 // Standalone selections (no allowance backing).
 const SELECTION_ROWS: SelRow[] = [
   { id: 'sel-3', lineItem: 'Front door hardware', costCode: '8020 - Hardware', selection: 'Standalone selection', price: 850 },
+  { id: 'sel-4', lineItem: 'Garage door opener upgrade', costCode: '8020 - Hardware', selection: 'Chamberlain WiFi', price: 420 },
+  { id: 'sel-5', lineItem: 'Mailbox & house numbers', costCode: '8020 - Hardware', selection: 'Black aluminum', price: 180 },
 ];
-const COST_ROWS: CostRow[] = [
-  { id: 'cost-1', item: 'Limestone blocks & mortar', costCode: '4100 - Stone Masonry', costType: 'None', builderCost: 4800 },
-  { id: 'cost-2', item: 'Framing lumber delivery', costCode: '3100 - Framing', costType: 'None', builderCost: 3200 },
-];
-
-const SourceIcon = ({ source }: { source: SourceKey }) => {
+const SourceIcon = ({ source }: { source: SourceKey | 'Folder' }) => {
   const c = 'var(--bds-color-gray-70)';
-  if (source === 'Costs' || source === 'Change Orders') {
+  if (source === 'Folder' || source === 'Change Orders') {
     return <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="2" y="1.5" width="12" height="13" rx="1.5" stroke={c} strokeWidth="1.2"/><path d="M5 5h6M5 8h6M5 11h3" stroke={c} strokeWidth="1" strokeLinecap="round"/></svg>;
   }
   if (source === 'Selections') {
@@ -74,6 +100,10 @@ interface Props {
   open: boolean;
   onClose: () => void;
   onAdd: (lineItems: any[]) => void;
+  // "Invoice (modal)" only — renders as a panel docked beside the invoice
+  // modal instead of its own centered dialog + backdrop. Defaults to the
+  // original centered-modal presentation everywhere else.
+  variant?: 'modal' | 'panel';
 }
 
 const TH_L: React.CSSProperties = { padding: '10px 12px 10px 0', textAlign: 'left' };
@@ -95,27 +125,23 @@ function NumField({ value, onChange, suffix, prefix, width = 46 }: { value: stri
   );
 }
 
-export default function AddFromAllModal({ open, onClose, onAdd }: Props) {
+export default function AddFromAllModal({ open, onClose, onAdd, variant = 'modal' }: Props) {
   const [checked, setChecked] = useState<Record<string, boolean>>({});
-  const [sources, setSources] = useState<Record<SourceKey, boolean>>({ Estimate: true, 'Change Orders': true, Selections: true, Costs: true });
-  const [includeDescs, setIncludeDescs] = useState(true);
+  const [sources, setSources] = useState<Record<SourceKey, boolean>>({ Estimate: true, 'Change Orders': true, Selections: true });
   const [sourceMenuOpen, setSourceMenuOpen] = useState(false);
   const [pct, setPct] = useState<Record<string, number>>({});
-  const [markup, setMarkup] = useState<Record<string, number>>({});
-  const [adjust, setAdjust] = useState<Record<SourceKey, string>>({ Estimate: '100.00', 'Change Orders': '100.00', Selections: '100.00', Costs: '100.00' });
+  const [adjust, setAdjust] = useState<Record<SourceKey, string>>({ Estimate: '100.00', 'Change Orders': '100.00', Selections: '100.00' });
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
 
   if (!open) return null;
 
   const pctAmount = (r: PctRow) => r.clientPrice * (pct[r.id] ?? 0) / 100;
-  const costAmount = (r: CostRow) => r.builderCost * (1 + (markup[r.id] ?? 0) / 100);
   const ALLOWANCE_CHILDREN = ALLOWANCE_GROUPS.flatMap(g => g.children);
   const rowAmount = (id: string): number => {
     const e = ESTIMATE_ROWS.find(r => r.id === id); if (e) return pctAmount(e);
     const c = CO_ROWS.find(r => r.id === id); if (c) return pctAmount(c);
     const a = ALLOWANCE_CHILDREN.find(r => r.id === id); if (a) return a.price;
     const s = SELECTION_ROWS.find(r => r.id === id); if (s) return s.price;
-    const k = COST_ROWS.find(r => r.id === id); if (k) return costAmount(k);
     return 0;
   };
 
@@ -123,12 +149,20 @@ export default function AddFromAllModal({ open, onClose, onAdd }: Props) {
     if (!sources[src]) return [];
     if (src === 'Estimate') return ESTIMATE_ROWS.map(r => r.id);
     if (src === 'Change Orders') return CO_ROWS.map(r => r.id);
-    if (src === 'Selections') return [...ALLOWANCE_CHILDREN.map(r => r.id), ...SELECTION_ROWS.map(r => r.id)];
-    return COST_ROWS.map(r => r.id);
+    return [...ALLOWANCE_CHILDREN.map(r => r.id), ...SELECTION_ROWS.map(r => r.id)];
   };
   const allIds = SOURCE_ORDER.flatMap(idsForSource);
   const checkedIds = allIds.filter(id => checked[id]);
   const subtotal = checkedIds.reduce((s, id) => s + rowAmount(id), 0);
+  const allSourcesSelected = SOURCE_ORDER.every(s => sources[s]);
+  const toggleAllSources = () => {
+    const v = !allSourcesSelected;
+    setSources(() => {
+      const n = {} as Record<SourceKey, boolean>;
+      SOURCE_ORDER.forEach(s => { n[s] = v; });
+      return n;
+    });
+  };
 
   // Per-section tri-state header checkbox.
   const sectionState = (ids: string[]): 'all' | 'none' | 'some' => {
@@ -153,10 +187,8 @@ export default function AddFromAllModal({ open, onClose, onAdd }: Props) {
       if (e) return { id: getNextId(), description: e.title, costCode: e.costCode, costType: e.costType === 'None' ? 'Material' : e.costType, unitCost: pctAmount(e), quantity: 1, unit: '--', markup: 0 };
       const a = ALLOWANCE_CHILDREN.find(r => r.id === id);
       if (a) return { id: getNextId(), description: a.lineItem, costCode: a.costCode, costType: 'Selection', unitCost: a.price, quantity: 1, unit: '--', markup: 0 };
-      const s = SELECTION_ROWS.find(r => r.id === id);
-      if (s) return { id: getNextId(), description: s.lineItem, costCode: s.costCode, costType: 'Selection', unitCost: s.price, quantity: 1, unit: '--', markup: 0 };
-      const k = COST_ROWS.find(r => r.id === id)!;
-      return { id: getNextId(), description: k.item, costCode: k.costCode, costType: 'Material', unitCost: k.builderCost, quantity: 1, unit: '--', markup: markup[k.id] ?? 0 };
+      const s = SELECTION_ROWS.find(r => r.id === id)!;
+      return { id: getNextId(), description: s.lineItem, costCode: s.costCode, costType: 'Selection', unitCost: s.price, quantity: 1, unit: '--', markup: 0 };
     });
     if (items.length > 0) onAdd(items);
     onClose();
@@ -266,7 +298,7 @@ export default function AddFromAllModal({ open, onClose, onAdd }: Props) {
               <button onClick={() => setCollapsed(p => ({ ...p, [g.id]: !p[g.id] }))} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', color: 'var(--bds-color-gray-60)' }}>
                 <BdsIcon name={isCollapsed ? 'chevron-right' : 'chevron-down'} size={14} />
               </button>
-              <SourceIcon source="Costs" />
+              <SourceIcon source="Folder" />
               <BdsText as="span" size="heavy-md" style={{ flex: 1 }}>{g.name}</BdsText>
               {g.prevInvoiced > 0 && (
                 <div style={{ textAlign: 'right', marginRight: 18 }}>
@@ -331,122 +363,114 @@ export default function AddFromAllModal({ open, onClose, onAdd }: Props) {
     </div>
   );
 
-  const renderCostSection = () => (
-    <div style={{ marginBottom: 22 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 8 }}><SourceIcon source="Costs" /><BdsText as="span" size="heavy-md">Costs</BdsText></div>
-      <div style={cardStyle}>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead><tr style={{ borderBottom: '1px solid var(--bds-color-gray-15)', background: 'var(--bds-color-gray-5)' }}>
-            {titleHeader(COST_ROWS.map(r => r.id), 'Item')}{thText('Cost code')}{thText('Cost types')}
-            {thText('Builder cost', true)}{thText('% Markup', true)}
-            <th style={{ ...TH_R, paddingRight: 14 }}><BdsText as="span" size="heavy-sm" style={{ color: 'var(--bds-color-gray-50)' }}>Invoice amount</BdsText></th>
-          </tr></thead>
-          <tbody>
-            {COST_ROWS.map(r => (
-              <tr key={r.id} style={{ borderTop: '1px solid var(--bds-color-gray-10)' }}>
-                <td style={{ ...TD_L, paddingLeft: 14 }}><div style={{ display: 'flex', alignItems: 'center', gap: 10 }}><Check id={r.id} />{cellVal(r.item)}</div></td>
-                <td style={TD_L}>{cellVal(r.costCode)}</td>
-                <td style={TD_L}>{cellVal(r.costType, { muted: true })}</td>
-                <td style={TD_R}>{cellVal('$' + fmt(r.builderCost))}</td>
-                <td style={TD_R}><NumField value={(markup[r.id] ?? 0).toString()} onChange={v => setMarkup(p => ({ ...p, [r.id]: parseFloat(v) || 0 }))} suffix="%" /></td>
-                <td style={{ ...TD_R, paddingRight: 14 }}>{cellVal('$' + fmt(costAmount(r)), { strong: true })}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+  const anyActive = SOURCE_ORDER.some(s => sources[s]);
+
+  const cardContent = (
+    <>
+      {/* Header */}
+      <div style={{ padding: '20px 28px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexShrink: 0 }}>
+        <div>
+          {variant !== 'panel' && <BdsText as="div" size="normal-sm" style={{ color: 'var(--bds-color-gray-40)', marginBottom: 2 }}>Job title</BdsText>}
+          <BdsText as="div" size="distinct-lg">Add to invoice</BdsText>
+        </div>
+        <BdsButton displayType="tertiary" ariaLabel="Close" icon={<BdsIcon name="x" size={18} />} onClick={onClose} />
       </div>
-    </div>
+
+      {/* Filter bar */}
+      <div style={{ padding: '0 28px 18px', display: 'flex', gap: 32, alignItems: 'flex-start', flexWrap: 'wrap', borderBottom: '1px solid var(--bds-color-gray-15)' }}>
+        <div>
+          <BdsText as="div" size="heavy-sm" style={{ marginBottom: 6 }}>Date</BdsText>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '7px 14px', border: '1px solid var(--bds-color-gray-15)', borderRadius: 6, fontSize: 13, color: 'var(--bds-color-gray-70)', background: 'var(--bds-color-base-background)', cursor: 'pointer' }}>
+            All<BdsIcon name="chevron-down" size={12} />
+          </div>
+        </div>
+        <div>
+          <BdsText as="div" size="heavy-sm" style={{ marginBottom: 6 }}>Record type</BdsText>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, flexWrap: 'wrap' }}>
+            <div style={{ position: 'relative' }}>
+              <BdsButton
+                displayType="secondary"
+                text={anyActive ? `${SOURCE_ORDER.filter(s => sources[s]).length} selected` : 'Select record types'}
+                iconRight={<BdsIcon name="chevron-down" size={12} />}
+                onClick={() => setSourceMenuOpen(o => !o)}
+              />
+              {sourceMenuOpen && (
+                <>
+                  <div style={{ position: 'fixed', inset: 0, zIndex: 1 }} onClick={() => setSourceMenuOpen(false)} />
+                  <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: 4, background: 'var(--bds-color-base-background)', border: '1px solid var(--bds-color-gray-15)', borderRadius: 8, boxShadow: '0 8px 24px rgba(0,0,0,0.12)', padding: 6, zIndex: 2, minWidth: 210 }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', cursor: 'pointer', borderRadius: 6, borderBottom: '1px solid var(--bds-color-gray-15)', marginBottom: 4 }}>
+                      <input
+                        type="checkbox"
+                        checked={allSourcesSelected}
+                        ref={el => { if (el) el.indeterminate = !allSourcesSelected && SOURCE_ORDER.some(s => sources[s]); }}
+                        onChange={toggleAllSources}
+                        style={{ width: 16, height: 16, accentColor: 'var(--bds-color-blue-60)' }}
+                      />
+                      <BdsText as="span" size="heavy-sm" style={{ fontSize: 13 }}>Select all</BdsText>
+                    </label>
+                    {SOURCE_ORDER.map(s => (
+                      <label key={s} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', cursor: 'pointer', borderRadius: 6 }}>
+                        <input type="checkbox" checked={sources[s]} onChange={() => toggleSource(s)} style={{ width: 16, height: 16, accentColor: 'var(--bds-color-blue-60)' }} />
+                        <SourceIcon source={s} /><BdsText as="span" size="normal-md" style={{ fontSize: 13 }}>{s}</BdsText>
+                      </label>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+            {SOURCE_ORDER.filter(s => sources[s]).map(s => (
+              <BdsPill
+                key={s}
+                text={s}
+                selected
+                onClick={() => removeSource(s)}
+                icon={<span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><SourceIcon source={s} /><BdsIcon name="x" size={11} /></span>}
+              />
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Body */}
+      <div style={{ padding: '16px 28px', overflowY: 'auto', overflowX: 'auto', flex: 1, background: 'var(--bds-color-base-background)' }}>
+        {!anyActive ? (
+          <div style={{ ...cardStyle, padding: 32, textAlign: 'center' }}><BdsText as="span" size="normal-md" style={{ color: 'var(--bds-color-gray-40)' }}>No record types selected.</BdsText></div>
+        ) : (
+          <>
+            {sources['Estimate'] && renderPctSection('Estimate', ESTIMATE_ROWS)}
+            {sources['Change Orders'] && renderPctSection('Change Orders', CO_ROWS)}
+            {sources['Selections'] && renderSelectionSection()}
+          </>
+        )}
+      </div>
+
+      {/* Footer */}
+      <div style={{ padding: '16px 28px', background: 'var(--bds-color-base-background)', borderTop: '1px solid var(--bds-color-gray-15)', borderRadius: variant === 'panel' ? 0 : '0 0 12px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 24, flexShrink: 0 }}>
+        <div>
+          <BdsText as="div" size="normal-sm" style={{ color: 'var(--bds-color-gray-50)' }}>Invoice subtotal</BdsText>
+          <BdsText as="div" size="heavy-lg">${fmt(subtotal)}</BdsText>
+        </div>
+        <BdsButton displayType="primary" text="Add to invoice" disabled={checkedIds.length === 0} onClick={handleAdd} />
+      </div>
+    </>
   );
 
-  const anyActive = SOURCE_ORDER.some(s => sources[s]);
+  if (variant === 'panel') {
+    return (
+      <div
+        className="bds-scope bds-real-scope"
+        style={{ background: 'var(--bds-color-base-background)', width: '100%', height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
+        onClick={e => e.stopPropagation()}
+      >
+        {cardContent}
+      </div>
+    );
+  }
 
   return createPortal(
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(14,15,16,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={onClose}>
       <div className="bds-scope bds-real-scope" style={{ background: 'var(--bds-color-base-background)', borderRadius: 12, width: 1040, maxWidth: '97vw', maxHeight: '90vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }} onClick={e => e.stopPropagation()}>
-
-        {/* Header */}
-        <div style={{ padding: '20px 28px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexShrink: 0 }}>
-          <div>
-            <BdsText as="div" size="normal-sm" style={{ color: 'var(--bds-color-gray-40)', marginBottom: 2 }}>Job title</BdsText>
-            <BdsText as="div" size="distinct-lg">Add to invoice</BdsText>
-          </div>
-          <BdsButton displayType="tertiary" ariaLabel="Close" icon={<BdsIcon name="x" size={18} />} onClick={onClose} />
-        </div>
-
-        {/* Filter bar */}
-        <div style={{ padding: '0 28px 18px', display: 'flex', gap: 32, alignItems: 'flex-start', flexWrap: 'wrap', borderBottom: '1px solid var(--bds-color-gray-15)' }}>
-          <div>
-            <BdsText as="div" size="heavy-sm" style={{ marginBottom: 6 }}>Date</BdsText>
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '7px 14px', border: '1px solid var(--bds-color-gray-15)', borderRadius: 6, fontSize: 13, color: 'var(--bds-color-gray-70)', background: 'var(--bds-color-base-background)', cursor: 'pointer' }}>
-              All<BdsIcon name="chevron-down" size={12} />
-            </div>
-          </div>
-          <div>
-            <BdsText as="div" size="heavy-sm" style={{ marginBottom: 6 }}>Record type</BdsText>
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, flexWrap: 'wrap' }}>
-              <div style={{ position: 'relative' }}>
-                <BdsButton
-                  displayType="secondary"
-                  text={anyActive ? `${SOURCE_ORDER.filter(s => sources[s]).length} selected` : 'Select record types'}
-                  iconRight={<BdsIcon name="chevron-down" size={12} />}
-                  onClick={() => setSourceMenuOpen(o => !o)}
-                />
-                {sourceMenuOpen && (
-                  <>
-                    <div style={{ position: 'fixed', inset: 0, zIndex: 1 }} onClick={() => setSourceMenuOpen(false)} />
-                    <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: 4, background: 'var(--bds-color-base-background)', border: '1px solid var(--bds-color-gray-15)', borderRadius: 8, boxShadow: '0 8px 24px rgba(0,0,0,0.12)', padding: 6, zIndex: 2, minWidth: 210 }}>
-                      {SOURCE_ORDER.map(s => (
-                        <label key={s} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', cursor: 'pointer', borderRadius: 6 }}>
-                          <input type="checkbox" checked={sources[s]} onChange={() => toggleSource(s)} style={{ width: 16, height: 16, accentColor: 'var(--bds-color-blue-60)' }} />
-                          <SourceIcon source={s} /><BdsText as="span" size="normal-md" style={{ fontSize: 13 }}>{s}</BdsText>
-                        </label>
-                      ))}
-                    </div>
-                  </>
-                )}
-              </div>
-              {SOURCE_ORDER.filter(s => sources[s]).map(s => (
-                <BdsPill
-                  key={s}
-                  text={s}
-                  selected
-                  onClick={() => removeSource(s)}
-                  icon={<span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><SourceIcon source={s} /><BdsIcon name="x" size={11} /></span>}
-                />
-              ))}
-            </div>
-          </div>
-          <div>
-            <BdsText as="div" size="heavy-sm" style={{ marginBottom: 6 }}>Bill options</BdsText>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
-              <input type="checkbox" checked={includeDescs} onChange={() => setIncludeDescs(!includeDescs)} style={{ width: 16, height: 16, accentColor: 'var(--bds-color-blue-60)' }} />
-              <BdsText as="span" size="normal-md" style={{ fontSize: 13 }}>Include line item descriptions &amp; notes</BdsText>
-            </label>
-          </div>
-        </div>
-
-        {/* Body */}
-        <div style={{ padding: '16px 28px', overflowY: 'auto', flex: 1, background: 'var(--bds-color-base-background)' }}>
-          {!anyActive ? (
-            <div style={{ ...cardStyle, padding: 32, textAlign: 'center' }}><BdsText as="span" size="normal-md" style={{ color: 'var(--bds-color-gray-40)' }}>No record types selected.</BdsText></div>
-          ) : (
-            <>
-              {sources['Estimate'] && renderPctSection('Estimate', ESTIMATE_ROWS)}
-              {sources['Change Orders'] && renderPctSection('Change Orders', CO_ROWS)}
-              {sources['Selections'] && renderSelectionSection()}
-              {sources['Costs'] && renderCostSection()}
-            </>
-          )}
-        </div>
-
-        {/* Footer */}
-        <div style={{ padding: '16px 28px', background: 'var(--bds-color-base-background)', borderTop: '1px solid var(--bds-color-gray-15)', borderRadius: '0 0 12px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 24 }}>
-          <div>
-            <BdsText as="div" size="normal-sm" style={{ color: 'var(--bds-color-gray-50)' }}>Invoice subtotal</BdsText>
-            <BdsText as="div" size="heavy-lg">${fmt(subtotal)}</BdsText>
-          </div>
-          <BdsButton displayType="primary" text="Add to invoice" disabled={checkedIds.length === 0} onClick={handleAdd} />
-        </div>
+        {cardContent}
       </div>
     </div>,
     document.body,
