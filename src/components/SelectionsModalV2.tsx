@@ -109,6 +109,7 @@ interface Props {
   // Row IDs (allowance group ids, allowance-child ids, or standalone ids) to
   // pre-check when the wizard opens — e.g. the rows selected in the grid.
   initialCheckedIds?: string[];
+  variant?: 'modal' | 'panel';
 }
 
 // This is the "old" selections wizard: the builder checks individual selection
@@ -116,7 +117,7 @@ interface Props {
 // does NOT bill allowance lines directly — allowance groups here are just
 // grouping labels. Each selection can be billed at a percentage: a global
 // Invoice % applies to every line, and any line can be overridden individually.
-export default function SelectionsModalV2({ open, onClose, onAdd, data, addedChildIds = [], initialCheckedIds }: Props) {
+export default function SelectionsModalV2({ open, onClose, onAdd, data, addedChildIds = [], initialCheckedIds, variant = 'modal' }: Props) {
   const addedChildSet = new Set(addedChildIds);
   const isAlreadyAdded = (c: SelectionChild) => addedChildSet.has(c.id);
 
@@ -444,90 +445,108 @@ export default function SelectionsModalV2({ open, onClose, onAdd, data, addedChi
     );
   };
 
+  const cardContent = (
+    <>
+      <div className="est-modal-hdr">
+        <div>
+          <h2 className="selv2-title">Add selections to invoice</h2>
+        </div>
+        <button className="est-modal-close" onClick={onClose}>&times;</button>
+      </div>
+
+      <div className="est-modal-body selv2-body">
+        <div className="selv2-desc">
+          Choose approved selections to invoice, and set what percentage of each to bill.
+        </div>
+
+        <div className="selv2-controls">
+          <label className="selv2-inline-check selv2-controls-primary" onClick={toggleAll}>
+            <div className={"est-check" + (globalState === 'all' ? ' on' : globalState === 'partial' ? ' partial' : '')} />
+            <span className="selv2-controls-label">Select all</span>
+          </label>
+          <label className="selv2-inline-check selv2-controls-opt" onClick={() => setIncludeDescs(v => !v)}>
+            <div className={"est-check" + (includeDescs ? ' on' : '')} />
+            Include descriptions
+          </label>
+          <label className="selv2-inline-check selv2-controls-opt" onClick={() => setGroupByCode(v => !v)}>
+            <div className={"est-check" + (groupByCode ? ' on' : '')} />
+            Group by cost code
+          </label>
+          <div className="selv2-controls-spacer" />
+          <button type="button" className="est-expand-btn" onClick={toggleExpandAll}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M7 20l5-5 5 5" /><path d="M7 4l5 5 5-5" /></svg>
+            {allExpanded ? 'Collapse all' : 'Expand all'}
+          </button>
+          <div className="selv2-controls-opt" style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 12 }}>
+            <span>Invoice %</span>
+            <input
+              type="number"
+              min={0}
+              max={100}
+              value={globalPct}
+              onChange={e => setGlobal(e.target.value)}
+              style={pctInputStyle}
+            />
+          </div>
+        </div>
+
+        <div className="selv2-sections">
+          {allowanceGroups.length > 0 && (
+            <>
+              <div className="selv2-section-label">Allowances with approved selections</div>
+              {allowanceGroups.map(renderGroup)}
+            </>
+          )}
+          {standaloneChildren.length > 0 && (
+            <>
+              <div className="selv2-section-label" style={{ marginTop: 12 }}>Selections</div>
+              <div className="selv2-children" style={{ background: 'white', border: '1px solid var(--g200)', borderRadius: 8, overflow: 'hidden' }}>
+                <table className="selv2-table">
+                  {selHead}
+                  <tbody>
+                    {standaloneChildren.map(renderSelRow)}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+          {availableData.length === 0 && (
+            <div className="selv2-empty">No selections to add.</div>
+          )}
+        </div>
+      </div>
+
+      <div className="selv2-footer">
+        <div className="selv2-footer-summary">
+          <span className="selv2-footer-summary-label">Subtotal added to invoice</span>
+          <span className="selv2-footer-summary-amount">{fmtCurrency(invoiceSubtotal)}</span>
+        </div>
+        <div className="selv2-footer-buttons">
+          <button className="btn btn-s" onClick={onClose}>Cancel</button>
+          <button className="btn btn-p" onClick={handleCreate} disabled={selectedCount === 0}>
+            Add line items
+          </button>
+        </div>
+      </div>
+    </>
+  );
+
+  if (variant === 'panel') {
+    return (
+      <div
+        className="est-modal selv2-modal"
+        style={{ width: '100%', maxWidth: 'none', height: '100%', maxHeight: 'none', borderRadius: 0, boxShadow: 'none', margin: 0 }}
+        onClick={e => e.stopPropagation()}
+      >
+        {cardContent}
+      </div>
+    );
+  }
+
   return createPortal(
     <div className="modal-backdrop" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="est-modal selv2-modal" onClick={e => e.stopPropagation()}>
-        <div className="est-modal-hdr">
-          <div>
-            <h2 className="selv2-title">Add selections to invoice</h2>
-          </div>
-          <button className="est-modal-close" onClick={onClose}>&times;</button>
-        </div>
-
-        <div className="est-modal-body selv2-body">
-          <div className="selv2-desc">
-            Choose approved selections to invoice, and set what percentage of each to bill.
-          </div>
-
-          <div className="selv2-controls">
-            <label className="selv2-inline-check selv2-controls-primary" onClick={toggleAll}>
-              <div className={"est-check" + (globalState === 'all' ? ' on' : globalState === 'partial' ? ' partial' : '')} />
-              <span className="selv2-controls-label">Select all</span>
-            </label>
-            <label className="selv2-inline-check selv2-controls-opt" onClick={() => setIncludeDescs(v => !v)}>
-              <div className={"est-check" + (includeDescs ? ' on' : '')} />
-              Include descriptions
-            </label>
-            <label className="selv2-inline-check selv2-controls-opt" onClick={() => setGroupByCode(v => !v)}>
-              <div className={"est-check" + (groupByCode ? ' on' : '')} />
-              Group by cost code
-            </label>
-            <div className="selv2-controls-spacer" />
-            <button type="button" className="est-expand-btn" onClick={toggleExpandAll}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M7 20l5-5 5 5" /><path d="M7 4l5 5 5-5" /></svg>
-              {allExpanded ? 'Collapse all' : 'Expand all'}
-            </button>
-            <div className="selv2-controls-opt" style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 12 }}>
-              <span>Invoice %</span>
-              <input
-                type="number"
-                min={0}
-                max={100}
-                value={globalPct}
-                onChange={e => setGlobal(e.target.value)}
-                style={pctInputStyle}
-              />
-            </div>
-          </div>
-
-          <div className="selv2-sections">
-            {allowanceGroups.length > 0 && (
-              <>
-                <div className="selv2-section-label">Allowances with approved selections</div>
-                {allowanceGroups.map(renderGroup)}
-              </>
-            )}
-            {standaloneChildren.length > 0 && (
-              <>
-                <div className="selv2-section-label" style={{ marginTop: 12 }}>Selections</div>
-                <div className="selv2-children" style={{ background: 'white', border: '1px solid var(--g200)', borderRadius: 8, overflow: 'hidden' }}>
-                  <table className="selv2-table">
-                    {selHead}
-                    <tbody>
-                      {standaloneChildren.map(renderSelRow)}
-                    </tbody>
-                  </table>
-                </div>
-              </>
-            )}
-            {availableData.length === 0 && (
-              <div className="selv2-empty">No selections to add.</div>
-            )}
-          </div>
-        </div>
-
-        <div className="selv2-footer">
-          <div className="selv2-footer-summary">
-            <span className="selv2-footer-summary-label">Subtotal added to invoice</span>
-            <span className="selv2-footer-summary-amount">{fmtCurrency(invoiceSubtotal)}</span>
-          </div>
-          <div className="selv2-footer-buttons">
-            <button className="btn btn-s" onClick={onClose}>Cancel</button>
-            <button className="btn btn-p" onClick={handleCreate} disabled={selectedCount === 0}>
-              Add line items
-            </button>
-          </div>
-        </div>
+        {cardContent}
       </div>
     </div>,
     document.body,

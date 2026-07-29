@@ -157,7 +157,7 @@ export default function CompanySettingsPage() {
   const [invoicesModalOpen, setInvoicesModalOpen] = useState(false);
 
   return (
-    <div style={{ flex: 1, minWidth: 0, overflowY: 'auto', background: '#eef0f8' }}>
+    <div className="bds-scope" style={{ flex: 1, minWidth: 0, overflowY: 'auto', background: '#eef0f8' }}>
       <div style={{ maxWidth: 1500, margin: '0 auto', padding: '28px 32px 48px' }}>
         <h1 style={{ fontSize: 26, fontWeight: 700, color: 'var(--g800)', margin: '0 0 24px' }}>Company settings</h1>
         <div style={{

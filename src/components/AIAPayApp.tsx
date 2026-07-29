@@ -2221,7 +2221,7 @@ export default function AIAPayApp({ onNavigate, approvedCOIds, addedCostIds: ext
             <span style={{ fontSize: 12, padding: '4px 12px', borderRadius: 6, background: '#f1f5f9', color: '#64748b', fontWeight: 500 }}>
               Application 002
             </span>
-            <button style={iconBtnStyle}>
+            <button style={iconBtnStyle} onClick={() => onNavigate?.('owner-invoices')} aria-label="Close">
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 4l8 8M12 4l-8 8" stroke="#94a3b8" strokeWidth="1.5" strokeLinecap="round"/></svg>
             </button>
           </div>

@@ -4,6 +4,9 @@ import { resolve } from 'path';
 
 export default defineConfig({
   plugins: [react()],
+  server: {
+    allowedHosts: ['invoice-reimagined.localhost'],
+  },
   build: {
     rollupOptions: {
       input: {

@@ -138,7 +138,7 @@ export default function InvoicesSettingsModal({ onClose }: { onClose: () => void
 
   return createPortal(
     <div className="modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="est-modal" style={{ maxWidth: 1100 }} onClick={(e) => e.stopPropagation()}>
+      <div className="est-modal bds-scope" style={{ maxWidth: 1100 }} onClick={(e) => e.stopPropagation()}>
         <div className="est-modal-hdr">
           <h2 style={{ fontSize: 20, fontWeight: 700, color: 'var(--bt-midnight)', margin: 0 }}>Invoices</h2>
           <button className="est-modal-close" onClick={onClose}>&times;</button>

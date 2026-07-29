@@ -100,6 +100,10 @@ interface Props {
   open: boolean;
   onClose: () => void;
   onAdd: (lineItems: any[]) => void;
+  // "Invoice (modal)" only — renders as a panel docked beside the invoice
+  // modal instead of its own centered dialog + backdrop. Defaults to the
+  // original centered-modal presentation everywhere else.
+  variant?: 'modal' | 'panel';
 }
 
 const TH_L: React.CSSProperties = { padding: '10px 12px 10px 0', textAlign: 'left' };
@@ -121,7 +125,7 @@ function NumField({ value, onChange, suffix, prefix, width = 46 }: { value: stri
   );
 }
 
-export default function AddFromAllModal({ open, onClose, onAdd }: Props) {
+export default function AddFromAllModal({ open, onClose, onAdd, variant = 'modal' }: Props) {
   const [checked, setChecked] = useState<Record<string, boolean>>({});
   const [sources, setSources] = useState<Record<SourceKey, boolean>>({ Estimate: true, 'Change Orders': true, Selections: true });
   const [sourceMenuOpen, setSourceMenuOpen] = useState(false);
@@ -361,95 +365,112 @@ export default function AddFromAllModal({ open, onClose, onAdd }: Props) {
 
   const anyActive = SOURCE_ORDER.some(s => sources[s]);
 
+  const cardContent = (
+    <>
+      {/* Header */}
+      <div style={{ padding: '20px 28px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexShrink: 0 }}>
+        <div>
+          {variant !== 'panel' && <BdsText as="div" size="normal-sm" style={{ color: 'var(--bds-color-gray-40)', marginBottom: 2 }}>Job title</BdsText>}
+          <BdsText as="div" size="distinct-lg">Add to invoice</BdsText>
+        </div>
+        <BdsButton displayType="tertiary" ariaLabel="Close" icon={<BdsIcon name="x" size={18} />} onClick={onClose} />
+      </div>
+
+      {/* Filter bar */}
+      <div style={{ padding: '0 28px 18px', display: 'flex', gap: 32, alignItems: 'flex-start', flexWrap: 'wrap', borderBottom: '1px solid var(--bds-color-gray-15)' }}>
+        <div>
+          <BdsText as="div" size="heavy-sm" style={{ marginBottom: 6 }}>Date</BdsText>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '7px 14px', border: '1px solid var(--bds-color-gray-15)', borderRadius: 6, fontSize: 13, color: 'var(--bds-color-gray-70)', background: 'var(--bds-color-base-background)', cursor: 'pointer' }}>
+            All<BdsIcon name="chevron-down" size={12} />
+          </div>
+        </div>
+        <div>
+          <BdsText as="div" size="heavy-sm" style={{ marginBottom: 6 }}>Record type</BdsText>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, flexWrap: 'wrap' }}>
+            <div style={{ position: 'relative' }}>
+              <BdsButton
+                displayType="secondary"
+                text={anyActive ? `${SOURCE_ORDER.filter(s => sources[s]).length} selected` : 'Select record types'}
+                iconRight={<BdsIcon name="chevron-down" size={12} />}
+                onClick={() => setSourceMenuOpen(o => !o)}
+              />
+              {sourceMenuOpen && (
+                <>
+                  <div style={{ position: 'fixed', inset: 0, zIndex: 1 }} onClick={() => setSourceMenuOpen(false)} />
+                  <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: 4, background: 'var(--bds-color-base-background)', border: '1px solid var(--bds-color-gray-15)', borderRadius: 8, boxShadow: '0 8px 24px rgba(0,0,0,0.12)', padding: 6, zIndex: 2, minWidth: 210 }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', cursor: 'pointer', borderRadius: 6, borderBottom: '1px solid var(--bds-color-gray-15)', marginBottom: 4 }}>
+                      <input
+                        type="checkbox"
+                        checked={allSourcesSelected}
+                        ref={el => { if (el) el.indeterminate = !allSourcesSelected && SOURCE_ORDER.some(s => sources[s]); }}
+                        onChange={toggleAllSources}
+                        style={{ width: 16, height: 16, accentColor: 'var(--bds-color-blue-60)' }}
+                      />
+                      <BdsText as="span" size="heavy-sm" style={{ fontSize: 13 }}>Select all</BdsText>
+                    </label>
+                    {SOURCE_ORDER.map(s => (
+                      <label key={s} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', cursor: 'pointer', borderRadius: 6 }}>
+                        <input type="checkbox" checked={sources[s]} onChange={() => toggleSource(s)} style={{ width: 16, height: 16, accentColor: 'var(--bds-color-blue-60)' }} />
+                        <SourceIcon source={s} /><BdsText as="span" size="normal-md" style={{ fontSize: 13 }}>{s}</BdsText>
+                      </label>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+            {SOURCE_ORDER.filter(s => sources[s]).map(s => (
+              <BdsPill
+                key={s}
+                text={s}
+                selected
+                onClick={() => removeSource(s)}
+                icon={<span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><SourceIcon source={s} /><BdsIcon name="x" size={11} /></span>}
+              />
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Body */}
+      <div style={{ padding: '16px 28px', overflowY: 'auto', overflowX: 'auto', flex: 1, background: 'var(--bds-color-base-background)' }}>
+        {!anyActive ? (
+          <div style={{ ...cardStyle, padding: 32, textAlign: 'center' }}><BdsText as="span" size="normal-md" style={{ color: 'var(--bds-color-gray-40)' }}>No record types selected.</BdsText></div>
+        ) : (
+          <>
+            {sources['Estimate'] && renderPctSection('Estimate', ESTIMATE_ROWS)}
+            {sources['Change Orders'] && renderPctSection('Change Orders', CO_ROWS)}
+            {sources['Selections'] && renderSelectionSection()}
+          </>
+        )}
+      </div>
+
+      {/* Footer */}
+      <div style={{ padding: '16px 28px', background: 'var(--bds-color-base-background)', borderTop: '1px solid var(--bds-color-gray-15)', borderRadius: variant === 'panel' ? 0 : '0 0 12px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 24, flexShrink: 0 }}>
+        <div>
+          <BdsText as="div" size="normal-sm" style={{ color: 'var(--bds-color-gray-50)' }}>Invoice subtotal</BdsText>
+          <BdsText as="div" size="heavy-lg">${fmt(subtotal)}</BdsText>
+        </div>
+        <BdsButton displayType="primary" text="Add to invoice" disabled={checkedIds.length === 0} onClick={handleAdd} />
+      </div>
+    </>
+  );
+
+  if (variant === 'panel') {
+    return (
+      <div
+        className="bds-scope bds-real-scope"
+        style={{ background: 'var(--bds-color-base-background)', width: '100%', height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
+        onClick={e => e.stopPropagation()}
+      >
+        {cardContent}
+      </div>
+    );
+  }
+
   return createPortal(
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(14,15,16,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={onClose}>
       <div className="bds-scope bds-real-scope" style={{ background: 'var(--bds-color-base-background)', borderRadius: 12, width: 1040, maxWidth: '97vw', maxHeight: '90vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }} onClick={e => e.stopPropagation()}>
-
-        {/* Header */}
-        <div style={{ padding: '20px 28px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexShrink: 0 }}>
-          <div>
-            <BdsText as="div" size="normal-sm" style={{ color: 'var(--bds-color-gray-40)', marginBottom: 2 }}>Job title</BdsText>
-            <BdsText as="div" size="distinct-lg">Add to invoice</BdsText>
-          </div>
-          <BdsButton displayType="tertiary" ariaLabel="Close" icon={<BdsIcon name="x" size={18} />} onClick={onClose} />
-        </div>
-
-        {/* Filter bar */}
-        <div style={{ padding: '0 28px 18px', display: 'flex', gap: 32, alignItems: 'flex-start', flexWrap: 'wrap', borderBottom: '1px solid var(--bds-color-gray-15)' }}>
-          <div>
-            <BdsText as="div" size="heavy-sm" style={{ marginBottom: 6 }}>Date</BdsText>
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '7px 14px', border: '1px solid var(--bds-color-gray-15)', borderRadius: 6, fontSize: 13, color: 'var(--bds-color-gray-70)', background: 'var(--bds-color-base-background)', cursor: 'pointer' }}>
-              All<BdsIcon name="chevron-down" size={12} />
-            </div>
-          </div>
-          <div>
-            <BdsText as="div" size="heavy-sm" style={{ marginBottom: 6 }}>Record type</BdsText>
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, flexWrap: 'wrap' }}>
-              <div style={{ position: 'relative' }}>
-                <BdsButton
-                  displayType="secondary"
-                  text={anyActive ? `${SOURCE_ORDER.filter(s => sources[s]).length} selected` : 'Select record types'}
-                  iconRight={<BdsIcon name="chevron-down" size={12} />}
-                  onClick={() => setSourceMenuOpen(o => !o)}
-                />
-                {sourceMenuOpen && (
-                  <>
-                    <div style={{ position: 'fixed', inset: 0, zIndex: 1 }} onClick={() => setSourceMenuOpen(false)} />
-                    <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: 4, background: 'var(--bds-color-base-background)', border: '1px solid var(--bds-color-gray-15)', borderRadius: 8, boxShadow: '0 8px 24px rgba(0,0,0,0.12)', padding: 6, zIndex: 2, minWidth: 210 }}>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', cursor: 'pointer', borderRadius: 6, borderBottom: '1px solid var(--bds-color-gray-15)', marginBottom: 4 }}>
-                        <input
-                          type="checkbox"
-                          checked={allSourcesSelected}
-                          ref={el => { if (el) el.indeterminate = !allSourcesSelected && SOURCE_ORDER.some(s => sources[s]); }}
-                          onChange={toggleAllSources}
-                          style={{ width: 16, height: 16, accentColor: 'var(--bds-color-blue-60)' }}
-                        />
-                        <BdsText as="span" size="heavy-sm" style={{ fontSize: 13 }}>Select all</BdsText>
-                      </label>
-                      {SOURCE_ORDER.map(s => (
-                        <label key={s} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', cursor: 'pointer', borderRadius: 6 }}>
-                          <input type="checkbox" checked={sources[s]} onChange={() => toggleSource(s)} style={{ width: 16, height: 16, accentColor: 'var(--bds-color-blue-60)' }} />
-                          <SourceIcon source={s} /><BdsText as="span" size="normal-md" style={{ fontSize: 13 }}>{s}</BdsText>
-                        </label>
-                      ))}
-                    </div>
-                  </>
-                )}
-              </div>
-              {SOURCE_ORDER.filter(s => sources[s]).map(s => (
-                <BdsPill
-                  key={s}
-                  text={s}
-                  selected
-                  onClick={() => removeSource(s)}
-                  icon={<span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><SourceIcon source={s} /><BdsIcon name="x" size={11} /></span>}
-                />
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Body */}
-        <div style={{ padding: '16px 28px', overflowY: 'auto', flex: 1, background: 'var(--bds-color-base-background)' }}>
-          {!anyActive ? (
-            <div style={{ ...cardStyle, padding: 32, textAlign: 'center' }}><BdsText as="span" size="normal-md" style={{ color: 'var(--bds-color-gray-40)' }}>No record types selected.</BdsText></div>
-          ) : (
-            <>
-              {sources['Estimate'] && renderPctSection('Estimate', ESTIMATE_ROWS)}
-              {sources['Change Orders'] && renderPctSection('Change Orders', CO_ROWS)}
-              {sources['Selections'] && renderSelectionSection()}
-            </>
-          )}
-        </div>
-
-        {/* Footer */}
-        <div style={{ padding: '16px 28px', background: 'var(--bds-color-base-background)', borderTop: '1px solid var(--bds-color-gray-15)', borderRadius: '0 0 12px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 24 }}>
-          <div>
-            <BdsText as="div" size="normal-sm" style={{ color: 'var(--bds-color-gray-50)' }}>Invoice subtotal</BdsText>
-            <BdsText as="div" size="heavy-lg">${fmt(subtotal)}</BdsText>
-          </div>
-          <BdsButton displayType="primary" text="Add to invoice" disabled={checkedIds.length === 0} onClick={handleAdd} />
-        </div>
+        {cardContent}
       </div>
     </div>,
     document.body,

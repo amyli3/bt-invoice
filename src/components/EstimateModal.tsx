@@ -92,9 +92,10 @@ interface Props {
   onClose: () => void;
   onAdd: (items: EstimateItem[]) => void;
   jobName: string;
+  variant?: 'modal' | 'panel';
 }
 
-export default function EstimateModal({ open, onClose, onAdd, jobName }: Props) {
+export default function EstimateModal({ open, onClose, onAdd, jobName, variant = 'modal' }: Props) {
   // Allowances that have selections are reconciled in the Selections & Allowances
   // wizard, not invoiced here — so exclude them from the estimate modal. Only
   // estimate line items and allowances without selections show here.
@@ -260,74 +261,92 @@ export default function EstimateModal({ open, onClose, onAdd, jobName }: Props) 
     );
   };
 
+  const cardContent = (
+    <>
+      {/* Header */}
+      <div className="est-modal-hdr">
+        <div>
+          {variant !== 'panel' && <div className="est-modal-hdr-sub">{jobName}</div>}
+          <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--bt-midnight)', margin: 0 }}>Invoice line items from Estimate</h2>
+        </div>
+        <button className="est-modal-close" onClick={onClose}>&times;</button>
+      </div>
+
+      {/* Body */}
+      <div className="est-modal-body">
+        <div className="est-desc">
+          Choose estimate line items and pre-contract allowances, then set the percentage to invoice for each.
+        </div>
+
+        <label className="est-include-check" onClick={() => setIncludeDescs(!includeDescs)}>
+          <div className={"est-check" + (includeDescs ? " on" : "")} />
+          Include line item descriptions &amp; notes
+        </label>
+
+        {/* Controls */}
+        <div className="est-controls">
+          <div className="est-search-wrap">
+            <svg width="14" height="14" viewBox="0 0 20 20" fill="none">
+              <circle cx="9" cy="9" r="5.5" stroke="currentColor" strokeWidth="1.5" />
+              <path d="M13 13L17 17" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+            </svg>
+            <input className="est-search" style={{ width: '100%' }} placeholder="Search line item" value={search} onChange={e => setSearch(e.target.value)} />
+          </div>
+<div className="est-markup-wrap">
+            <span>Adjust Invoice %</span>
+            <input className="est-markup-input" value={markupPct} onChange={e => setMarkupPct(e.target.value)} />
+            <span style={{ fontSize: 13, color: 'var(--g500)' }}>%</span>
+            <button className="est-apply-btn">Apply</button>
+          </div>
+        </div>
+
+        {/* Table */}
+        <div className="est-table-scroll">
+          <div className="est-table-inner">
+            {/* Table header */}
+            <div className="est-thead">
+              <div className={"est-check" + (allSelected ? " on" : someSelected ? " partial" : "")} onClick={toggleAll} />
+              <span>Items</span>
+              <span>Cost code</span>
+              <span>Cost type</span>
+              <span>Client price</span>
+              <span>Previously invoiced</span>
+              <span>New invoice %</span>
+              <span>New invoice amount</span>
+            </div>
+
+            {/* Grouped sections */}
+            {renderSection('Estimate line items', lines)}
+            {renderSection('Allowances', allowances)}
+          </div>
+        </div>
+      </div>
+
+      {/* Footer */}
+      <div className="est-modal-footer">
+        <button className="btn btn-p" onClick={handleAdd}>
+          Add to invoice{selectedCount > 0 ? ` (${selectedCount})` : ''}
+        </button>
+      </div>
+    </>
+  );
+
+  if (variant === 'panel') {
+    return (
+      <div
+        className="est-modal"
+        style={{ width: '100%', maxWidth: 'none', height: '100%', maxHeight: 'none', borderRadius: 0, boxShadow: 'none', margin: 0 }}
+        onClick={e => e.stopPropagation()}
+      >
+        {cardContent}
+      </div>
+    );
+  }
+
   return createPortal(
     <div className="modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="est-modal" onClick={e => e.stopPropagation()}>
-        {/* Header */}
-        <div className="est-modal-hdr">
-          <div>
-            <div className="est-modal-hdr-sub">{jobName}</div>
-            <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--bt-midnight)', margin: 0 }}>Invoice line items from Estimate</h2>
-          </div>
-          <button className="est-modal-close" onClick={onClose}>&times;</button>
-        </div>
-
-        {/* Body */}
-        <div className="est-modal-body">
-          <div className="est-desc">
-            Choose estimate line items and pre-contract allowances, then set the percentage to invoice for each.
-          </div>
-
-          <label className="est-include-check" onClick={() => setIncludeDescs(!includeDescs)}>
-            <div className={"est-check" + (includeDescs ? " on" : "")} />
-            Include line item descriptions &amp; notes
-          </label>
-
-          {/* Controls */}
-          <div className="est-controls">
-            <div className="est-search-wrap">
-              <svg width="14" height="14" viewBox="0 0 20 20" fill="none">
-                <circle cx="9" cy="9" r="5.5" stroke="currentColor" strokeWidth="1.5" />
-                <path d="M13 13L17 17" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-              </svg>
-              <input className="est-search" style={{ width: '100%' }} placeholder="Search line item" value={search} onChange={e => setSearch(e.target.value)} />
-            </div>
-<div className="est-markup-wrap">
-              <span>Adjust Invoice %</span>
-              <input className="est-markup-input" value={markupPct} onChange={e => setMarkupPct(e.target.value)} />
-              <span style={{ fontSize: 13, color: 'var(--g500)' }}>%</span>
-              <button className="est-apply-btn">Apply</button>
-            </div>
-          </div>
-
-          {/* Table */}
-          <div className="est-table-scroll">
-            <div className="est-table-inner">
-              {/* Table header */}
-              <div className="est-thead">
-                <div className={"est-check" + (allSelected ? " on" : someSelected ? " partial" : "")} onClick={toggleAll} />
-                <span>Items</span>
-                <span>Cost code</span>
-                <span>Cost type</span>
-                <span>Client price</span>
-                <span>Previously invoiced</span>
-                <span>New invoice %</span>
-                <span>New invoice amount</span>
-              </div>
-
-              {/* Grouped sections */}
-              {renderSection('Estimate line items', lines)}
-              {renderSection('Allowances', allowances)}
-            </div>
-          </div>
-        </div>
-
-        {/* Footer */}
-        <div className="est-modal-footer">
-          <button className="btn btn-p" onClick={handleAdd}>
-            Add to invoice{selectedCount > 0 ? ` (${selectedCount})` : ''}
-          </button>
-        </div>
+        {cardContent}
       </div>
     </div>,
     document.body

@@ -1,5 +1,10 @@
 import { useState, Fragment, useRef, useEffect } from 'react';
 import { allAllowances, allSelections } from '../allowanceMockData';
+import { DrawScheduleLine, InvoicingMode, Job } from '../types';
+import SendToBudgetModal from './SendToBudgetModal';
+import PaymentScheduleModal from './PaymentScheduleModal';
+import InvoicingModePicker from './InvoicingModePicker';
+import { BdsIcon } from '../bds';
 
 type EstimateItem = { id: string; name: string; costCode: string; costCodeRaw: string; desc: string; qty: number; unit: string; unitCost: number; costType: string; builderCost: number; markup: number; };
 type EstimateGroup = { group: string; budgetAmount: number; items: EstimateItem[]; };
@@ -75,11 +80,28 @@ const fmt = (n: number) => n.toLocaleString('en-US', { minimumFractionDigits: 2,
 interface Props {
   jobOpen?: boolean;
   onToggleJob?: () => void;
+  locked?: boolean;
+  // Called once the user confirms in SendToBudgetModal. In production, sending
+  // to budget takes the builder to Job Costing Budget — so the parent is
+  // responsible for navigating there once this fires.
+  onSendToBudget?: (totalOwnerPrice: number) => void;
+  onUnlock?: () => void;
+  existingDrawSchedule?: DrawScheduleLine[];
+  onScheduleCreated?: (draws: DrawScheduleLine[]) => void;
   onBuildProposal?: () => void;
+  job: Job;
+  invoicingMode?: InvoicingMode;
+  onSetInvoicingMode?: (mode: InvoicingMode) => void;
 }
 
-export default function EstimatePage({ jobOpen, onToggleJob, onBuildProposal }: Props) {
+export default function EstimatePage({ jobOpen, onToggleJob, locked, onSendToBudget, onUnlock, existingDrawSchedule, onScheduleCreated, onBuildProposal, job, invoicingMode, onSetInvoicingMode }: Props) {
   const [groupBy, setGroupBy] = useState<'proposal' | 'costcode'>('proposal');
+  // The Send to Budget flow is a confirm step plus two optional side-steps in
+  // the same dialog: pick/confirm the invoicing mode, and set up a draw
+  // schedule, both since the contract price they depend on has just become
+  // final. "mode"/"schedule" always return to "confirm" so Send to Budget
+  // stays an explicit, separate click.
+  const [budgetFlowStep, setBudgetFlowStep] = useState<'confirm' | 'mode' | 'schedule' | null>(null);
   const estimateData = groupBy === 'proposal' ? proposalData : costCodeData;
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set(proposalData.map(g => g.group)));
   const [groupByOpen, setGroupByOpen] = useState(false);
@@ -163,12 +185,76 @@ export default function EstimatePage({ jobOpen, onToggleJob, onBuildProposal }: 
           </button>
         </div>
         <div className="ep-actions-right">
-          <button className="btn btn-s">Lock estimate</button>
-          <button className="btn btn-s">Send to budget</button>
-          <button className="btn btn-p" onClick={onBuildProposal}>Build proposal</button>
-          <button className="btn btn-s">Export</button>
+          {locked ? (
+            <>
+              <button className="btn btn-s">Export</button>
+              <button className="btn btn-s" onClick={onUnlock}>Unlock estimate</button>
+            </>
+          ) : (
+            <>
+              <button className="btn btn-s">Lock estimate</button>
+              <button className="btn btn-s" onClick={() => setBudgetFlowStep('confirm')}>Send to budget</button>
+              <button className="btn btn-p" onClick={onBuildProposal}>Build proposal</button>
+              <button className="btn btn-s">Export</button>
+            </>
+          )}
         </div>
       </div>
+
+      {budgetFlowStep === 'confirm' && (
+        <SendToBudgetModal
+          job={job}
+          builderCost={totalBuilderCost}
+          profit={estimatedProfit}
+          totalOwnerPrice={totalOwnerPrice}
+          margin={(estimatedProfit / totalOwnerPrice) * 100}
+          hasDrawSchedule={!!existingDrawSchedule && existingDrawSchedule.length > 0}
+          invoicingMode={invoicingMode}
+          onChangeInvoicingMode={() => setBudgetFlowStep('mode')}
+          onCancel={() => setBudgetFlowStep(null)}
+          onOpenDrawSchedule={() => setBudgetFlowStep('schedule')}
+          onConfirm={() => {
+            setBudgetFlowStep(null);
+            onSendToBudget?.(totalOwnerPrice);
+          }}
+        />
+      )}
+
+      {budgetFlowStep === 'mode' && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(20, 24, 33, 0.5)', zIndex: 1000,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24,
+        }}>
+          <div className="bds-scope" style={{ background: '#fff', borderRadius: 'var(--bds-radius-lg)', width: 920, maxWidth: '95vw', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.25)', position: 'relative' }}>
+            <button
+              type="button"
+              onClick={() => setBudgetFlowStep('confirm')}
+              style={{ position: 'absolute', top: 20, right: 20, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--bds-color-gray-70)' }}
+            >
+              <BdsIcon name="x" size={20} />
+            </button>
+            <InvoicingModePicker
+              job={job}
+              onContinue={(mode) => {
+                onSetInvoicingMode?.(mode);
+                setBudgetFlowStep('confirm');
+              }}
+            />
+          </div>
+        </div>
+      )}
+
+      {budgetFlowStep === 'schedule' && (
+        <PaymentScheduleModal
+          existingDraws={existingDrawSchedule}
+          defaultTotal={totalOwnerPrice}
+          onClose={() => setBudgetFlowStep('confirm')}
+          onSave={(draws) => {
+            onScheduleCreated?.(draws);
+            setBudgetFlowStep('confirm');
+          }}
+        />
+      )}
 
       {/* Table */}
       <div className="ep-table-wrap">

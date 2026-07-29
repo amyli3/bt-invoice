@@ -4,9 +4,10 @@ interface Props {
   invoice: Invoice;
   jobOpen: boolean;
   onToggleJob: () => void;
+  onClose?: () => void;
 }
 
-export default function PageHeader({ invoice, jobOpen, onToggleJob }: Props) {
+export default function PageHeader({ invoice, jobOpen, onToggleJob, onClose }: Props) {
   return (
     <div className="pg-hdr">
       <div className="pg-accent"></div>
@@ -27,6 +28,16 @@ export default function PageHeader({ invoice, jobOpen, onToggleJob }: Props) {
             <span style={{ fontSize: 13, color: 'var(--g500)' }}>#{invoice.invoiceNumber}</span>
           )}
           <span className="status status-unreleased">{invoice.status}</span>
+          {onClose && (
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close"
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--g500)', display: 'flex', alignItems: 'center', padding: 4 }}
+            >
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+            </button>
+          )}
         </div>
       </div>
     </div>

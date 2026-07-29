@@ -67,12 +67,34 @@ export interface ClientColumnVisibility {
   [key: string]: boolean;
 }
 
+export type InvoicingMode = 'time-interval' | 'milestone-draws' | 'aia-percent-complete';
+
+export interface DrawScheduleLine {
+  drawNumber: number;
+  milestone: string;
+  title: string;
+  amount: number;
+  /** Whether the schedule phase tied to this milestone has been marked complete. */
+  phaseComplete: boolean;
+  /** Whether this draw has already been invoiced. */
+  invoiced?: boolean;
+}
+
 export interface Job {
   id: number;
   name: string;
   addr: string;
   group: string;
   tag?: string;
+  /** How this job's contract is structured — known as early as proposal signing. */
+  contractType?: 'fixed-price' | 'cost-plus' | 'time-and-materials';
+  /** Commercial jobs typically bill on certified AIA pay applications. */
+  sector?: 'residential' | 'commercial';
+  /** Draw/milestone payment schedule set up when the proposal was built, if any. */
+  drawSchedule?: DrawScheduleLine[];
+  /** Set on Job Details — lenders typically require draw-based disbursements
+   * tied to inspected progress, which feeds the invoicing-mode recommendation. */
+  fundedByConstructionLoan?: boolean;
 }
 
 export interface ColumnDef {
