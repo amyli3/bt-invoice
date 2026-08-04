@@ -163,7 +163,9 @@ const AIA_CONTINUATION_GROUPS = [
   { code: '6000-6999', label: 'Exterior & Sitework', scheduled: 42000, completed: 0 },
 ];
 
-function AiaPreview({ job }: { job: Job }) {
+// Exported so the reimagined full-page invoice can render this same G702/G703
+// document on its Client preview tab when the progress path is chosen.
+export function AiaPreview({ job }: { job: Job }) {
   const originalContractSum = 420000;
   const changeOrders = 8500;
   const contractSumToDate = originalContractSum + changeOrders;

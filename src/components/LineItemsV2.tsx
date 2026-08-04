@@ -1,11 +1,30 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, type ReactNode } from 'react';
 import { Invoice, LineItem, ColumnVisibility } from '../types';
 import { COST_TYPES, getNextId } from '../mockData';
 import { fmt, parseTaxRate } from '../utils';
 import { costCodeLabel } from '../selectionsData';
 import { BdsBadge } from '../bds';
+import { autoFillLineItems } from './CostsModal';
+import { contractAutoFillLineItems } from '../contractBilling';
 
-function AddFromDropdown({ onOpenEstimate, onOpenSelections2b, onOpenSelections3, onOpenAll, onOpenCosts }: { onOpenEstimate?: () => void; onOpenSelections?: () => void; onOpenSelections2?: () => void; onOpenSelections2b?: () => void; onOpenSelections3?: () => void; onOpenAll?: () => void; onOpenCosts?: () => void }) {
+/* Which billing model the job runs on, which decides what Auto fill reads.
+   Open book (cost plus, time and materials) bills what the job cost; fixed
+   price bills what was contracted. They are not two styles of the same fill:
+   the sources, the amounts and the copy all differ. */
+export type BillingModel = 'openBook' | 'fixedPrice';
+
+/* Sparkle marks the affordance as "the product is doing this for you", matching
+   how Bills / Client Updates / Job Options use BdsIconSparkle today. Open
+   question on the story: whether a sparkle is right for a deterministic,
+   history-based recommendation. It is statistical, but it is not AI. */
+const Sparkle = ({ size = 14 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0 }} aria-hidden="true">
+    <path d="M6.8 1.2 7.9 5.7 12.4 6.8 7.9 7.9 6.8 12.4 5.7 7.9 1.2 6.8 5.7 5.7Z" fill="currentColor" />
+    <path d="M12.2 9.6 12.8 11.6 14.8 12.2 12.8 12.8 12.2 14.8 11.6 12.8 9.6 12.2 11.6 11.6Z" fill="currentColor" opacity="0.7" />
+  </svg>
+);
+
+export function AddFromDropdown({ onOpenEstimate, onOpenSelections2b, onOpenSelections3, onOpenAll, onOpenAll2, onOpenCosts, hideSingleSourceOptions = false }: { onOpenEstimate?: () => void; onOpenSelections?: () => void; onOpenSelections2?: () => void; onOpenSelections2b?: () => void; onOpenSelections3?: () => void; onOpenAll?: () => void; onOpenAll2?: () => void; onOpenCosts?: () => void; hideSingleSourceOptions?: boolean }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -29,21 +48,35 @@ function AddFromDropdown({ onOpenEstimate, onOpenSelections2b, onOpenSelections3
       </button>
       {open && (
         <div className="add-from-dropdown">
-          <button className="add-from-option" onClick={() => { setOpen(false); onOpenEstimate?.(); }}>
-            <span style={{ fontWeight: 500 }}>Estimate</span>
-          </button>
-          {/* "Selections" opens the V5 Selections & Allowances wizard. The older
-              plain-selections wizard (onOpenSelections) is hidden. */}
-          <button className="add-from-option" onClick={() => { setOpen(false); onOpenSelections2b?.(); }}>
-            <span style={{ fontWeight: 500 }}>Selections</span>
-          </button>
-          {/* The pre-redesign wizard, kept for reference — groups by allowance
-              and lets the builder check individual selections to invoice. */}
-          <button className="add-from-option" onClick={() => { setOpen(false); onOpenSelections3?.(); }}>
-            <span style={{ fontWeight: 500 }}>Selections 2 (old)</span>
-          </button>
-          <button className="add-from-option" onClick={() => { setOpen(false); onOpenAll?.(); }} style={{ borderTop: '1px solid var(--g200)' }}>
+          {/* The single-source wizards. Invoice (modal) hides them — the
+              combined view already covers estimate + change orders +
+              selections there — but every other page keeps them. */}
+          {!hideSingleSourceOptions && (
+            <>
+              <button className="add-from-option" onClick={() => { setOpen(false); onOpenEstimate?.(); }}>
+                <span style={{ fontWeight: 500 }}>Estimate</span>
+              </button>
+              {/* "Selections" opens the V5 Selections & Allowances wizard. The older
+                  plain-selections wizard (onOpenSelections) is hidden. */}
+              <button className="add-from-option" onClick={() => { setOpen(false); onOpenSelections2b?.(); }}>
+                <span style={{ fontWeight: 500 }}>Selections</span>
+              </button>
+              {/* The pre-redesign wizard, kept for reference — groups by allowance
+                  and lets the builder check individual selections to invoice. */}
+              <button className="add-from-option" onClick={() => { setOpen(false); onOpenSelections3?.(); }}>
+                <span style={{ fontWeight: 500 }}>Selections 2 (old)</span>
+              </button>
+            </>
+          )}
+          <button className="add-from-option" onClick={() => { setOpen(false); onOpenAll?.(); }} style={hideSingleSourceOptions ? undefined : { borderTop: '1px solid var(--g200)' }}>
             <span style={{ fontWeight: 600 }}>Combined view</span>
+          </button>
+          {/* Combined view 2 = the same wizard with Costs added as a fourth
+              record type. The Costs entry below stays: the standalone costs
+              modal is still its own flow. */}
+          <button className="add-from-option" onClick={() => { setOpen(false); onOpenAll2?.(); }}>
+            <span style={{ fontWeight: 600 }}>Combined view 2</span>
+            <span style={{ display: 'block', fontSize: 11, fontWeight: 400, color: 'var(--g500)', marginTop: 2 }}>Includes costs</span>
           </button>
           <button className="add-from-option" onClick={() => { setOpen(false); onOpenCosts?.(); }}>
             <span style={{ fontWeight: 500 }}>Costs</span>
@@ -53,6 +86,23 @@ function AddFromDropdown({ onOpenEstimate, onOpenSelections2b, onOpenSelections3
     </div>
   );
 }
+
+/* Related item tag per source. Allowance and selection keep the colors they
+   already had; the two cost sources are neutral, since a cost line's provenance
+   is reference information rather than a status worth a color. */
+const RELATED_ITEM_TAG: Record<
+  NonNullable<LineItem['relatedItem']>['type'],
+  { label: string; background: string; color: string }
+> = {
+  allowance: { label: 'Allowance', background: '#e8f1fc', color: 'var(--bt-blue)' },
+  selection: { label: 'Selection', background: 'var(--green-bg)', color: 'var(--green)' },
+  bill: { label: 'Bill', background: 'var(--g100)', color: 'var(--g700)' },
+  timeClock: { label: 'Time clock', background: 'var(--g100)', color: 'var(--g700)' },
+  quickBooks: { label: 'QuickBooks', background: 'var(--g100)', color: 'var(--g700)' },
+  // Fixed-price provenance: a contract line or an approved change order.
+  contract: { label: 'Contract', background: '#e8f1fc', color: 'var(--bt-blue)' },
+  changeOrder: { label: 'Change order', background: '#e8f1fc', color: 'var(--bt-blue)' },
+};
 
 interface LineRowProps {
   item: LineItem;
@@ -103,10 +153,10 @@ function LineRow({ item, onChange, onRemove, vis, taxRate }: LineRowProps) {
           <span style={{
             display: 'inline-flex', alignItems: 'center', gap: 4,
             fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 4,
-            background: item.relatedItem.type === 'allowance' ? '#e8f1fc' : 'var(--green-bg)',
-            color: item.relatedItem.type === 'allowance' ? 'var(--bt-blue)' : 'var(--green)',
+            background: RELATED_ITEM_TAG[item.relatedItem.type].background,
+            color: RELATED_ITEM_TAG[item.relatedItem.type].color,
           }}>
-            {item.relatedItem.type === 'allowance' ? 'Allowance' : 'Selection'}: {item.relatedItem.name}
+            {RELATED_ITEM_TAG[item.relatedItem.type].label}: {item.relatedItem.name}
           </span>
         )}
       </td>
@@ -363,13 +413,64 @@ interface Props {
   onOpenSelections2b?: () => void;
   onOpenSelections3?: () => void;
   onOpenAll?: () => void;
+  /** "Combined view 2" — the combined wizard with Costs added as a source. */
+  onOpenAll2?: () => void;
+  /** Billing model of the job, which decides what Auto fill offers. Comes from
+      the job's contractType, so it isn't an invoice-level decision. */
+  billingModel?: BillingModel;
+  /** Invoice (modal) only: show just Combined view + Costs in "Add from". */
+  hideSingleSourceOptions?: boolean;
+  /** Slot under the "Add from" row — used for the "we pre-filled this invoice"
+      note, which belongs next to the lines it's explaining. */
+  notice?: ReactNode;
   onOpenCosts?: () => void;
+  // Optional slot rendered at the left of the "Add from" row — the full-page
+  // invoice puts the Flat fee / Line items toggle inline here.
+  modeToggle?: ReactNode;
 }
 
-export default function LineItems({ invoice, onChange, vis, stackView = 'summary', onStackViewChange, onOpenEstimate, onOpenSelections, onOpenSelections2, onOpenSelections2b, onOpenSelections3, onOpenAll, onOpenCosts }: Props) {
+export default function LineItems({ invoice, onChange, vis, stackView = 'summary', onStackViewChange, onOpenEstimate, onOpenSelections, onOpenSelections2, onOpenSelections2b, onOpenSelections3, onOpenAll, onOpenAll2, onOpenCosts, hideSingleSourceOptions, notice, modeToggle, billingModel = 'openBook' }: Props) {
   // The row the builder is actively editing — only this one gets the blue
   // edit highlight; other expanded rows stay neutral white.
   const [activeEditId, setActiveEditId] = useState<string | null>(null);
+
+  /* Auto fill: the one-click path from US #283497. Populates unsaved form state
+     rather than creating anything, so abandoning the invoice costs nothing.
+     Holds the ids it added so Undo can remove exactly those lines and nothing
+     the builder typed themselves. Non-null also means "already run", which
+     hides the trigger so a second click can't duplicate the lines. */
+  const [autoFilledIds, setAutoFilledIds] = useState<string[] | null>(null);
+  const isFixedPrice = billingModel === 'fixedPrice';
+  /* Open book reads unbilled cost records; fixed price reads contract lines and
+     approved change orders at percent complete. Same one-click shape, different
+     source of truth, so the two can never be mixed on one invoice by accident. */
+  const autoFillCandidates = isFixedPrice ? contractAutoFillLineItems() : autoFillLineItems();
+  const canAutoFill = autoFillCandidates.length > 0 && autoFilledIds === null;
+
+  const runAutoFill = () => {
+    if (autoFillCandidates.length === 0) return;
+    setAutoFilledIds(autoFillCandidates.map(i => i.id));
+    onChange({ ...invoice, lineItems: [...invoice.lineItems, ...autoFillCandidates] });
+  };
+  const undoAutoFill = () => {
+    if (!autoFilledIds) return;
+    onChange({ ...invoice, lineItems: invoice.lineItems.filter(li => !autoFilledIds.includes(li.id)) });
+    setAutoFilledIds(null);
+  };
+
+  /* If the billing model changes under us (the builder switched to a job on a
+     different contract type), pull the previous model's auto-filled lines back
+     off. Cost lines on a fixed-price invoice, or contract percentages on an
+     open-book one, are not just mislabeled, they are the wrong amounts owed, so
+     leaving them behind would be worse than clearing them. Only touches lines
+     Auto fill added; anything typed by hand stays. */
+  useEffect(() => {
+    if (autoFilledIds) undoAutoFill();
+    // Deliberately keyed on the model alone: this is a reset on switch, not a
+    // reaction to line-item edits.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [billingModel]);
+
   const add = () => onChange({...invoice, lineItems: [...invoice.lineItems, { id: getNextId(), description: '', costCode: '', costType: 'Material', unitCost: 0, quantity: 1, unit: '--', markup: 0 }]});
   const upd = (i: number, item: LineItem) => { const l = [...invoice.lineItems]; l[i] = item; onChange({...invoice, lineItems: l}); };
   const rem = (i: number) => {
@@ -397,7 +498,9 @@ export default function LineItems({ invoice, onChange, vis, stackView = 'summary
 
   return (
     <div className="sec" style={{paddingBottom: 0}}>
-      <div style={{display: 'flex', justifyContent: 'flex-end', alignItems: 'center', marginBottom: 8, flexWrap: 'wrap', gap: 16}}>
+      <div style={{display: 'flex', justifyContent: modeToggle ? 'space-between' : 'flex-end', alignItems: 'center', marginBottom: 8, flexWrap: 'wrap', gap: 16}}>
+        {modeToggle}
+        {modeToggle && <div style={{flex: 1}} />}
         {hasGroups && onStackViewChange && (
           <button
             type="button"
@@ -407,8 +510,112 @@ export default function LineItems({ invoice, onChange, vis, stackView = 'summary
             {stackView === 'summary' ? 'Switch to itemized' : 'Switch to summary'}
           </button>
         )}
-        <AddFromDropdown onOpenEstimate={onOpenEstimate} onOpenSelections={onOpenSelections} onOpenSelections2={onOpenSelections2} onOpenSelections2b={onOpenSelections2b} onOpenSelections3={onOpenSelections3} onOpenAll={onOpenAll} onOpenCosts={onOpenCosts} />
+        <AddFromDropdown onOpenEstimate={onOpenEstimate} onOpenSelections={onOpenSelections} onOpenSelections2={onOpenSelections2} onOpenSelections2b={onOpenSelections2b} onOpenSelections3={onOpenSelections3} onOpenAll={onOpenAll} onOpenAll2={onOpenAll2} onOpenCosts={onOpenCosts} hideSingleSourceOptions={hideSingleSourceOptions} />
       </div>
+
+      {/* The offer. Only rendered when there is something to generate, so a job
+          with nothing to bill gets no banner rather than a dead end. Names the
+          two sources out loud (bills, time clock) because "costs" on its own
+          doesn't tell the builder what is about to be pulled in, and says
+          nothing about dates: the service applies no cutoff, so promising
+          "since your last invoice" would be wrong. */}
+      {canAutoFill && (
+        <div
+          style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap',
+            background: 'var(--bds-color-info-background)', border: '1px solid var(--bds-color-info-foreground)',
+            borderRadius: 'var(--bds-radius-lg, 12px)', padding: '14px 16px', marginBottom: 12,
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+            <span style={{ color: 'var(--bds-color-info-foreground)', paddingTop: 2 }}><Sparkle size={16} /></span>
+            <div>
+              <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--bds-color-gray-90)' }}>
+                Let Buildertrend fill in this invoice
+              </div>
+              {/* Sources named to match what open book actually pulls, per the
+                  research (ADO #284248 / Confluence "what builders actually
+                  treat as invoiceable"):
+                    bills            no approval and no payment filter. "Approved
+                                     bills" is Trap 2 in that research: IsApproved
+                                     is a display flag and must not become a
+                                     filter. Unapproved bills invoice at ~77%.
+                    time clock       approved only. This one IS gated, 84.6% vs
+                                     0.6% for pending, so "approved" belongs here.
+                    accounting costs all types, negatives included.
+                  Change orders are NOT pulled: scope is costs only, and on open
+                  book change orders are 2.4% of invoice lines. No date language,
+                  since bills over 180 days old invoice more (86.0%) than newer
+                  ones and any window would lose revenue. */}
+              {/* Fixed price never mentions costs: on a fixed-price contract a
+                  bill is the builder's own margin problem, not something the
+                  client owes. What they owe is the contracted value of finished
+                  work, so the copy names the schedule and the change orders. */}
+              <div style={{ fontSize: 12, color: 'var(--bds-color-gray-70)', marginTop: 2, lineHeight: 1.45 }}>
+                {isFixedPrice
+                  ? `We'll bill the contract lines the schedule says have moved since your last invoice, at their
+                     percent complete, plus approved change orders you haven't billed yet. You can review and make
+                     changes before you send it to your client.`
+                  : `We'll pull in the unbilled costs you usually bill on this job (bills, approved time clock hours,
+                     and accounting costs) and add them as line items. You can review and make changes before you
+                     send it to your client.`}
+              </div>
+            </div>
+          </div>
+          {/* Secondary, not primary: the banner already carries the colour, and
+              Auto fill is an offer rather than the page's main action (Save and
+              Send are). The other blue banners in the app do use a primary
+              button here, so this is the deliberate difference. */}
+          <button
+            type="button"
+            className="btn btn-s"
+            onClick={runAutoFill}
+            /* The default gray-15 border measures 1.11:1 against the banner
+               fill, so the button edge effectively disappears. g500 clears the
+               3:1 WCAG needs for a control boundary while staying neutral. */
+            style={{ fontSize: 13, padding: '8px 16px', gap: 6, borderColor: 'var(--g500)' }}
+          >
+            <Sparkle />
+            Auto fill
+          </button>
+        </div>
+      )}
+
+      {/* Auto fill skips the review modal, so the review has to happen here.
+          role="status" announces it; Undo makes the whole thing reversible in
+          one click, which is what makes an 82%-precision suggestion safe. */}
+      {autoFilledIds && (
+        <div
+          role="status"
+          style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap',
+            background: 'var(--bds-color-info-background)', border: '1px solid var(--bds-color-info-foreground)',
+            borderRadius: 'var(--bds-radius-lg, 12px)', padding: '12px 16px', marginBottom: 12,
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+            <span style={{ color: 'var(--bds-color-info-foreground)', paddingTop: 2 }}><Sparkle size={16} /></span>
+            <div>
+              <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--bds-color-gray-90)' }}>
+                Added line items
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--bds-color-gray-70)', marginTop: 2 }}>
+                Review line items and remove anything you don't want to invoice to the client yet.
+              </div>
+            </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <button
+              type="button"
+              onClick={undoAutoFill}
+              style={{ background: 'none', border: 'none', padding: 0, fontFamily: 'inherit', fontSize: 13, fontWeight: 500, color: 'var(--bds-color-info-foreground)', cursor: 'pointer' }}
+            >
+              Undo
+            </button>
+          </div>
+        </div>
+      )}
+      {notice}
       <div className="lt-scroll liv2-lt-scroll">
         <table className="lt">
           <thead><tr>
@@ -432,14 +639,23 @@ export default function LineItems({ invoice, onChange, vis, stackView = 'summary
               if (grouped && stackView === 'itemized') {
                 return <GroupItemizedRows key={item.id} item={item} vis={vis} taxRate={taxRate} activeEditId={activeEditId} onActivate={setActiveEditId} onChange={u => upd(i, u)} onRemove={() => rem(i)} />;
               }
-              // All wizard-added lines (allowances + selections) use the clean
-              // icon + name + cost-code row with a caret to edit. Manual "+ Item"
-              // lines keep the inline-editable row.
-              if (item.relatedItem) {
+              // Allowance and selection lines use the clean icon + name +
+              // cost-code row with a caret to edit. Cost lines (bill / time
+              // clock) keep the inline-editable row: they carry a relatedItem
+              // for traceability but are ordinary single lines, and the builder
+              // needs to adjust their amounts in place before sending.
+              if (item.relatedItem && (item.relatedItem.type === 'allowance' || item.relatedItem.type === 'selection')) {
                 return <GroupSummaryRow key={item.id} item={item} colCount={colCount} vis={vis} taxRate={taxRate} activeEditId={activeEditId} onActivate={setActiveEditId} onChange={u => upd(i, u)} onRemove={() => rem(i)} />;
               }
               return <LineRow key={item.id} item={item} onChange={u => upd(i, u)} onRemove={() => rem(i)} vis={vis} taxRate={taxRate} />;
             })}
+            {/* Add row lives inside the table, above the Total row — not as a
+                loose button under the container. */}
+            <tr>
+              <td colSpan={colCount} style={{ padding: '10px 16px' }}>
+                <button className="add-btn" onClick={add}><span className="add-icon">+</span> Item</button>
+              </td>
+            </tr>
           </tbody>
           <tfoot>
             <tr style={{ borderTop: '2px solid var(--g200)', background: 'var(--g50)' }}>
@@ -459,18 +675,21 @@ export default function LineItems({ invoice, onChange, vis, stackView = 'summary
           </tfoot>
         </table>
       </div>
-      <div style={{padding: '10px 0'}}><button className="add-btn" onClick={add}><span className="add-icon">+</span> Item</button></div>
       <div style={{display: 'flex', justifyContent: 'flex-end', padding: '14px 0'}}>
-        <div style={{textAlign: 'right'}}>
-          {taxRate > 0 && (
-            <div style={{fontSize: 13, color: 'var(--g500)', marginBottom: 4}}>
-              Subtotal: {fmtCurrency(tcp)} &nbsp;|&nbsp; Tax: {fmtCurrency(taxTotal)}
-            </div>
-          )}
-          <div style={{fontSize: 14, fontWeight: 700, color: 'var(--bt-midnight)', display: 'flex', gap: 24}}>
+        <div style={{minWidth: 260}}>
+          <div style={{display: 'flex', justifyContent: 'space-between', gap: 24, fontSize: 13, color: 'var(--g700)', marginBottom: 4}}>
+            <span>Subtotal</span><span>{fmtCurrency(tcp)}</span>
+          </div>
+          <div style={{display: 'flex', justifyContent: 'space-between', gap: 24, fontSize: 13, color: 'var(--g700)'}}>
+            <span>Tax</span><span>{fmtCurrency(taxTotal)}</span>
+          </div>
+          <div style={{borderTop: '1px solid var(--g200)', margin: '10px 0'}} />
+          <div style={{display: 'flex', justifyContent: 'space-between', gap: 24, fontSize: 16, fontWeight: 700, color: 'var(--bt-midnight)'}}>
             <span>Total price</span><span>{fmtCurrency(tcp + taxTotal)}</span>
           </div>
-          <button className="btn-g" style={{fontSize: 12, marginTop: 4}}>&#9654; Show full price breakdown</button>
+          <div style={{textAlign: 'right', marginTop: 6}}>
+            <button className="btn-g" style={{fontSize: 13, textDecoration: 'underline'}}>See full price breakdown</button>
+          </div>
         </div>
       </div>
     </div>

@@ -74,11 +74,13 @@ export function BdsPill({ text, displayType = 'default', selected, onClick, icon
 }
 
 type TextSize = 'normal-sm' | 'normal-md' | 'normal-lg' | 'distinct-sm' | 'distinct-md' | 'distinct-lg' | 'heavy-sm' | 'heavy-md' | 'heavy-lg';
-export function BdsText({ size = 'normal-md', children, as, className = '', style }: {
+export function BdsText({ size = 'normal-md', children, as, className = '', style, id }: {
   size?: TextSize; children: ReactNode; as?: keyof JSX.IntrinsicElements; className?: string; style?: CSSProperties;
+  /** For headings referenced by aria-labelledby. */
+  id?: string;
 }) {
   const Tag: any = as ?? 'span';
-  return <Tag className={`bds-r-text bds-r-text-${size} ${className}`} style={style}>{children}</Tag>;
+  return <Tag id={id} className={`bds-r-text bds-r-text-${size} ${className}`} style={style}>{children}</Tag>;
 }
 
 export function BdsInput({ id, value, onChange, placeholder, disabled, readOnly, className = '', style, ...rest }: {

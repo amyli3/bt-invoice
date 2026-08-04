@@ -150,6 +150,10 @@ export const defaultInvoice: Invoice = {
   notes: '',
   invoiceDescription: '',
   emailMessage: '',
+  // Closing text is boilerplate the builder sets once in company settings and
+  // BT prefills onto every invoice, so it starts populated rather than blank.
+  closingText: 'Please use the Pay Online button to submit your payment. For your convenience you can pay by Electronic Check! If you would like instructions on how to pay online, either access the video link below or go to the documents tab for step-by-step instructions.\n\nThank you for your business! (402) 555-0180 | billing@abcbuilders.com | www.abcbuilders.com\nABC Builders LLC is a licensed General & Residential Contractor',
+  invoiceToQboOnSend: true,
 };
 
 // Invoices already created for this job — the "Add to existing" side of the
@@ -183,14 +187,18 @@ export const EXISTING_INVOICES: Invoice[] = [
 
 // Demo content for the "Invoice (modal)" TopNav entry, so it opens with
 // something to look at instead of a blank builder.
-export const DEMO_MODAL_INVOICE: Invoice = {
+// Pre-filled demo content for the "Invoice (modal)" and "Invoice (full page)"
+// presentations. This is a plain invoice — not a progress invoice — since both
+// of those routes demo the regular invoice builder's presentation, not AIA
+// percent-complete billing (that's the separate "Progress Invoice" page).
+export const DEMO_INVOICE: Invoice = {
   ...defaultInvoice,
-  title: 'Progress invoice - July 2026',
+  title: 'Kitchen Demo Work',
   invoiceNumber: '0045',
-  type: 'progress',
+  type: 'invoice',
   invoiceDescription: 'Covers work completed through July 31, 2026: framing, rough plumbing, rough electrical, and initial finish material purchases.',
   lineItems: [
-    { id: 'demo-modal-1', description: 'Framing labor', costCode: '2100', costType: 'Labor', unitCost: 12500, quantity: 1, unit: '--', markup: 0 },
+    { id: 'demo-inv-1', description: 'Framing labor', costCode: '2100', costType: 'Labor', unitCost: 12500, quantity: 1, unit: '--', markup: 0 },
     { id: 'demo-modal-2', description: 'Rough plumbing', costCode: '2200', costType: 'Subcontractor', unitCost: 6800, quantity: 1, unit: '--', markup: 0 },
     { id: 'demo-modal-3', description: 'Electrical rough-in', costCode: '2300', costType: 'Subcontractor', unitCost: 5400, quantity: 1, unit: '--', markup: 0 },
     { id: 'demo-modal-4', description: 'Cabinet hardware materials', costCode: '6090', costType: 'Material', unitCost: 850, quantity: 2, unit: 'ea', markup: 10 },

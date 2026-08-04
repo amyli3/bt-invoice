@@ -56,12 +56,28 @@ select.fi {
 .badge { display: inline-block; padding: 2px 8px; font-size: 12px; font-weight: 500; border: 1px solid var(--g200); border-radius: 4px; color: var(--g600); background: white; }
 .status { display: inline-flex; align-items: center; padding: 3px 10px; font-size: 12px; font-weight: 600; border-radius: 20px; }
 .status-unreleased { background: var(--yellow-bg); color: var(--yellow); }
+/* Not sent yet, and nothing's wrong: neutral rather than the yellow warning. */
+.status-draft { background: var(--g100); color: var(--g600); }
 
-/* ── Tabs ── */
-.tabs { display: inline-flex; border: 1px solid var(--g200); border-radius: var(--radius); overflow: hidden; }
-.tab { padding: 8px 16px; font-size: 14px; line-height: 20px; font-weight: 500; font-family: inherit; border: none; cursor: pointer; transition: all 0.15s; background: white; color: var(--g600); white-space: nowrap; }
-.tab:not(:last-child) { border-right: 1px solid var(--g200); }
-.tab.on { background: var(--bt-blue-light); color: var(--bt-blue); font-weight: 600; }
+/* ── Tabs ──
+   BDS segmented "split button" (Blueprint BuiButtonGroup). Spec from Figma
+   SoT Invoice Presentation node 454:54731: 36px tall (8px/16px padding),
+   Inter Medium 14/20, 8px outer radius, 1px gray-15 hairline with the
+   Button/Light/Enabled shadow; selected segment is blue-10 on blue-70. */
+.tabs {
+  display: inline-flex; border: 1px solid var(--bds-color-gray-15, #e2e7f0);
+  border-radius: 8px; overflow: hidden;
+  box-shadow: 0 0 0 1px rgba(0,0,0,0.08), 0 2px 2px -1px rgba(0,0,0,0.08);
+}
+.tab {
+  padding: 8px 16px; font-size: 14px; line-height: 20px; font-weight: 500;
+  font-family: inherit; border: none; cursor: pointer; transition: all 0.15s;
+  background: var(--bds-color-gray-0, #fff); color: var(--bds-color-gray-90, #202227);
+  white-space: nowrap;
+}
+.tab:not(:last-child) { border-right: 1px solid var(--bds-color-gray-15, #e2e7f0); }
+.tab:hover:not(.on) { background: var(--bds-color-gray-5, #f7f9fc); }
+.tab.on { background: var(--bds-color-blue-10, #e6f6ff); color: var(--bds-color-blue-70, #004fd6); }
 
 /* ── Top nav ── */
 .topnav {
@@ -145,6 +161,8 @@ select.fi {
 
 /* ── Page header ── */
 .pg-hdr { background: white; border-bottom: 1px solid var(--g200); flex-shrink: 0; }
+/* No rule between the header and the Details / Client preview tabs below it. */
+.pg-hdr-flush { border-bottom: none; }
 .pg-accent { display: none; }
 .pg-hdr-content { display: flex; align-items: center; justify-content: space-between; padding: 12px 24px; }
 .pg-hdr-sub { font-size: 12px; color: var(--g400); }
@@ -309,6 +327,11 @@ select.fi {
 
 /* ── Sections ── */
 .sec { padding: 20px 24px; border-bottom: 1px solid var(--g100); }
+/* Full-page invoice — the builder column reads as one continuous form, so the
+   shared section components (Invoice information, Owner price, line items)
+   don't draw rules between themselves. Descendant match, since the full page
+   nests these inside a grid to sit beside the QuickBooks rail. */
+.builder-flush .sec { border-bottom: none; }
 .sec-title { font-size: 15px; font-weight: 700; color: var(--bt-midnight); margin-bottom: 14px; }
 
 /* ── Column visibility ── */
@@ -451,6 +474,7 @@ table { width: 100%; border-collapse: collapse; }
 }
 .client-group-tab:hover { color: var(--bt-blue); }
 .client-group-tab.on { background: white; color: var(--bt-blue); font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,0.06); }
+
 
 /* ── Preview paper ── */
 .paper {
@@ -2046,7 +2070,7 @@ button.jps-term-label { cursor: pointer; }
   margin: 8px 4px 0;
 }
 .jps-allowance-subtotal-text .jps-subtotal-label {
-  font-weight: 600; color: var(--g500); margin-right: 8px;
+  font-weight: 700; color: var(--bt-midnight); margin-right: 4px;
 }
 
 /* Sub-group header rows inside allowance tables — splits approved vs. pending within a single allowance */
@@ -6597,8 +6621,12 @@ button.jps-term-label { cursor: pointer; }
   display: flex; align-items: center; justify-content: space-between;
   padding: 12px 14px; gap: 12px; background: white;
   border-bottom: 1px solid var(--g200);
+  /* In a narrow container (docked "Add from" panel, resized window) the meta
+     figures drop under the title instead of colliding with it. */
+  flex-wrap: wrap;
 }
-.selv2-group-left { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
+.selv2-group-left { display: flex; align-items: center; gap: 10px; flex: 1 1 auto; min-width: min(100%, 240px); }
+.selv2-group-left .selv2-group-name { min-width: 0; overflow-wrap: anywhere; }
 .selv2-chev-btn {
   background: none; border: none; cursor: pointer; padding: 0; line-height: 0;
   color: var(--g500); display: inline-flex; align-items: center;
@@ -6626,7 +6654,7 @@ button.jps-term-label { cursor: pointer; }
 .selv2-section-selectall { margin: 6px 0 10px; }
 /* Helper/explainer line under a section heading (e.g. Credits owed) */
 .selv2-section-help { font-size: 12px; color: var(--g600); line-height: 1.5; margin: 2px 0 10px; }
-.selv2-group-meta { display: flex; align-items: center; gap: 24px; }
+.selv2-group-meta { display: flex; align-items: center; gap: 24px; flex-wrap: wrap; row-gap: 8px; }
 .selv2-meta-item { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
 .selv2-meta-label { font-size: 11px; color: var(--g500); font-weight: 500; white-space: nowrap; }
 .selv2-meta-value { font-size: 13px; font-weight: 600; color: var(--bt-midnight); }

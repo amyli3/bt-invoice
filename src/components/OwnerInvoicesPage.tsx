@@ -72,6 +72,12 @@ export default function OwnerInvoicesPage({
   const readyAiaRow = invoicingMode === 'aia-percent-complete'
     ? AIA_DEMO_INVOICES.find(r => r.status === 'Pending')
     : undefined;
+  // Nothing exists on the client's side yet: BT has assembled the costs, and the
+  // button creates an editable draft that sits Unreleased until it's sent. The
+  // banners say so explicitly — "Ready to invoice" alone read like an invoice
+  // already existed, or like the button would send one.
+  const draftNote = 'Creating it saves an editable draft. Nothing goes to the client until you review and send it.';
+
   const askingForMode = showModePicker || !invoicingMode;
   // AIA's progress invoice already covers percent-complete billing end to
   // end, so a separate payment-schedule reference doesn't apply there — it
@@ -221,7 +227,7 @@ export default function OwnerInvoicesPage({
           <div style={{ fontSize: 56, marginBottom: 16 }}>🗓️</div>
           <h2 style={{ fontSize: 20, fontWeight: 700, margin: '0 0 8px', color: 'var(--bds-color-gray-90)' }}>Set up a payment schedule</h2>
           <p style={{ color: 'var(--bds-color-gray-60)', maxWidth: 420, margin: '0 0 20px' }}>
-            This job doesn't have a payment schedule yet. Create one to split the contract into draws — Buildertrend will surface each draw here as its schedule phase is marked complete.
+            This job doesn't have a payment schedule yet. Create one to split the contract into draws, and Buildertrend will surface each draw here as its schedule phase is marked complete.
           </p>
           <BdsButton text="Create payment schedule" displayType="primary" onClick={() => setShowScheduleModal(true)} />
         </div>
@@ -237,14 +243,13 @@ export default function OwnerInvoicesPage({
             }}>
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                  <BdsBadge text="Ready to invoice" displayType="success" />
-                  <span style={{ fontWeight: 600, color: 'var(--bds-color-gray-90)' }}>{readyDraw.title}</span>
+                  <span style={{ fontWeight: 600, color: 'var(--bds-color-gray-90)' }}>{readyDraw.title} is ready to review</span>
                 </div>
                 <div style={{ fontSize: 13, color: 'var(--bds-color-gray-70)' }}>
-                  "{readyDraw.milestone}" was marked complete on the schedule — this draw was set up for ${readyDraw.amount.toLocaleString()} when the proposal was signed.
+                  "{readyDraw.milestone}" was marked complete on the schedule. This draw was set up for ${readyDraw.amount.toLocaleString()} when the proposal was signed. {draftNote}
                 </div>
               </div>
-              <BdsButton text="Review & create invoice" displayType="primary" onClick={() => onAddInvoice(invoicingMode)} />
+              <BdsButton text="Review draft invoice" displayType="primary" onClick={() => onAddInvoice(invoicingMode)} />
             </div>
           )}
 
@@ -256,14 +261,15 @@ export default function OwnerInvoicesPage({
             }}>
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                  <BdsBadge text="Ready to invoice" displayType="success" />
-                  <span style={{ fontWeight: 600, color: 'var(--bds-color-gray-90)' }}>The invoice for this period is ready to invoice</span>
+                  <span style={{ fontWeight: 600, color: 'var(--bds-color-gray-90)' }}>
+                    {readyTimeIntervalRow.period ? `${readyTimeIntervalRow.period} invoice` : 'This period\u2019s invoice'} is ready to review
+                  </span>
                 </div>
                 <div style={{ fontSize: 13, color: 'var(--bds-color-gray-70)' }}>
-                  Bills and time clock hours logged since {lastInvoicedRow ? `your last invoice (${lastInvoicedRow.title})` : 'your last invoice'} — ${readyTimeIntervalRow.amount.toLocaleString()} ready to review and send.
+                  Buildertrend pulled together the bills and time clock hours logged since {lastInvoicedRow ? `your last invoice (${lastInvoicedRow.title})` : 'your last invoice'}, totaling ${readyTimeIntervalRow.amount.toLocaleString()}. {draftNote}
                 </div>
               </div>
-              <BdsButton text="Review & create invoice" displayType="primary" onClick={() => onAddInvoice('time-interval')} />
+              <BdsButton text="Review draft invoice" displayType="primary" onClick={() => onAddInvoice('time-interval')} />
             </div>
           )}
 
@@ -275,14 +281,13 @@ export default function OwnerInvoicesPage({
             }}>
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                  <BdsBadge text="Ready to invoice" displayType="success" />
-                  <span style={{ fontWeight: 600, color: 'var(--bds-color-gray-90)' }}>Progress invoice for {readyAiaRow.period} is ready to invoice</span>
+                  <span style={{ fontWeight: 600, color: 'var(--bds-color-gray-90)' }}>Progress invoice for {readyAiaRow.period} is ready to review</span>
                 </div>
                 <div style={{ fontSize: 13, color: 'var(--bds-color-gray-70)' }}>
-                  ${readyAiaRow.amount.toLocaleString()} in certified work is ready to bill on this period's pay application.
+                  ${readyAiaRow.amount.toLocaleString()} in certified work is ready to bill on this period's pay application. {draftNote}
                 </div>
               </div>
-              <BdsButton text="Review & create invoice" displayType="primary" onClick={() => onAddInvoice('aia-percent-complete')} />
+              <BdsButton text="Review draft pay application" displayType="primary" onClick={() => onAddInvoice('aia-percent-complete')} />
             </div>
           )}
 

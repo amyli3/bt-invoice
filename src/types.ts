@@ -17,7 +17,10 @@ export interface LineItem {
   quantity: number;
   unit: string;
   markup: number;
-  relatedItem?: { type: 'allowance' | 'selection'; name: string; groupId: string; childIds?: string[] };
+  /** Where the line came from, shown as a tag in the Related item column.
+      'bill' / 'timeClock' are the cost sources; each cost record yields exactly
+      one line, so their groupId is just the record's own id. */
+  relatedItem?: { type: 'allowance' | 'selection' | 'bill' | 'timeClock' | 'quickBooks' | 'contract' | 'changeOrder'; name: string; groupId: string; childIds?: string[] };
   // Underage reallocation metadata. When present, this line is the source
   // (negative) side of a reallocation from one allowance to another. The
   // builder view shows it at its own cost code; the client view (when
@@ -57,6 +60,11 @@ export interface Invoice {
   notes: string;
   invoiceDescription: string;
   emailMessage: string;
+  // Surfaced on the full-page invoice, which mirrors the real invoice form's
+  // field set (description / closing text / internal notes + QuickBooks status)
+  // rather than the prototype's older description / email message / notes trio.
+  closingText?: string;
+  invoiceToQboOnSend?: boolean;
 }
 
 export interface ColumnVisibility {

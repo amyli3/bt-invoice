@@ -1722,8 +1722,8 @@ export default function JobPriceSummary({ jobOpen, onToggleJob, onOpenSelection,
                   });
                   return (
                     <div className="jps-allowance-subtotal-text">
-                      <span className="jps-subtotal-label">Subtotal</span>
-                      <VarianceValue value={withTax(diffSum)} />
+                      <span className="jps-subtotal-label">Subtotal:</span>
+                      <strong>{fmt(withTax(diffSum))}</strong>
                     </div>
                   );
                 };

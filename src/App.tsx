@@ -1,14 +1,17 @@
 import { useState, useEffect } from 'react';
 import { Invoice, ColumnVisibility, ClientColumnVisibility } from './types';
-import { defaultInvoice, EXISTING_INVOICES, DEMO_MODAL_INVOICE } from './mockData';
+import { defaultInvoice, EXISTING_INVOICES, DEMO_INVOICE } from './mockData';
 import { BdsButton } from './bds';
 import TopNav from './components/TopNav';
 import JobSidebar from './components/JobSidebar';
 import PageHeader from './components/PageHeader';
 import InvoiceInfo from './components/InvoiceInfo';
-import OwnerPrice from './components/OwnerPrice';
+import OwnerPrice, { PriceModeToggle } from './components/OwnerPrice';
+import InvoiceKindPicker, { type InvoiceKind } from './components/InvoiceKindPicker';
+import ProgressInvoiceGrid from './components/ProgressInvoiceGrid';
+import { AiaPreview } from './components/InvoicePreviewPanel';
 import LineItems from './components/LineItems';
-import LineItemsV2 from './components/LineItemsV2';
+import LineItemsV2, { AddFromDropdown, type BillingModel } from './components/LineItemsV2';
 import Notes from './components/Notes';
 import ClientPreview from './components/ClientPreview';
 import EmailPreview from './components/EmailPreview';
@@ -48,9 +51,9 @@ import { getNextId } from './mockData';
 import { TIME_INTERVAL_DEMO_INVOICES, JULY_TIME_INTERVAL_ITEMS, type DemoInvoiceRow } from './mockData';
 import type { InvoicingMode, DrawScheduleLine, Job } from './types';
 
-type PageType = 'invoice' | 'invoice-2' | 'invoice-3' | 'invoice-3-modal' | 'client-preview-invoice' | 'job-price-summary' | 'selections' | 'option-detail' | 'progress-invoice' | 'change-order' | 'change-order-list' | 'client-portal' | 'client-jps' | 'estimate' | 'job-proposal' | 'client-selections' | 'client-selections-2' | 'client-selections-3' | 'job-costing-budget' | 'underage-flows' | 'job-details-clients' | 'owner-invoices' | 'openbook' | 'job-details' | 'company-settings';
+type PageType = 'invoice' | 'invoice-2' | 'invoice-3' | 'invoice-3-modal' | 'invoice-full-page' | 'invoice-full-page-reimagined' | 'client-preview-invoice' | 'job-price-summary' | 'selections' | 'option-detail' | 'progress-invoice' | 'change-order' | 'change-order-list' | 'client-portal' | 'client-jps' | 'estimate' | 'job-proposal' | 'client-selections' | 'client-selections-2' | 'client-selections-3' | 'job-costing-budget' | 'underage-flows' | 'job-details-clients' | 'owner-invoices' | 'openbook' | 'job-details' | 'company-settings';
 
-const validPages: PageType[] = ['invoice', 'invoice-2', 'invoice-3', 'invoice-3-modal', 'client-preview-invoice', 'job-price-summary', 'selections', 'option-detail', 'progress-invoice', 'change-order', 'change-order-list', 'client-portal', 'client-jps', 'estimate', 'job-proposal', 'client-selections', 'client-selections-2', 'client-selections-3', 'job-costing-budget', 'underage-flows', 'job-details-clients', 'owner-invoices', 'openbook', 'job-details', 'company-settings'];
+const validPages: PageType[] = ['invoice', 'invoice-2', 'invoice-3', 'invoice-3-modal', 'invoice-full-page', 'invoice-full-page-reimagined', 'client-preview-invoice', 'job-price-summary', 'selections', 'option-detail', 'progress-invoice', 'change-order', 'change-order-list', 'client-portal', 'client-jps', 'estimate', 'job-proposal', 'client-selections', 'client-selections-2', 'client-selections-3', 'job-costing-budget', 'underage-flows', 'job-details-clients', 'owner-invoices', 'openbook', 'job-details', 'company-settings'];
 
 function getInitialPage(): PageType {
   // Support ?page=X query param (used when hash is occupied by Figma capture)
@@ -97,6 +100,9 @@ export default function App() {
   // modal side-panel pattern) with the same display/column options as the
   // real invoice client-preview editor. The full-page Invoice route is untouched.
   const [modalDetailsTab, setModalDetailsTab] = useState<'details' | 'client-preview'>('details');
+  // "Invoice (full page - reimagined)" only — which grid the builder chose at
+  // the decision point. null = decision not made yet, so the picker shows.
+  const [reimaginedKind, setReimaginedKind] = useState<InvoiceKind | null>(null);
   const [customizePanelOpen, setCustomizePanelOpen] = useState(true);
   const [clientHideLineItems, setClientHideLineItems] = useState(false);
   const [clientShowQrCode, setClientShowQrCode] = useState(false);
@@ -136,6 +142,13 @@ export default function App() {
   const [stackView, setStackView] = useState<'summary' | 'itemized'>('summary');
   const [selV2on3ModalOpen, setSelV2on3ModalOpen] = useState(false);
   const [addAllModalOpen, setAddAllModalOpen] = useState(false);
+  // "Combined view 2" — the same wizard with Costs as a fourth record type. Its
+  // own flag so it and the original combined view can be compared side by side.
+  const [addAllV2ModalOpen, setAddAllV2ModalOpen] = useState(false);
+  // Width of the docked "Add from" panel on the tabs/modal layout. null = the
+  // responsive default; dragging the divider between the invoice form and the
+  // panel pins an explicit pixel width so the builder can size it themselves.
+  const [dockedPanelWidth, setDockedPanelWidth] = useState<number | null>(null);
   const [costsModalOpen, setCostsModalOpen] = useState(false);
   const [selectionsWizardOpen, setSelectionsWizardOpen] = useState(false);
   const [wizardPreselectIds, setWizardPreselectIds] = useState<string[]>([]);
@@ -150,18 +163,26 @@ export default function App() {
   // Same idea as autoFilledDraw, for the time-interval/open-book path — set
   // when a period's bills and time-clock hours were pulled in automatically.
   const [autoFilledPeriod, setAutoFilledPeriod] = useState<{ period: string } | null>(null);
+  // Which page the pre-filled invoice was opened on. autoFilledDraw/Period stay
+  // in state as you move around the prototype, so without this the note would
+  // follow you onto every other invoice route.
+  const [prefillPage, setPrefillPage] = useState<PageType | null>(null);
   const startDrawInvoice = (job: typeof JOBS[number], draw: NonNullable<typeof job.drawSchedule>[number]) => {
     setInvoice({
       ...defaultInvoice,
+      // Created from the "review draft invoice" banner, so it opens as a draft:
+      // nothing has gone to the client until it's sent.
+      status: 'Draft',
       title: draw.title,
       mode: 'flatFee',
       type: 'progress',
       flatFeeAmount: draw.amount,
-      invoiceDescription: `${draw.milestone} milestone marked complete — Draw #${draw.drawNumber} of the payment schedule set at proposal signing.`,
+      invoiceDescription: `${draw.milestone} milestone marked complete. Draw #${draw.drawNumber} of the payment schedule set at proposal signing.`,
       to: { ...defaultInvoice.to, name: job.name },
     });
     setAutoFilledDraw({ drawNumber: draw.drawNumber, milestone: draw.milestone });
     setAutoFilledPeriod(null);
+    setPrefillPage('invoice-3');
     setActivePage('invoice-3');
   };
   // A plain one-off invoice, independent of the job's billing mode — any job,
@@ -172,6 +193,7 @@ export default function App() {
     setInvoice({ ...defaultInvoice, to: { ...defaultInvoice.to, name: job.name } });
     setAutoFilledDraw(null);
     setAutoFilledPeriod(null);
+    setPrefillPage(null);
     setActivePage('invoice-3');
   };
   // Time interval / Open book's "ready to invoice" moment — pull in the
@@ -190,15 +212,17 @@ export default function App() {
     }));
     setInvoice({
       ...defaultInvoice,
+      status: 'Draft',
       title: row.title,
       mode: 'lineItems',
       type: 'invoice',
       lineItems,
-      invoiceDescription: `Bills and time clock hours logged in ${row.period ?? 'this period'} — pulled in automatically.`,
+      invoiceDescription: `Bills and time clock hours logged in ${row.period ?? 'this period'}, pulled in automatically.`,
       to: { ...defaultInvoice.to, name: job.name },
     });
     setAutoFilledDraw(null);
     setAutoFilledPeriod({ period: row.period ?? '' });
+    setPrefillPage('invoice-3');
     setActivePage('invoice-3');
   };
   // Per-job invoicing-mode decision, made once via the InvoicingModePicker
@@ -421,6 +445,13 @@ export default function App() {
     };
   };
   const currentJobWithOverrides: Job = withJobOverrides(currentJob ?? JOBS[0]);
+  /* Cost plus and time-and-materials are both open book: the client sees the
+     costs and pays them, so Auto fill reads cost records. Fixed price bills the
+     contract, so it reads contract lines. Jobs with no contractType set fall in
+     with open book, which is what the existing cost-based fill assumed. */
+  const jobBillingModel: BillingModel =
+    currentJob?.contractType === 'fixed-price' ? 'fixedPrice' : 'openBook';
+  const billingModel: BillingModel = jobBillingModel;
   // EstimatePage is hardcoded to Johnson Residence (job 1) regardless of
   // which job is selected in the sidebar — so its own job-scoped state
   // (invoicing mode, financials) always reads/writes job 1 specifically.
@@ -959,116 +990,334 @@ export default function App() {
     );
   }
 
-  const isInvoiceV2Like = activePage === 'invoice-2' || activePage === 'invoice-3' || activePage === 'invoice-3-modal';
-  // 'invoice-3' and 'invoice-3-modal' are the same reimagine builder content —
-  // the latter is just presented as a modal over Owner Invoices instead of a
-  // full page. Anything gated on "am I in the invoice-3 experience" (wizards
-  // launched from "Add from", the pre-fill banners) needs both.
-  const isInvoice3Family = activePage === 'invoice-3' || activePage === 'invoice-3-modal';
+  // 'invoice-full-page-reimagined' is a copy of the full page whose line-items
+  // section leads with a Regular / Progress decision instead of a Flat fee /
+  // Line items toggle — everything else about the page is identical, so it
+  // travels with 'invoice-full-page' through all the layout flags below.
+  const isReimaginedFullPage = activePage === 'invoice-full-page-reimagined';
+  const isFullPageInvoice = activePage === 'invoice-full-page' || isReimaginedFullPage;
+  const isInvoiceV2Like = activePage === 'invoice-2' || activePage === 'invoice-3' || activePage === 'invoice-3-modal' || isFullPageInvoice;
+  // 'invoice-3', 'invoice-3-modal' and the full-page routes are the same
+  // reimagine builder content — the latter are just presented with the
+  // Details/Client preview tab layout (as a modal, or as a full page) instead
+  // of the side-by-side Builder/Preview split. Anything gated on "am I in the
+  // invoice-3 experience" (wizards launched from "Add from", the pre-fill
+  // banners) needs all of them.
+  const isInvoice3Family = activePage === 'invoice-3' || activePage === 'invoice-3-modal' || isFullPageInvoice;
   const showInvoiceAsModal = activePage === 'invoice-3-modal';
+  // The full-page routes reuse the modal's Details/Client-preview tab layout,
+  // just rendered inline in the content area instead of inside the modal
+  // backdrop — see showInvoiceAsModal-only usages below for what stays modal-specific.
+  const useTabsLayout = showInvoiceAsModal || isFullPageInvoice;
+  // Progress path on the reimagined page previews as a G702/G703 pay
+  // application, not the regular invoice document — so the Client preview tab
+  // swaps in AiaPreview and drops the Customize panel, whose column/line-item
+  // options only describe the regular invoice.
+  const showProgressClientPreview = isReimaginedFullPage && reimaginedKind === 'progress';
+
+  // Leaving Details closes any open "Add from" panel — it's docked next to
+  // the builder form, which isn't shown on the Client preview tab.
+  const openClientPreviewTab = () => {
+    setEstModalOpen(false);
+    setSelV5ModalOpen(false);
+    setSelV2on3ModalOpen(false);
+    setAddAllModalOpen(false);
+    setAddAllV2ModalOpen(false);
+    setCostsModalOpen(false);
+    setModalDetailsTab('client-preview');
+  };
+
+  // Details / Client preview switcher — the shared BDS segmented control
+  // (same `.tabs` component as "Invoice date | Link to schedule item"), matching
+  // the Change Order page's tab treatment.
+  const renderDetailsTabs = () => (
+    <div className="tabs" role="tablist" aria-label="Invoice view">
+      <button
+        type="button"
+        role="tab"
+        aria-selected={modalDetailsTab === 'details'}
+        className={"tab" + (modalDetailsTab === 'details' ? ' on' : '')}
+        onClick={() => setModalDetailsTab('details')}
+      >
+        Details
+      </button>
+      <button
+        type="button"
+        role="tab"
+        aria-selected={modalDetailsTab === 'client-preview'}
+        className={"tab" + (modalDetailsTab === 'client-preview' ? ' on' : '')}
+        onClick={openClientPreviewTab}
+      >
+        Client preview
+      </button>
+    </div>
+  );
+
+  /* Split by job: the header NAMES the billing type (subtitle, next to the
+     title), and the control that CHANGES it sits beside the grid it changes.
+     Reading what kind of invoice this is is a header concern; switching it is a
+     line-items concern, since the type is what decides which grid you get.
+
+     Cost of putting the control by the grid: it needs three placements, because
+     each container disappears in some mode. Line items row, schedule-of-values
+     header, and Owner price for flat fee, which renders no grid at all.
+
+     Known tradeoff, unchanged: switching with line items already entered leaves
+     the previous type's lines behind. Leaving the invoice resets the choice (see
+     leaveInvoice), so close-and-reopen is still the clean path. */
+  /* The title already names the type, but only until the builder types their own
+     title over it. So the subtitle leads with the type name just in that case,
+     and otherwise carries the explanation alone rather than repeating the H1. */
+  const billingKindSubtitle = (() => {
+    const name = reimaginedKind === 'progress' ? 'Progress invoice' : 'Regular invoice';
+    const how = reimaginedKind === 'progress'
+      ? 'billed on percent complete against the schedule of values'
+      : 'billed by line item';
+    return invoice.title
+      ? `${name} · ${how}`
+      : how.charAt(0).toUpperCase() + how.slice(1);
+  })();
+
+  /* Picking a kind sets invoice.type as well, so the title, the client preview
+     and anything else keyed on type agree with the grid that's showing. Without
+     this the header rendered "Invoice" over a schedule of values. */
+  const pickBillingKind = (kind: InvoiceKind | null) => {
+    setReimaginedKind(kind);
+    if (kind) setInvoice(inv => ({ ...inv, type: kind === 'progress' ? 'progress' : 'invoice' }));
+  };
+
+  const renderBillingKindSwitch = () => (
+    <button
+      type="button"
+      onClick={() => pickBillingKind(null)}
+      style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 13, fontWeight: 500, color: 'var(--bt-blue)', fontFamily: 'inherit', whiteSpace: 'nowrap' }}
+    >
+      Switch billing type
+    </button>
+  );
+
+  /* Leaving the invoice also clears the billing type, so reopening starts at
+     "How are you billing this invoice?" with a clean grid. */
+  const leaveInvoice = () => {
+    setReimaginedKind(null);
+    setActivePage('owner-invoices');
+  };
+
+  // The Details tab's form sections. Rendered either on their own (modal) or as
+  // the left column beside the QuickBooks rail (full page).
+  const renderDetailsForm = () => (
+    <>
+      <InvoiceInfo invoice={invoice} onChange={setInvoice} />
+      <OwnerPrice
+        invoice={invoice}
+        onChange={setInvoice}
+        // Full page only: the toggle moves inline with "Add from" below.
+        // Flat-fee mode keeps it here, since LineItemsV2 (and therefore that
+        // inline slot) isn't rendered in that mode — otherwise there'd be no way
+        // back to line items. On the reimagined page it's also irrelevant until
+        // the builder has chosen the regular path.
+        hideModeToggle={isReimaginedFullPage
+          ? (reimaginedKind !== 'regular' || invoice.mode === 'lineItems')
+          : (isFullPageInvoice && invoice.mode === 'lineItems')}
+        modeToggleExtra={isReimaginedFullPage && reimaginedKind !== null ? renderBillingKindSwitch() : undefined}
+      />
+
+      {/* Reimagined page: decide Regular vs Progress first, then load that grid. */}
+      {isReimaginedFullPage && reimaginedKind === null && (
+        <div className="sec" style={{ borderBottom: 'none' }}>
+          <InvoiceKindPicker onPick={pickBillingKind} />
+        </div>
+      )}
+      {isReimaginedFullPage && reimaginedKind === 'progress' && (
+        <div className="sec" style={{ paddingBottom: 0 }}>
+          {/* The label doesn't repeat the type: the header subtitle above already
+              carries it. The switch sits in the grid toolbar's LEFT cluster and
+              "Add from" on the right, which is the same arrangement the
+              line-items path uses, so neither control moves between paths. */}
+          <div className="sec-title" style={{ fontSize: 14, margin: '0 0 8px' }}>Schedule of values</div>
+          <ProgressInvoiceGrid
+            toolbarLeft={renderBillingKindSwitch()}
+            toolbarRight={
+              <>
+                <AddFromDropdown
+                  onOpenEstimate={() => { setSelV5ModalOpen(false); setSelV2on3ModalOpen(false); setAddAllModalOpen(false); setCostsModalOpen(false); setAddAllV2ModalOpen(false); setEstModalOpen(true); }}
+                  onOpenSelections2b={() => { setEstModalOpen(false); setSelV2on3ModalOpen(false); setAddAllModalOpen(false); setCostsModalOpen(false); setAddAllV2ModalOpen(false); setSelV5ModalOpen(true); }}
+                  onOpenSelections3={() => { setEstModalOpen(false); setSelV5ModalOpen(false); setAddAllModalOpen(false); setCostsModalOpen(false); setAddAllV2ModalOpen(false); setSelV2on3ModalOpen(true); }}
+                  onOpenAll={() => { setEstModalOpen(false); setSelV5ModalOpen(false); setSelV2on3ModalOpen(false); setCostsModalOpen(false); setAddAllV2ModalOpen(false); setAddAllModalOpen(true); }}
+                  onOpenAll2={() => { setEstModalOpen(false); setSelV5ModalOpen(false); setSelV2on3ModalOpen(false); setCostsModalOpen(false); setAddAllModalOpen(false); setAddAllV2ModalOpen(true); }}
+                  onOpenCosts={() => { setEstModalOpen(false); setSelV5ModalOpen(false); setSelV2on3ModalOpen(false); setAddAllModalOpen(false); setAddAllV2ModalOpen(false); setCostsModalOpen(true); }}
+                />
+              </>
+            }
+          />
+        </div>
+      )}
+
+      {(!isReimaginedFullPage || reimaginedKind === 'regular') && invoice.mode === 'lineItems' && (
+        <LineItemsV2
+          invoice={invoice} onChange={setInvoice} vis={vis} onVisChange={setVis} stackView={stackView} onStackViewChange={setStackView}
+          modeToggle={isReimaginedFullPage && reimaginedKind !== null ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+              <PriceModeToggle invoice={invoice} onChange={setInvoice} />
+              {renderBillingKindSwitch()}
+            </div>
+          ) : isFullPageInvoice ? <PriceModeToggle invoice={invoice} onChange={setInvoice} /> : undefined}
+          // Only one "Add from" panel docks at a time — opening one closes any other.
+          onOpenEstimate={() => { setSelV5ModalOpen(false); setSelV2on3ModalOpen(false); setAddAllModalOpen(false); setCostsModalOpen(false); setAddAllV2ModalOpen(false); setEstModalOpen(true); }}
+          onOpenSelections={() => setSelV2ModalOpen(true)}
+          onOpenSelections2={() => setSelV4ModalOpen(true)}
+          onOpenSelections2b={() => { setEstModalOpen(false); setSelV2on3ModalOpen(false); setAddAllModalOpen(false); setCostsModalOpen(false); setAddAllV2ModalOpen(false); setSelV5ModalOpen(true); }}
+          onOpenSelections3={() => { setEstModalOpen(false); setSelV5ModalOpen(false); setAddAllModalOpen(false); setCostsModalOpen(false); setAddAllV2ModalOpen(false); setSelV2on3ModalOpen(true); }}
+          onOpenAll={() => { setEstModalOpen(false); setSelV5ModalOpen(false); setSelV2on3ModalOpen(false); setCostsModalOpen(false); setAddAllV2ModalOpen(false); setAddAllModalOpen(true); }}
+          onOpenAll2={() => { setEstModalOpen(false); setSelV5ModalOpen(false); setSelV2on3ModalOpen(false); setCostsModalOpen(false); setAddAllModalOpen(false); setAddAllV2ModalOpen(true); }}
+          onOpenCosts={() => { setEstModalOpen(false); setSelV5ModalOpen(false); setSelV2on3ModalOpen(false); setAddAllModalOpen(false); setAddAllV2ModalOpen(false); setCostsModalOpen(true); }}
+          // Invoice (modal) only — other pages keep the single-source wizards.
+          hideSingleSourceOptions={showInvoiceAsModal}
+          billingModel={billingModel}
+          notice={invoice.mode === 'lineItems' ? prefillNotice : undefined}
+        />
+      )}
+      <Notes invoice={invoice} onChange={setInvoice} variant={isFullPageInvoice ? 'full-page' : 'default'} />
+    </>
+  );
+
+  // Drag-to-resize for the docked "Add from" panel. The panel's right edge is
+  // pinned to the modal, so the new width is just (right edge − pointer x),
+  // clamped so neither side collapses. Double-click the divider to reset.
+  const startDockedPanelDrag = (e: React.MouseEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const panel = e.currentTarget.parentElement;
+    const row = panel?.parentElement;
+    if (!panel || !row) return;
+    const right = panel.getBoundingClientRect().right;
+    const rowWidth = row.getBoundingClientRect().width;
+    const move = (ev: MouseEvent) => {
+      const next = right - ev.clientX;
+      setDockedPanelWidth(Math.max(360, Math.min(next, rowWidth - 320)));
+    };
+    const up = () => {
+      document.removeEventListener('mousemove', move);
+      document.removeEventListener('mouseup', up);
+      document.body.style.userSelect = '';
+      document.body.style.cursor = '';
+    };
+    document.addEventListener('mousemove', move);
+    document.addEventListener('mouseup', up);
+    document.body.style.userSelect = 'none';
+    document.body.style.cursor = 'col-resize';
+  };
+
+  // "We pre-filled this invoice" sits with the line items it's explaining
+  // (under the Add from row) rather than at the top of the page, where it read
+  // as a page-level announcement far away from the lines it describes.
+  const prefillReason = autoFilledDraw
+    ? `the "${autoFilledDraw.milestone}" schedule phase was marked complete, which is Draw #${autoFilledDraw.drawNumber} on this job's payment schedule.`
+    : autoFilledPeriod
+    ? `bills and time clock hours logged in ${autoFilledPeriod.period} were pulled in automatically.`
+    : null;
+  const prefillNotice = prefillReason && activePage === prefillPage ? (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', marginBottom: 10,
+      background: '#EEF5FF', border: '1px solid #B8D4FF', borderRadius: 8, fontSize: 13, color: '#1A3A6B',
+    }}>
+      <span style={{ fontSize: 15 }}>✨</span>
+      <span style={{ flex: 1 }}>
+        <strong>We pre-filled this invoice</strong> {prefillReason}
+      </span>
+      <button
+        type="button"
+        onClick={() => { setAutoFilledDraw(null); setAutoFilledPeriod(null); setPrefillPage(null); }}
+        style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#1A3A6B', fontSize: 13, textDecoration: 'underline' }}
+      >
+        Dismiss
+      </button>
+    </div>
+  ) : null;
 
   const renderInvoiceBuilder = () => (
     <>
-      {autoFilledDraw && isInvoice3Family && (
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', margin: '12px 16px 0',
-          background: '#EEF5FF', border: '1px solid #B8D4FF', borderRadius: 8, fontSize: 13, color: '#1A3A6B',
-        }}>
-          <span style={{fontSize: 15}}>✨</span>
-          <span style={{flex: 1}}>
-            <strong>We pre-filled this invoice</strong> — the "{autoFilledDraw.milestone}" schedule phase was marked complete, which is Draw #{autoFilledDraw.drawNumber} on this job's payment schedule.
-          </span>
-          <button
-            type="button"
-            onClick={() => setAutoFilledDraw(null)}
-            style={{background: 'none', border: 'none', cursor: 'pointer', color: '#1A3A6B', fontSize: 13, textDecoration: 'underline'}}
-          >
-            Dismiss
-          </button>
-        </div>
+      {/* Flat-fee invoices (the draws path) have no line-items section to hang
+          the note under, so it stays at the top of the builder for those. */}
+      {invoice.mode !== 'lineItems' && prefillNotice && (
+        <div style={{ margin: '12px 16px 0' }}>{prefillNotice}</div>
       )}
-      {autoFilledPeriod && isInvoice3Family && (
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', margin: '12px 16px 0',
-          background: '#EEF5FF', border: '1px solid #B8D4FF', borderRadius: 8, fontSize: 13, color: '#1A3A6B',
-        }}>
-          <span style={{fontSize: 15}}>✨</span>
-          <span style={{flex: 1}}>
-            <strong>We pre-filled this invoice</strong> — bills and time clock hours logged in {autoFilledPeriod.period} were pulled in automatically.
-          </span>
-          <button
-            type="button"
-            onClick={() => setAutoFilledPeriod(null)}
-            style={{background: 'none', border: 'none', cursor: 'pointer', color: '#1A3A6B', fontSize: 13, textDecoration: 'underline'}}
-          >
-            Dismiss
-          </button>
-        </div>
-      )}
-      <PageHeader invoice={invoice} jobOpen={jobOpen} onToggleJob={() => setJobOpen(true)} onClose={() => setActivePage('owner-invoices')} />
-
-      {showInvoiceAsModal ? (
-        <>
-          {/* Invoice (modal) only — Details/Client preview as top-level tabs,
-              matching the real "Progress invoice" dialog's tab pattern,
-              instead of the side-by-side split the full-page route uses. */}
-          <div style={{ display: 'flex', gap: 24, padding: '0 24px', borderBottom: '1px solid var(--g200)', flexShrink: 0 }}>
-            <button
-              type="button"
-              onClick={() => setModalDetailsTab('details')}
-              style={{
-                background: 'none', border: 'none', padding: '12px 2px', cursor: 'pointer',
-                fontSize: 14, fontWeight: 600, color: modalDetailsTab === 'details' ? 'var(--bt-blue, #0065db)' : 'var(--g500)',
-                borderBottom: modalDetailsTab === 'details' ? '2px solid var(--bt-blue, #0065db)' : '2px solid transparent',
-              }}
-            >
-              Details
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                // Leaving Details closes any open "Add from" panel — it's
-                // docked next to the builder form, which isn't shown here.
-                setEstModalOpen(false);
-                setSelV5ModalOpen(false);
-                setSelV2on3ModalOpen(false);
-                setAddAllModalOpen(false);
-                setCostsModalOpen(false);
-                setModalDetailsTab('client-preview');
-              }}
-              style={{
-                background: 'none', border: 'none', padding: '12px 2px', cursor: 'pointer',
-                fontSize: 14, fontWeight: 600, color: modalDetailsTab === 'client-preview' ? 'var(--bt-blue, #0065db)' : 'var(--g500)',
-                borderBottom: modalDetailsTab === 'client-preview' ? '2px solid var(--bt-blue, #0065db)' : '2px solid transparent',
-              }}
-            >
-              Client preview
-            </button>
+      {isFullPageInvoice ? (
+        // Invoice (full page) — job breadcrumb, title + status, back link, then
+        // a row with the Details/Client preview tabs on the left and the record
+        // actions on the right. Mirrors the Change Order page's header, instead
+        // of the dialog-style PageHeader + bottom action bar the modal uses.
+        <div style={{ padding: '16px 24px', background: 'white', flexShrink: 0 }}>
+          <div style={{ fontSize: 13, color: 'var(--g500)' }}>{currentJob?.name ?? invoice.to.name}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 2 }}>
+            <span style={{ fontSize: 24, fontWeight: 700, color: 'var(--g800)' }}>
+              {invoice.title || (invoice.type === 'progress' ? 'Progress invoice' : 'Invoice')}
+            </span>
+            <span className={invoice.status === 'Draft' ? 'status status-draft' : 'status status-unreleased'}>{invoice.status}</span>
           </div>
+          {isReimaginedFullPage && reimaginedKind !== null && (
+            <div style={{ fontSize: 13, color: 'var(--g500)', marginTop: 2 }}>{billingKindSubtitle}</div>
+          )}
+          <button
+            type="button"
+            onClick={leaveInvoice}
+            style={{ background: 'none', border: 'none', padding: 0, marginTop: 4, cursor: 'pointer', fontSize: 13, color: 'var(--bt-blue)', fontFamily: 'inherit' }}
+          >
+            ← Back to Invoices
+          </button>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, marginTop: 12, flexWrap: 'wrap' }}>
+            {renderDetailsTabs()}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+              <button className="btn btn-s" onClick={() => { setInvoice(defaultInvoice); setAutoFilledDraw(null); leaveInvoice(); }}>Cancel</button>
+              <button className="btn btn-s">Save</button>
+              <button className="btn btn-p">
+                <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                  <path fillRule="evenodd" clipRule="evenodd" d="M4.25485 1.51548C4.03255 1.39268 3.77812 1.34049 3.52542 1.36588C3.27273 1.39127 3.03377 1.49303 2.84035 1.65761C2.64692 1.82219 2.50822 2.04178 2.4427 2.28715C2.37723 2.53235 2.38812 2.79215 2.4736 3.03111L4.95804 10.0001L2.47328 16.9699C2.38793 17.2087 2.37726 17.4679 2.4427 17.713C2.50822 17.9583 2.64692 18.1779 2.84035 18.3425C3.03377 18.5071 3.27273 18.6088 3.52542 18.6342C3.77812 18.6596 4.03255 18.6074 4.25485 18.4846L17.4505 11.0938L17.4522 11.0929C17.6468 10.9848 17.8091 10.8267 17.9221 10.6349C18.0355 10.4425 18.0954 10.2233 18.0954 10.0001C18.0954 9.77677 18.0355 9.55756 17.9221 9.36521C17.8091 9.17341 17.6468 9.0153 17.4522 8.90723L17.4505 8.9063L4.25804 1.51725L4.25485 1.51548ZM16.8425 9.99847L17.1479 9.45318L16.8454 10.0001L16.8425 10.0016L3.65039 17.3905L6.06228 10.6251H10.6245C10.9697 10.6251 11.2495 10.3452 11.2495 10.0001C11.2495 9.65487 10.9697 9.37505 10.6245 9.37505H6.06228L3.6507 2.61049L3.65039 2.60962L16.8425 9.99847Z" fill="currentColor"/>
+                </svg>
+                Send
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <PageHeader invoice={invoice} jobOpen={jobOpen} onToggleJob={() => setJobOpen(true)} onClose={leaveInvoice} flush={showInvoiceAsModal} />
+      )}
+
+      {useTabsLayout ? (
+        <>
+          {showInvoiceAsModal && (
+            <div style={{ padding: '16px 24px', borderBottom: '1px solid var(--g200)', flexShrink: 0 }}>
+              {renderDetailsTabs()}
+            </div>
+          )}
 
           {modalDetailsTab === 'details' ? (
             <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
-              <div className="builder builder-full" style={{ flex: 1, minHeight: 0 }}>
-                <InvoiceInfo invoice={invoice} onChange={setInvoice} />
-                <OwnerPrice invoice={invoice} onChange={setInvoice} />
-                {invoice.mode === 'lineItems' && (
-                  <LineItemsV2
-                    invoice={invoice} onChange={setInvoice} vis={vis} onVisChange={setVis} stackView={stackView} onStackViewChange={setStackView}
-                    // Only one "Add from" panel docks at a time — opening one closes any other.
-                    onOpenEstimate={() => { setSelV5ModalOpen(false); setSelV2on3ModalOpen(false); setAddAllModalOpen(false); setCostsModalOpen(false); setEstModalOpen(true); }}
-                    onOpenSelections={() => setSelV2ModalOpen(true)}
-                    onOpenSelections2={() => setSelV4ModalOpen(true)}
-                    onOpenSelections2b={() => { setEstModalOpen(false); setSelV2on3ModalOpen(false); setAddAllModalOpen(false); setCostsModalOpen(false); setSelV5ModalOpen(true); }}
-                    onOpenSelections3={() => { setEstModalOpen(false); setSelV5ModalOpen(false); setAddAllModalOpen(false); setCostsModalOpen(false); setSelV2on3ModalOpen(true); }}
-                    onOpenAll={() => { setEstModalOpen(false); setSelV5ModalOpen(false); setSelV2on3ModalOpen(false); setCostsModalOpen(false); setAddAllModalOpen(true); }}
-                    onOpenCosts={() => { setEstModalOpen(false); setSelV5ModalOpen(false); setSelV2on3ModalOpen(false); setAddAllModalOpen(false); setCostsModalOpen(true); }}
-                  />
-                )}
-                <Notes invoice={invoice} onChange={setInvoice} />
+              <div className={"builder builder-full" + (isFullPageInvoice ? ' builder-flush' : '')} style={{ flex: 1, minHeight: 0, minWidth: 0 }}>
+                {renderDetailsForm()}
               </div>
 
-              {(estModalOpen || selV5ModalOpen || selV2on3ModalOpen || addAllModalOpen || costsModalOpen) && (
-                <div style={{ width: 'clamp(560px, 46vw, 980px)', flexShrink: 0, borderLeft: '1px solid var(--g200)', background: 'white', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+              {(estModalOpen || selV5ModalOpen || selV2on3ModalOpen || addAllModalOpen || addAllV2ModalOpen || costsModalOpen) && (
+                <div style={{
+                  // Default sizing is responsive; dragging the divider pins a px width.
+                  // minWidth keeps the panel readable when the window gets narrow, and
+                  // maxWidth stops it (pinned or not) from crushing the invoice form —
+                  // whichever the window allows, the panel's own content scrolls.
+                  width: dockedPanelWidth ?? 'clamp(560px, 52vw, 1200px)',
+                  minWidth: 'min(100%, 440px)',
+                  maxWidth: 'max(min(100%, 440px), calc(100% - 320px))',
+                  flexShrink: 0,
+                  borderLeft: '1px solid var(--g200)', background: 'white',
+                  display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative',
+                }}>
+                  {/* Drag the divider to widen / narrow the panel. */}
+                  <div
+                    onMouseDown={startDockedPanelDrag}
+                    onDoubleClick={() => setDockedPanelWidth(null)}
+                    title="Drag to resize · double-click to reset"
+                    style={{ position: 'absolute', left: -4, top: 0, bottom: 0, width: 9, cursor: 'col-resize', zIndex: 20 }}
+                  >
+                    <div style={{ position: 'absolute', left: 3, top: '50%', transform: 'translateY(-50%)', width: 3, height: 46, borderRadius: 2, background: 'var(--g300)' }} />
+                  </div>
                   {estModalOpen && (
                     <EstimateModal
                       variant="panel"
@@ -1105,6 +1354,19 @@ export default function App() {
                       open={addAllModalOpen}
                       onClose={() => setAddAllModalOpen(false)}
                       onAdd={(items) => setInvoice(inv => ({ ...inv, lineItems: [...inv.lineItems, ...items] }))}
+                      onAddSelections={handleAddFromSelections}
+                      addedChildIds={invoice.lineItems.flatMap(li => li.relatedItem?.childIds ?? [])}
+                    />
+                  )}
+                  {addAllV2ModalOpen && (
+                    <AddFromAllModal
+                      variant="panel"
+                      includeCosts
+                      open={addAllV2ModalOpen}
+                      onClose={() => setAddAllV2ModalOpen(false)}
+                      onAdd={(items) => setInvoice(inv => ({ ...inv, lineItems: [...inv.lineItems, ...items] }))}
+                      onAddSelections={handleAddFromSelections}
+                      addedChildIds={invoice.lineItems.flatMap(li => li.relatedItem?.childIds ?? [])}
                     />
                   )}
                   {costsModalOpen && (
@@ -1113,6 +1375,7 @@ export default function App() {
                       open={costsModalOpen}
                       onClose={() => setCostsModalOpen(false)}
                       onAdd={(items) => setInvoice(inv => ({ ...inv, lineItems: [...inv.lineItems, ...items] }))}
+                      jobName={currentJob?.name}
                     />
                   )}
                 </div>
@@ -1121,29 +1384,37 @@ export default function App() {
           ) : (
             <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
               <div style={{ flex: 1, minWidth: 0, overflowY: 'auto', padding: 24, background: 'var(--g50)' }}>
-                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
-                  {!customizePanelOpen && (
-                    <button type="button" className="btn btn-s" onClick={() => setCustomizePanelOpen(true)}>
-                      Customize
-                    </button>
-                  )}
-                </div>
-                <ClientPreview
-                  invoice={invoice}
-                  clientVis={clientVis}
-                  groupBy={clientGroupBy}
-                  hideLineItems={clientHideLineItems}
-                  showQrCode={clientShowQrCode}
-                  showCustomFields={clientShowCustomFields}
-                  showDescription={clientShowDescription}
-                  showIntroText={clientShowIntroText}
-                  showClosingText={clientShowClosingText}
-                  maxWidth={780}
-                  minHeight="100%"
-                />
+                {!showProgressClientPreview && (
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
+                    {!customizePanelOpen && (
+                      <button type="button" className="btn btn-s" onClick={() => setCustomizePanelOpen(true)}>
+                        Customize
+                      </button>
+                    )}
+                  </div>
+                )}
+                {showProgressClientPreview ? (
+                  <div style={{ maxWidth: 1040, margin: '0 auto' }}>
+                    <AiaPreview job={currentJobWithOverrides} />
+                  </div>
+                ) : (
+                  <ClientPreview
+                    invoice={invoice}
+                    clientVis={clientVis}
+                    groupBy={clientGroupBy}
+                    hideLineItems={clientHideLineItems}
+                    showQrCode={clientShowQrCode}
+                    showCustomFields={clientShowCustomFields}
+                    showDescription={clientShowDescription}
+                    showIntroText={clientShowIntroText}
+                    showClosingText={clientShowClosingText}
+                    maxWidth={780}
+                    minHeight="100%"
+                  />
+                )}
               </div>
 
-              {customizePanelOpen && (
+              {!showProgressClientPreview && customizePanelOpen && (
                 <div style={{ width: 280, flexShrink: 0, borderLeft: '1px solid var(--g200)', background: 'white', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
                   <div style={{ flex: 1, overflowY: 'auto', padding: 20 }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
@@ -1258,7 +1529,7 @@ export default function App() {
               <InvoiceInfo invoice={invoice} onChange={setInvoice} />
               <OwnerPrice invoice={invoice} onChange={setInvoice} />
               {invoice.mode === 'lineItems' && (isInvoiceV2Like
-                ? <LineItemsV2 invoice={invoice} onChange={setInvoice} vis={vis} onVisChange={setVis} stackView={stackView} onStackViewChange={setStackView} onOpenEstimate={() => setEstModalOpen(true)} onOpenSelections={() => setSelV2ModalOpen(true)} onOpenSelections2={() => setSelV4ModalOpen(true)} onOpenSelections2b={() => setSelV5ModalOpen(true)} onOpenSelections3={() => setSelV2on3ModalOpen(true)} onOpenAll={() => setAddAllModalOpen(true)} onOpenCosts={() => setCostsModalOpen(true)} />
+                ? <LineItemsV2 invoice={invoice} onChange={setInvoice} vis={vis} onVisChange={setVis} stackView={stackView} onStackViewChange={setStackView} onOpenEstimate={() => setEstModalOpen(true)} onOpenSelections={() => setSelV2ModalOpen(true)} onOpenSelections2={() => setSelV4ModalOpen(true)} onOpenSelections2b={() => setSelV5ModalOpen(true)} onOpenSelections3={() => setSelV2on3ModalOpen(true)} onOpenAll={() => setAddAllModalOpen(true)} onOpenAll2={() => setAddAllV2ModalOpen(true)} onOpenCosts={() => setCostsModalOpen(true)} billingModel={billingModel} notice={invoice.mode === 'lineItems' ? prefillNotice : undefined} />
                 : <LineItems invoice={invoice} onChange={setInvoice} vis={vis} onVisChange={setVis} onOpenEstimate={() => setEstModalOpen(true)} onOpenSelections={() => setSelModalOpen(true)} />)}
               <Notes invoice={invoice} onChange={setInvoice} />
             </div>
@@ -1297,34 +1568,46 @@ export default function App() {
         </>
       )}
 
-      <div className="bbar" style={showInvoiceAsModal ? { background: 'var(--g50)', boxShadow: '0 -1px 0 var(--g200)' } : undefined}>
-        <button className="btn btn-s" onClick={() => { setInvoice(defaultInvoice); setAutoFilledDraw(null); if (showInvoiceAsModal) setActivePage('owner-invoices'); }}>Cancel</button>
-        {isInvoiceV2Like && !isNarrow && !showInvoiceAsModal && (
-          <button
-            type="button"
-            className="btn btn-s"
-            onClick={() => setPreviewHidden(h => !h)}
-            title={previewHidden ? 'Show client preview' : 'Hide client preview'}
-            aria-pressed={!previewHidden}
-          >
-            Client preview
-          </button>
-        )}
-        <button className="btn btn-s">Save</button>
-        <button className="btn btn-p">Send</button>
-      </div>
+      {!isFullPageInvoice && (
+        <div className="bbar" style={useTabsLayout ? { background: 'var(--g50)', boxShadow: '0 -1px 0 var(--g200)' } : undefined}>
+          <button className="btn btn-s" onClick={() => { setInvoice(defaultInvoice); setAutoFilledDraw(null); setReimaginedKind(null); if (useTabsLayout) setActivePage('owner-invoices'); }}>Cancel</button>
+          {isInvoiceV2Like && !isNarrow && !useTabsLayout && (
+            <button
+              type="button"
+              className="btn btn-s"
+              onClick={() => setPreviewHidden(h => !h)}
+              title={previewHidden ? 'Show client preview' : 'Hide client preview'}
+              aria-pressed={!previewHidden}
+            >
+              Client preview
+            </button>
+          )}
+          <button className="btn btn-s">Save</button>
+          <button className="btn btn-p">Send</button>
+        </div>
+      )}
     </>
   );
 
   return (
     <div style={{display: 'flex', flexDirection: 'column', height: '100vh'}}>
       <TopNav onNavigate={(page) => {
-        if (page === 'invoice-3-modal') setInvoice(DEMO_MODAL_INVOICE);
+        // Both demo presentations show the same plain invoice. Plain "Invoice"
+        // resets to a blank one so it never inherits the demo content (or a
+        // progress invoice loaded by an earlier flow).
+        if (page === 'invoice-3-modal' || page === 'invoice-full-page') setInvoice(DEMO_INVOICE);
+        else if (page === 'invoice-full-page-reimagined') {
+          // Start this one at the decision point with a blank invoice, since
+          // picking a billing type is the first step of the flow.
+          setInvoice(defaultInvoice);
+          setReimaginedKind(null);
+        }
+        else if (page === 'invoice-3') setInvoice(defaultInvoice);
         setActivePage(page as PageType);
       }} />
       <div style={{display: 'flex', flex: 1, minHeight: 0}}>
         <JobSidebar open={jobOpen} onToggle={() => setJobOpen(false)} selectedJob={selectedJob} onSelectJob={(id) => { setSelectedJob(id); if (isNarrow) setJobOpen(false); }} onHomeClick={() => setActivePage('client-portal')} onOpenJobDetails={(id) => { setJobDetailsReturnPage(activePage); setSelectedJob(id); setActivePage('job-details'); }} />
-        <div className="content-area" style={showInvoiceAsModal ? {overflowY: 'auto'} : undefined}>
+        <div className="content-area" style={useTabsLayout ? {overflowY: 'auto'} : undefined}>
           {showInvoiceAsModal
             ? <OwnerInvoicesPage
                 job={currentJobWithOverrides}
@@ -1342,14 +1625,16 @@ export default function App() {
         </div>
       </div>
       {showInvoiceAsModal && (
-        <div className="modal-backdrop" onClick={() => setActivePage('owner-invoices')}>
-          <div className="est-modal" style={{height: '92vh', width: '99vw', maxWidth: 1900}} onClick={e => e.stopPropagation()}>
+        <div className="modal-backdrop" onClick={leaveInvoice}>
+          {/* maxHeight overrides .est-modal's 88vh cap, which would otherwise
+              win over the height below and keep the modal short. */}
+          <div className="est-modal" style={{height: '98vh', maxHeight: '98vh', width: '99vw', maxWidth: 2400}} onClick={e => e.stopPropagation()}>
             {renderInvoiceBuilder()}
           </div>
         </div>
       )}
       <EstimateModal
-        open={estModalOpen && !showInvoiceAsModal}
+        open={estModalOpen && !useTabsLayout}
         onClose={() => setEstModalOpen(false)}
         onAdd={handleAddFromEstimate}
         jobName={currentJob?.name || 'Job name'}
@@ -1387,7 +1672,7 @@ export default function App() {
         addedChildIds={invoice.lineItems.flatMap(li => li.relatedItem?.childIds ?? [])}
       />
       <SelectionsModalV5
-        open={selV5ModalOpen && isInvoice3Family && !showInvoiceAsModal}
+        open={selV5ModalOpen && isInvoice3Family && !useTabsLayout}
         onClose={() => setSelV5ModalOpen(false)}
         onAdd={handleAddFromSelections}
         addedChildIds={invoice.lineItems.flatMap(li => li.relatedItem?.childIds ?? [])}
@@ -1395,21 +1680,32 @@ export default function App() {
         newInvoiceType={invoice.type ?? 'invoice'}
       />
       <SelectionsModalV2
-        open={selV2on3ModalOpen && isInvoice3Family && !showInvoiceAsModal}
+        open={selV2on3ModalOpen && isInvoice3Family && !useTabsLayout}
         onClose={() => setSelV2on3ModalOpen(false)}
         onAdd={handleAddFromSelections}
         addedChildIds={invoice.lineItems.flatMap(li => li.relatedItem?.childIds ?? [])}
         data={selection3Data}
       />
       <AddFromAllModal
-        open={addAllModalOpen && isInvoice3Family && !showInvoiceAsModal}
+        open={addAllModalOpen && isInvoice3Family && !useTabsLayout}
         onClose={() => setAddAllModalOpen(false)}
         onAdd={(items) => setInvoice(inv => ({ ...inv, lineItems: [...inv.lineItems, ...items] }))}
+        onAddSelections={handleAddFromSelections}
+        addedChildIds={invoice.lineItems.flatMap(li => li.relatedItem?.childIds ?? [])}
+      />
+      <AddFromAllModal
+        includeCosts
+        open={addAllV2ModalOpen && isInvoice3Family && !useTabsLayout}
+        onClose={() => setAddAllV2ModalOpen(false)}
+        onAdd={(items) => setInvoice(inv => ({ ...inv, lineItems: [...inv.lineItems, ...items] }))}
+        onAddSelections={handleAddFromSelections}
+        addedChildIds={invoice.lineItems.flatMap(li => li.relatedItem?.childIds ?? [])}
       />
       <CostsModal
-        open={costsModalOpen && isInvoice3Family && !showInvoiceAsModal}
+        open={costsModalOpen && isInvoice3Family && !useTabsLayout}
         onClose={() => setCostsModalOpen(false)}
         onAdd={(items) => setInvoice(inv => ({ ...inv, lineItems: [...inv.lineItems, ...items] }))}
+        jobName={currentJob?.name}
       />
     </div>
   );
