@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import InvoicesSettingsModal from './InvoicesSettingsModal';
+import InvoicesSettingsModal, { type DefaultInvoiceKind } from './InvoicesSettingsModal';
 
 function Icon({ children }: { children: React.ReactNode }) {
   return (
@@ -153,7 +153,12 @@ function SettingsRow({ icon, label, onClick }: SettingItem & { onClick?: () => v
   );
 }
 
-export default function CompanySettingsPage() {
+interface Props {
+  defaultInvoiceKind?: DefaultInvoiceKind;
+  onDefaultInvoiceKindChange?: (kind: DefaultInvoiceKind) => void;
+}
+
+export default function CompanySettingsPage({ defaultInvoiceKind, onDefaultInvoiceKindChange }: Props) {
   const [invoicesModalOpen, setInvoicesModalOpen] = useState(false);
 
   return (
@@ -208,7 +213,13 @@ export default function CompanySettingsPage() {
           </div>
         </div>
       </div>
-      {invoicesModalOpen && <InvoicesSettingsModal onClose={() => setInvoicesModalOpen(false)} />}
+      {invoicesModalOpen && (
+        <InvoicesSettingsModal
+          onClose={() => setInvoicesModalOpen(false)}
+          defaultInvoiceKind={defaultInvoiceKind}
+          onDefaultInvoiceKindChange={onDefaultInvoiceKindChange}
+        />
+      )}
     </div>
   );
 }

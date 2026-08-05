@@ -1,5 +1,11 @@
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
+import type { InvoiceKind } from './InvoiceKindPicker';
+
+/* Every builder has a concrete default now: there is no "ask me" state, so the
+   invoice picker is reached deliberately (Switch billing type) rather than by
+   the absence of a setting. */
+export type DefaultInvoiceKind = InvoiceKind;
 
 interface Draw {
   id: string;
@@ -88,7 +94,15 @@ function RichTextBox({ value, onChange, placeholder }: { value: string; onChange
   );
 }
 
-export default function InvoicesSettingsModal({ onClose }: { onClose: () => void }) {
+interface ModalProps {
+  onClose: () => void;
+  // Lifted to App so the reimagined invoice page reads the same value the
+  // picker's "Always bill this way" checkbox writes.
+  defaultInvoiceKind?: DefaultInvoiceKind;
+  onDefaultInvoiceKindChange?: (kind: DefaultInvoiceKind) => void;
+}
+
+export default function InvoicesSettingsModal({ onClose, defaultInvoiceKind = 'regular', onDefaultInvoiceKindChange }: ModalProps) {
   const [invoicePrefix, setInvoicePrefix] = useState('INV-');
   const [notifyInternal, setNotifyInternal] = useState(false);
   const [notifyBefore, setNotifyBefore] = useState(true);
@@ -152,6 +166,25 @@ export default function InvoicesSettingsModal({ onClose }: { onClose: () => void
             <div style={{ marginBottom: 16 }}>
               <div className="fl">Invoice prefix</div>
               <input className="fi" style={{ width: 140 }} value={invoicePrefix} onChange={(e) => setInvoicePrefix(e.target.value)} />
+            </div>
+
+            {/* Same setting the invoice picker's "Always bill this way"
+                checkbox writes, so a builder who set it there can find and
+                change it here. */}
+            <div style={{ marginBottom: 16 }}>
+              <div className="fl">Default invoice type</div>
+              <select
+                className="fi"
+                style={{ width: 220 }}
+                value={defaultInvoiceKind}
+                onChange={(e) => onDefaultInvoiceKindChange?.(e.target.value as DefaultInvoiceKind)}
+              >
+                <option value="regular">Standard invoice</option>
+                <option value="progress">Progress invoice</option>
+              </select>
+              <div style={{ fontSize: 12, color: 'var(--g500)', marginTop: 6 }}>
+                New invoices open as a {defaultInvoiceKind === 'progress' ? 'progress invoice' : 'standard invoice'}. You can still switch on any individual invoice.
+              </div>
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 4 }}>

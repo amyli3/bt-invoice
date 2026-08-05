@@ -8,6 +8,7 @@ import PageHeader from './components/PageHeader';
 import InvoiceInfo from './components/InvoiceInfo';
 import OwnerPrice, { PriceModeToggle } from './components/OwnerPrice';
 import InvoiceKindPicker, { type InvoiceKind } from './components/InvoiceKindPicker';
+import { type DefaultInvoiceKind } from './components/InvoicesSettingsModal';
 import ProgressInvoiceGrid from './components/ProgressInvoiceGrid';
 import { AiaPreview } from './components/InvoicePreviewPanel';
 import LineItems from './components/LineItems';
@@ -103,6 +104,30 @@ export default function App() {
   // "Invoice (full page - reimagined)" only — which grid the builder chose at
   // the decision point. null = decision not made yet, so the picker shows.
   const [reimaginedKind, setReimaginedKind] = useState<InvoiceKind | null>(null);
+  // Company settings > Invoices > Default invoice type. Written from two
+  // places, the settings modal and the picker's "Always bill this way"
+  // checkbox, so it lives here rather than inside either one. Persisted
+  // because the point of the setting is that it survives the next invoice.
+  const [defaultInvoiceKind, _setDefaultInvoiceKind] = useState<DefaultInvoiceKind>(() => {
+    try {
+      const saved = localStorage.getItem('reimagined-default-invoice-kind');
+      return saved === 'regular' || saved === 'progress' ? saved : 'regular';
+    } catch { return 'regular'; }
+  });
+  const setDefaultInvoiceKind = (kind: DefaultInvoiceKind) => {
+    _setDefaultInvoiceKind(kind);
+    try { localStorage.setItem('reimagined-default-invoice-kind', kind); } catch {}
+  };
+  // Opening the reimagined invoice honors that default: the picker is skipped
+  // and its grid loads directly. Keyed on the page, not on the kind, so
+  // "Switch billing type" can still clear the choice and bring the picker back
+  // for this one invoice without the default immediately reapplying.
+  useEffect(() => {
+    if (activePage !== 'invoice-full-page-reimagined') return;
+    setReimaginedKind(defaultInvoiceKind);
+    setInvoice(inv => ({ ...inv, type: defaultInvoiceKind === 'progress' ? 'progress' : 'invoice' }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activePage]);
   const [customizePanelOpen, setCustomizePanelOpen] = useState(true);
   const [clientHideLineItems, setClientHideLineItems] = useState(false);
   const [clientShowQrCode, setClientShowQrCode] = useState(false);
@@ -793,7 +818,10 @@ export default function App() {
       <div style={{display: 'flex', flexDirection: 'column', height: '100vh'}}>
         <TopNav onNavigate={(page) => setActivePage(page as PageType)} />
         <div style={{flex: 1, overflowY: 'auto'}}>
-          <CompanySettingsPage />
+          <CompanySettingsPage
+            defaultInvoiceKind={defaultInvoiceKind}
+            onDefaultInvoiceKindChange={setDefaultInvoiceKind}
+          />
         </div>
       </div>
     );
@@ -1065,25 +1093,13 @@ export default function App() {
      Known tradeoff, unchanged: switching with line items already entered leaves
      the previous type's lines behind. Leaving the invoice resets the choice (see
      leaveInvoice), so close-and-reopen is still the clean path. */
-  /* The title already names the type, but only until the builder types their own
-     title over it. So the subtitle leads with the type name just in that case,
-     and otherwise carries the explanation alone rather than repeating the H1. */
-  const billingKindSubtitle = (() => {
-    const name = reimaginedKind === 'progress' ? 'Progress invoice' : 'Regular invoice';
-    const how = reimaginedKind === 'progress'
-      ? 'billed on percent complete against the schedule of values'
-      : 'billed by line item';
-    return invoice.title
-      ? `${name} · ${how}`
-      : how.charAt(0).toUpperCase() + how.slice(1);
-  })();
-
   /* Picking a kind sets invoice.type as well, so the title, the client preview
      and anything else keyed on type agree with the grid that's showing. Without
      this the header rendered "Invoice" over a schedule of values. */
-  const pickBillingKind = (kind: InvoiceKind | null) => {
+  const pickBillingKind = (kind: InvoiceKind | null, makeDefault = false) => {
     setReimaginedKind(kind);
     if (kind) setInvoice(inv => ({ ...inv, type: kind === 'progress' ? 'progress' : 'invoice' }));
+    if (kind && makeDefault) setDefaultInvoiceKind(kind);
   };
 
   const renderBillingKindSwitch = () => (
@@ -1248,15 +1264,21 @@ export default function App() {
         // of the dialog-style PageHeader + bottom action bar the modal uses.
         <div style={{ padding: '16px 24px', background: 'white', flexShrink: 0 }}>
           <div style={{ fontSize: 13, color: 'var(--g500)' }}>{currentJob?.name ?? invoice.to.name}</div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 2 }}>
+          {/* Status sits at the header's right edge, level with the title, the
+              same side the record actions below it use. Right-aligned for every
+              billing type, not just progress, so the badge doesn't move when the
+              type changes. */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginTop: 2 }}>
             <span style={{ fontSize: 24, fontWeight: 700, color: 'var(--g800)' }}>
               {invoice.title || (invoice.type === 'progress' ? 'Progress invoice' : 'Invoice')}
             </span>
-            <span className={invoice.status === 'Draft' ? 'status status-draft' : 'status status-unreleased'}>{invoice.status}</span>
+            <span
+              className={invoice.status === 'Draft' ? 'status status-draft' : 'status status-unreleased'}
+              style={{ flexShrink: 0 }}
+            >
+              {invoice.status}
+            </span>
           </div>
-          {isReimaginedFullPage && reimaginedKind !== null && (
-            <div style={{ fontSize: 13, color: 'var(--g500)', marginTop: 2 }}>{billingKindSubtitle}</div>
-          )}
           <button
             type="button"
             onClick={leaveInvoice}
