@@ -1,4 +1,4 @@
-import { Invoice, Job, ColumnDef, InvoicingMode } from './types';
+import { Invoice, Job, ColumnDef, InvoicingMode, LineItem } from './types';
 
 export const COST_TYPES = ['None', 'Labor', 'Material', 'Equipment', 'Subcontractor', 'Other'];
 
@@ -182,6 +182,49 @@ export const EXISTING_INVOICES: Invoice[] = [
     lineItems: [
       { id: 'ei-44-1', description: 'Cabinet hardware materials', costCode: '6090', costType: 'Material', unitCost: 850, quantity: 1, unit: '--', markup: 0 },
     ],
+  },
+];
+
+/* Saved invoice templates, offered from the "+ Invoice" split button in the
+   reimagined loop. A template carries its own billing type, so importing one
+   answers "How are you billing this invoice?" on the builder's behalf and the
+   picker is skipped. Line items come in as a starting point to edit, which is
+   the whole reason a builder saves one. */
+export interface InvoiceTemplate {
+  id: string;
+  name: string;
+  description: string;
+  kind: 'regular' | 'progress';
+  lineItems: LineItem[];
+}
+
+export const INVOICE_TEMPLATES: InvoiceTemplate[] = [
+  {
+    id: 'tpl-monthly-draw',
+    name: 'Monthly draw',
+    description: 'Standard invoice. One line per trade, billed at the end of the month.',
+    kind: 'regular',
+    lineItems: [
+      { id: 'tpl-1-1', description: 'Labor for the period', costCode: '2100', costType: 'Labor', unitCost: 0, quantity: 1, unit: '--', markup: 0 },
+      { id: 'tpl-1-2', description: 'Materials for the period', costCode: '2200', costType: 'Material', unitCost: 0, quantity: 1, unit: '--', markup: 0 },
+      { id: 'tpl-1-3', description: 'Subcontractors for the period', costCode: '2600', costType: 'Subcontractor', unitCost: 0, quantity: 1, unit: '--', markup: 0 },
+    ],
+  },
+  {
+    id: 'tpl-deposit',
+    name: 'Deposit / mobilization',
+    description: 'Standard invoice. Single line for the up-front payment at contract signing.',
+    kind: 'regular',
+    lineItems: [
+      { id: 'tpl-2-1', description: 'Deposit at contract signing', costCode: '1000', costType: 'Other', unitCost: 0, quantity: 1, unit: '--', markup: 0 },
+    ],
+  },
+  {
+    id: 'tpl-aia',
+    name: 'AIA pay application',
+    description: 'Progress invoice. Schedule of values billed on percent complete.',
+    kind: 'progress',
+    lineItems: [],
   },
 ];
 

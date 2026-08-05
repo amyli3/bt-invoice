@@ -17,11 +17,14 @@ interface Props {
    entered leaves the previous type's lines behind. Closing the invoice also
    resets the choice, which is the clean path.
 
-   Most builders bill the same way every time, so the checkbox turns this step
-   off for good: it writes the pick to Company settings > Invoices > Default
-   invoice type, and from then on new invoices open straight into that grid.
-   Reachable again from "Switch billing type", which is also how a builder with
-   a saved default gets back here to change it.
+   Most builders invoice a given job the same way every time, so the checkbox
+   turns this step off for good: it writes the pick to that job's Job details >
+   Advanced settings > Default invoice type, and from then on new invoices on
+   the job open straight into that grid. Job level rather than company level
+   because the builder is looking at one job when they check it, and because
+   the mixed case (fixed-price remodels plus one AIA job) is the one that needs
+   the setting at all. Reachable again from "Switch billing type", which is
+   also how a builder with a saved default gets back here to change it.
 
    Deliberately does NOT restate the current default or where to find the
    setting: the checkbox is the only thing on this screen that touches the
@@ -38,11 +41,13 @@ export default function InvoiceKindPicker({ onPick }: Props) {
           choosing between two grids, so the copy says what each grid asks them
           to fill in. Named in the same order as the buttons below. */}
       <div style={{ fontSize: 14, color: 'var(--g500)', marginBottom: 20, lineHeight: 1.5, maxWidth: 620, marginLeft: 'auto', marginRight: 'auto' }}>
+        {/* Colon after the label rather than running the label straight into the
+            verb: "Standard invoice invoices" stutters. */}
         <div>
-          <b style={{ color: 'var(--g700)' }}>Standard invoice</b> bills the amounts you're charging, line by line, or as one flat fee.
+          <b style={{ color: 'var(--g700)' }}>Standard invoice:</b> invoices the amounts you're charging, line by line, or as one flat fee.
         </div>
         <div style={{ marginTop: 2 }}>
-          <b style={{ color: 'var(--g700)' }}>Progress invoice</b> bills a percent of each contract line, tracked against a schedule of values.
+          <b style={{ color: 'var(--g700)' }}>Progress invoice:</b> invoices a percent of each contract line, tracked against a schedule of values.
         </div>
       </div>
       <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
@@ -63,7 +68,7 @@ export default function InvoiceKindPicker({ onPick }: Props) {
           onChange={(e) => setMakeDefault(e.target.checked)}
           style={{ width: 15, height: 15, accentColor: 'var(--bt-blue)', margin: 0 }}
         />
-        Always bill this way. Skip this step on new invoices.
+        Always invoice this job this way. Skip this step on new invoices.
       </label>
     </div>
   );

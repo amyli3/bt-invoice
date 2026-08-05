@@ -32,6 +32,48 @@ function Field({ label, required, info, children }: { label: string; required?: 
 }
 
 const inputStyle: React.CSSProperties = { width: '100%' };
+
+/* Advanced settings runs on subheadings inside one card rather than a card per
+   topic: Taxes, Budget and Purchase orders are all "defaults that flow into
+   this job's numbers", and splitting them made the column read as six
+   unrelated boxes. */
+function SubHeading({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
+  return (
+    <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--bds-color-gray-90)', ...style }}>{children}</div>
+  );
+}
+
+function CheckboxRow({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: string }) {
+  return (
+    <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--bds-color-gray-80)', cursor: 'pointer' }}>
+      <input type="checkbox" checked={checked} onChange={e => onChange(e.target.checked)} />
+      {label}
+    </label>
+  );
+}
+
+// Currency fields here are limits, so an empty one means Unlimited rather than
+// zero. The placeholder carries that, which is why there's no separate toggle.
+function MoneyInput({ value, onChange, placeholder = 'Unlimited' }: { value: string; onChange: (v: string) => void; placeholder?: string }) {
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'stretch', border: '1px solid var(--bds-color-gray-20)',
+      borderRadius: 'var(--bds-radius-md)', overflow: 'hidden', background: '#fff',
+    }}>
+      <span style={{
+        display: 'flex', alignItems: 'center', padding: '0 10px', fontSize: 13,
+        color: 'var(--bds-color-gray-60)', background: 'var(--bds-color-gray-5)',
+        borderRight: '1px solid var(--bds-color-gray-20)',
+      }}>$</span>
+      <input
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        placeholder={placeholder}
+        style={{ flex: 1, minWidth: 0, border: 'none', outline: 'none', padding: '8px 12px', fontSize: 13, fontFamily: 'inherit', minHeight: 34 }}
+      />
+    </div>
+  );
+}
 const sectionCardStyle: React.CSSProperties = {
   border: '1px solid var(--bds-color-gray-15)', borderRadius: 'var(--bds-radius-lg)',
   padding: 20, display: 'flex', flexDirection: 'column', gap: 16, background: '#fff', marginBottom: 20,
@@ -46,6 +88,9 @@ export default function JobDetailsPage({
   onContractTypeChange,
   fundedByLoan,
   onFundedByLoanChange,
+  invoiceKindDefault = 'company',
+  companyInvoiceKindDefault = 'regular',
+  onInvoiceKindDefaultChange,
 }: {
   job: Job;
   onBack: () => void;
@@ -55,6 +100,10 @@ export default function JobDetailsPage({
   onContractTypeChange: (v: 'fixed-price' | 'open-book') => void;
   fundedByLoan: 'yes' | 'no';
   onFundedByLoanChange: (v: 'yes' | 'no') => void;
+  // 'company' means this job has no override and follows Company settings.
+  invoiceKindDefault?: 'company' | 'regular' | 'progress';
+  companyInvoiceKindDefault?: 'regular' | 'progress';
+  onInvoiceKindDefaultChange?: (v: 'company' | 'regular' | 'progress') => void;
 }) {
   const parsedAddr = parseAddr(job.addr);
   const [tab, setTab] = useState<TabKey>('job-details');
@@ -74,6 +123,19 @@ export default function JobDetailsPage({
   const [permitNumber, setPermitNumber] = useState('');
   const [lotInfo, setLotInfo] = useState('');
 
+  // Advanced settings. Local prototype state: only the invoice type default
+  // lifts to App, since it's the one the invoice page reads back.
+  const [geofencing, setGeofencing] = useState(true);
+  const [percentageType, setPercentageType] = useState('Markup');
+  const [percentage, setPercentage] = useState('0.00');
+  const [taxRate, setTaxRate] = useState('Import rate from Accounting');
+  const [projectionReference, setProjectionReference] = useState('System projection');
+  const [includeTimeClockLabor, setIncludeTimeClockLabor] = useState(false);
+  const [poLimit, setPoLimit] = useState('');
+  const [jobPoLimit, setJobPoLimit] = useState('');
+  const [workingTemplate, setWorkingTemplate] = useState(false);
+  const [billApprovers, setBillApprovers] = useState('');
+
   const addWorkday = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const day = e.target.value;
     if (day && !workdays.includes(day)) setWorkdays(prev => [...prev, day]);
@@ -81,7 +143,7 @@ export default function JobDetailsPage({
   };
 
   return (
-    <div className="bds-scope" style={{ padding: '24px 32px', width: '100%', maxWidth: 1200 }}>
+    <div className="bds-scope" style={{ padding: '24px 32px', width: '100%', maxWidth: 1200, margin: '0 auto' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
         <h1 style={{ fontSize: 22, fontWeight: 700, margin: 0, color: 'var(--bds-color-gray-90)' }}>{title || job.name}</h1>
         <BdsBadge text={status} displayType="success" />
@@ -107,9 +169,157 @@ export default function JobDetailsPage({
         />
       </div>
 
-      {tab !== 'job-details' && (
+      {tab !== 'job-details' && tab !== 'advanced-settings' && (
         <div style={{ color: 'var(--bds-color-gray-60)', fontSize: 14, padding: '40px 0', textAlign: 'center' }}>
           Nothing here yet.
+        </div>
+      )}
+
+      {/* Advanced settings is where the real product keeps the per-job
+          overrides of company-wide financial defaults (markup, tax rate,
+          projection reference), which is why the invoice type override belongs
+          here rather than on Job details. The surrounding cards mirror the
+          shipped page so the new setting can be judged in context: everything
+          except Default invoice type is inert prototype furniture. */}
+      {tab === 'advanced-settings' && (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
+          <div>
+            <div style={sectionCardStyle}>
+              <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--bds-color-gray-90)' }}>Project management options</div>
+              <div>
+                <SubHeading style={{ marginBottom: 10 }}>Time clock</SubHeading>
+                <CheckboxRow checked={geofencing} onChange={setGeofencing} label="Enable geofencing on Time Clock shifts" />
+              </div>
+            </div>
+
+            <div style={sectionCardStyle}>
+              <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--bds-color-gray-90)' }}>Margin and markup</div>
+              <div style={{ fontSize: 13, color: 'var(--bds-color-gray-60)', lineHeight: 1.5 }}>
+                This percentage below will be applied to all new line items on Estimates and Change Orders. To update existing line items, use checked actions.
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, alignItems: 'end' }}>
+                <Field label="Percentage type">
+                  <select value={percentageType} onChange={e => setPercentageType(e.target.value)} className="bds-r-input" style={inputStyle}>
+                    <option>Markup</option>
+                    <option>Margin</option>
+                  </select>
+                </Field>
+                <Field label="Percentage">
+                  <div style={{ display: 'flex', alignItems: 'stretch', gap: 8 }}>
+                    <div style={{
+                      display: 'flex', alignItems: 'stretch', flex: 1, minWidth: 0,
+                      border: '1px solid var(--bds-color-gray-20)', borderRadius: 'var(--bds-radius-md)', overflow: 'hidden', background: '#fff',
+                    }}>
+                      <input
+                        value={percentage}
+                        onChange={e => setPercentage(e.target.value)}
+                        style={{ flex: 1, minWidth: 0, border: 'none', outline: 'none', padding: '8px 12px', fontSize: 13, fontFamily: 'inherit', minHeight: 34 }}
+                      />
+                      <span style={{
+                        display: 'flex', alignItems: 'center', padding: '0 10px', fontSize: 13,
+                        color: 'var(--bds-color-gray-60)', background: 'var(--bds-color-gray-5)',
+                        borderLeft: '1px solid var(--bds-color-gray-20)',
+                      }}>%</span>
+                    </div>
+                    <button
+                      type="button"
+                      title="Set markup by cost type"
+                      style={{
+                        border: '1px solid var(--bds-color-gray-20)', borderRadius: 'var(--bds-radius-md)',
+                        background: '#fff', cursor: 'pointer', padding: '0 10px', fontSize: 14, color: 'var(--bds-color-gray-70)',
+                      }}
+                    >
+                      ⚙
+                    </button>
+                  </div>
+                </Field>
+              </div>
+
+              <div>
+                <SubHeading style={{ marginBottom: 10 }}>Taxes</SubHeading>
+                <Field label="Default tax rate">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <select value={taxRate} onChange={e => setTaxRate(e.target.value)} className="bds-r-input" style={{ flex: 1, minWidth: 0 }}>
+                      <option>Import rate from Accounting</option>
+                      <option>No tax</option>
+                      <option>Sales tax (7.5%)</option>
+                    </select>
+                    <button type="button" style={{ background: 'none', border: 'none', padding: 0, color: 'var(--bds-color-blue-70)', fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                      Manage
+                    </button>
+                  </div>
+                </Field>
+              </div>
+
+              <div>
+                <SubHeading style={{ marginBottom: 10 }}>Budget</SubHeading>
+                <Field label="Projection reference default" info="Which projection the budget compares against on new cost codes.">
+                  <select value={projectionReference} onChange={e => setProjectionReference(e.target.value)} className="bds-r-input" style={inputStyle}>
+                    <option>System projection</option>
+                    <option>Estimate</option>
+                    <option>Manual projection</option>
+                  </select>
+                  <div style={{ fontSize: 12, color: 'var(--bds-color-gray-60)', marginTop: 6, lineHeight: 1.5 }}>
+                    This selection will apply to all new cost codes on the budget. To update existing cost codes, use checked actions.
+                  </div>
+                </Field>
+                <div style={{ marginTop: 12 }}>
+                  <CheckboxRow checked={includeTimeClockLabor} onChange={setIncludeTimeClockLabor} label="Include Time Clock labor in the Job Costing Budget" />
+                </div>
+              </div>
+
+              <div>
+                <SubHeading style={{ marginBottom: 10 }}>Purchase orders</SubHeading>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                  <Field label="Individual Purchase Order limit"><MoneyInput value={poLimit} onChange={setPoLimit} /></Field>
+                  <Field label="Total Job Purchase Order limit"><MoneyInput value={jobPoLimit} onChange={setJobPoLimit} /></Field>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <div style={sectionCardStyle}>
+              <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--bds-color-gray-90)' }}>Template options</div>
+              <CheckboxRow checked={workingTemplate} onChange={setWorkingTemplate} label="Make this job a working template" />
+            </div>
+
+            <div style={sectionCardStyle}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--bds-color-gray-90)' }}>Bill approvals</div>
+                <BdsBadge text="New" displayType="info" />
+              </div>
+              <Field label="Additional default bill approvers for this job">
+                <BdsInput id="bill-approvers" value={billApprovers} onChange={(_, v) => setBillApprovers(v)} placeholder="Select users" style={inputStyle} />
+              </Field>
+            </div>
+
+            {/* Sits with the other per-job financial defaults, but in the short
+                right column so it isn't buried under the markup card. */}
+            <div style={sectionCardStyle}>
+              <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--bds-color-gray-90)' }}>Invoicing</div>
+              {/* Two options, no "Use company setting" entry: the select shows
+                  the type this job actually invoices as, which for a job that
+                  hasn't been touched is whatever Company settings says.
+                  Inheritance still exists underneath (App only stores a job
+                  value once one is picked here), it just isn't a third thing
+                  to read. No info icon either: the line below says it. */}
+              <Field label="Default invoice type">
+                <select
+                  className="bds-r-input"
+                  style={inputStyle}
+                  value={invoiceKindDefault === 'company' ? companyInvoiceKindDefault : invoiceKindDefault}
+                  onChange={e => onInvoiceKindDefaultChange?.(e.target.value as 'regular' | 'progress')}
+                >
+                  <option value="regular">Standard invoice</option>
+                  <option value="progress">Progress invoice</option>
+                </select>
+                <div style={{ fontSize: 12, color: 'var(--bds-color-gray-60)', marginTop: 6, lineHeight: 1.5 }}>
+                  New invoices on this job open as a {(invoiceKindDefault === 'company' ? companyInvoiceKindDefault : invoiceKindDefault) === 'progress' ? 'progress invoice' : 'standard invoice'}. You can still switch on any individual invoice.
+                </div>
+              </Field>
+            </div>
+          </div>
         </div>
       )}
 

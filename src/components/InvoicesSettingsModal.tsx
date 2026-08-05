@@ -97,7 +97,7 @@ function RichTextBox({ value, onChange, placeholder }: { value: string; onChange
 interface ModalProps {
   onClose: () => void;
   // Lifted to App so the reimagined invoice page reads the same value the
-  // picker's "Always bill this way" checkbox writes.
+  // picker's "Always invoice this way" checkbox writes.
   defaultInvoiceKind?: DefaultInvoiceKind;
   onDefaultInvoiceKindChange?: (kind: DefaultInvoiceKind) => void;
 }
@@ -168,7 +168,7 @@ export default function InvoicesSettingsModal({ onClose, defaultInvoiceKind = 'r
               <input className="fi" style={{ width: 140 }} value={invoicePrefix} onChange={(e) => setInvoicePrefix(e.target.value)} />
             </div>
 
-            {/* Same setting the invoice picker's "Always bill this way"
+            {/* Same setting the invoice picker's "Always invoice this way"
                 checkbox writes, so a builder who set it there can find and
                 change it here. */}
             <div style={{ marginBottom: 16 }}>
@@ -184,6 +184,7 @@ export default function InvoicesSettingsModal({ onClose, defaultInvoiceKind = 'r
               </select>
               <div style={{ fontSize: 12, color: 'var(--g500)', marginTop: 6 }}>
                 New invoices open as a {defaultInvoiceKind === 'progress' ? 'progress invoice' : 'standard invoice'}. You can still switch on any individual invoice.
+                {' '}A job can override this in Job details, under Advanced settings.
               </div>
             </div>
 

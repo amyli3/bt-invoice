@@ -420,6 +420,9 @@ interface Props {
   billingModel?: BillingModel;
   /** Invoice (modal) only: show just Combined view + Costs in "Add from". */
   hideSingleSourceOptions?: boolean;
+  /** Financial > Invoice: the reference copy of what's in product today, so it
+      carries none of the prototype's additions, Auto fill included. */
+  hideAutoFill?: boolean;
   /** Slot under the "Add from" row — used for the "we pre-filled this invoice"
       note, which belongs next to the lines it's explaining. */
   notice?: ReactNode;
@@ -429,7 +432,7 @@ interface Props {
   modeToggle?: ReactNode;
 }
 
-export default function LineItems({ invoice, onChange, vis, stackView = 'summary', onStackViewChange, onOpenEstimate, onOpenSelections, onOpenSelections2, onOpenSelections2b, onOpenSelections3, onOpenAll, onOpenAll2, onOpenCosts, hideSingleSourceOptions, notice, modeToggle, billingModel = 'openBook' }: Props) {
+export default function LineItems({ invoice, onChange, vis, stackView = 'summary', onStackViewChange, onOpenEstimate, onOpenSelections, onOpenSelections2, onOpenSelections2b, onOpenSelections3, onOpenAll, onOpenAll2, onOpenCosts, hideSingleSourceOptions, hideAutoFill, notice, modeToggle, billingModel = 'openBook' }: Props) {
   // The row the builder is actively editing — only this one gets the blue
   // edit highlight; other expanded rows stay neutral white.
   const [activeEditId, setActiveEditId] = useState<string | null>(null);
@@ -445,7 +448,7 @@ export default function LineItems({ invoice, onChange, vis, stackView = 'summary
      approved change orders at percent complete. Same one-click shape, different
      source of truth, so the two can never be mixed on one invoice by accident. */
   const autoFillCandidates = isFixedPrice ? contractAutoFillLineItems() : autoFillLineItems();
-  const canAutoFill = autoFillCandidates.length > 0 && autoFilledIds === null;
+  const canAutoFill = !hideAutoFill && autoFillCandidates.length > 0 && autoFilledIds === null;
 
   const runAutoFill = () => {
     if (autoFillCandidates.length === 0) return;

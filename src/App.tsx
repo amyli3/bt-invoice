@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Invoice, ColumnVisibility, ClientColumnVisibility } from './types';
 import { defaultInvoice, EXISTING_INVOICES, DEMO_INVOICE } from './mockData';
 import { BdsButton } from './bds';
@@ -6,6 +6,8 @@ import TopNav from './components/TopNav';
 import JobSidebar from './components/JobSidebar';
 import PageHeader from './components/PageHeader';
 import InvoiceInfo from './components/InvoiceInfo';
+import ProgressInvoiceInfo from './components/ProgressInvoiceInfo';
+import InvoiceTypeModal, { type InvoiceTypeChoice } from './components/InvoiceTypeModal';
 import OwnerPrice, { PriceModeToggle } from './components/OwnerPrice';
 import InvoiceKindPicker, { type InvoiceKind } from './components/InvoiceKindPicker';
 import { type DefaultInvoiceKind } from './components/InvoicesSettingsModal';
@@ -47,7 +49,7 @@ import OpenbookFlow from './components/OpenbookFlow';
 import OwnerInvoicesPage from './components/OwnerInvoicesPage';
 import JobDetailsPage from './components/JobDetailsPage';
 import CompanySettingsPage from './components/CompanySettingsPage';
-import { JOBS } from './mockData';
+import { JOBS, INVOICE_TEMPLATES } from './mockData';
 import { getNextId } from './mockData';
 import { TIME_INTERVAL_DEMO_INVOICES, JULY_TIME_INTERVAL_ITEMS, type DemoInvoiceRow } from './mockData';
 import type { InvoicingMode, DrawScheduleLine, Job } from './types';
@@ -86,7 +88,22 @@ export default function App() {
       _setActivePage('change-order' as PageType);
       return;
     }
+    /* Financial > Invoice lands on the job's invoices grid, empty, rather than
+       straight in the builder: the list is the entry point in product, and
+       "+ Invoice" from there is what opens the form. Its own nav key, so the
+       internal jumps to 'invoice-3' (that "+ Invoice", the draws fallback)
+       still go to the builder. */
+    if (page === 'invoice-base-grid') {
+      setInvoice(defaultInvoice);
+      setInvoicesLoop('base');
+      _setActivePage('owner-invoices');
+      window.location.hash = 'owner-invoices';
+      return;
+    }
     if (page === 'change-order') setSelectedCOId(null);
+    // Job details' Back returns wherever you came from, including the Jobs >
+    // Summary entry in the top nav, which doesn't set this itself.
+    if (page === 'job-details' && activePage !== 'job-details') setJobDetailsReturnPage(activePage);
     _setActivePage(page as PageType);
     window.location.hash = page;
   };
@@ -105,7 +122,7 @@ export default function App() {
   // the decision point. null = decision not made yet, so the picker shows.
   const [reimaginedKind, setReimaginedKind] = useState<InvoiceKind | null>(null);
   // Company settings > Invoices > Default invoice type. Written from two
-  // places, the settings modal and the picker's "Always bill this way"
+  // places, the settings modal and the picker's "Always invoice this way"
   // checkbox, so it lives here rather than inside either one. Persisted
   // because the point of the setting is that it survives the next invoice.
   const [defaultInvoiceKind, _setDefaultInvoiceKind] = useState<DefaultInvoiceKind>(() => {
@@ -118,16 +135,102 @@ export default function App() {
     _setDefaultInvoiceKind(kind);
     try { localStorage.setItem('reimagined-default-invoice-kind', kind); } catch {}
   };
-  // Opening the reimagined invoice honors that default: the picker is skipped
-  // and its grid loads directly. Keyed on the page, not on the kind, so
-  // "Switch billing type" can still clear the choice and bring the picker back
-  // for this one invoice without the default immediately reapplying.
+  // Job details > Advanced settings > Default invoice type, per job. The
+  // company setting covers the builder who invoices every job the same way;
+  // this covers the one job that doesn't match, which is the common case for a
+  // builder running fixed-price remodels alongside one AIA commercial job.
+  // Absent from the map means "use the company setting", so there is exactly
+  // one place a job's default can come from at any time.
+  const [jobInvoiceKindDefaults, _setJobInvoiceKindDefaults] = useState<Record<number, InvoiceKind>>(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('reimagined-job-default-invoice-kind') || '{}');
+      return saved && typeof saved === 'object' ? saved : {};
+    } catch { return {}; }
+  });
+  const setJobInvoiceKindDefault = (jobId: number, kind: InvoiceKind | 'company') => {
+    _setJobInvoiceKindDefaults(prev => {
+      const next = { ...prev };
+      if (kind === 'company') delete next[jobId]; else next[jobId] = kind;
+      try { localStorage.setItem('reimagined-job-default-invoice-kind', JSON.stringify(next)); } catch {}
+      return next;
+    });
+  };
+  // A new invoice opens on the picker unless THIS JOB has a default saved, in
+  // which case it opens straight into that grid. The company setting seeds
+  // what the job's Advanced settings select starts on; it doesn't skip the
+  // picker on its own, so the flow always has a visible decision point until a
+  // builder opts out of it for a job.
+  const jobDefaultInvoiceKind: InvoiceKind | null = jobInvoiceKindDefaults[selectedJob] ?? null;
+  // Set when a caller has already decided the kind (the split button's
+  // Progress option), so the entry effect below doesn't overwrite it.
+  const pendingKindRef = useRef<InvoiceKind | null | undefined>(undefined);
+  // Keyed on the page and the job, not on the kind, so "Switch billing type"
+  // can clear the choice and bring the picker back for this one invoice
+  // without the default immediately reapplying. Switching jobs re-applies,
+  // since it's a different job's rule.
   useEffect(() => {
     if (activePage !== 'invoice-full-page-reimagined') return;
-    setReimaginedKind(defaultInvoiceKind);
-    setInvoice(inv => ({ ...inv, type: defaultInvoiceKind === 'progress' ? 'progress' : 'invoice' }));
+    const kind = pendingKindRef.current !== undefined ? pendingKindRef.current : jobDefaultInvoiceKind;
+    pendingKindRef.current = undefined;
+    setReimaginedKind(kind);
+    if (kind) setInvoice(inv => ({ ...inv, type: kind === 'progress' ? 'progress' : 'invoice' }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activePage]);
+  }, [activePage, selectedJob]);
+  // "+ Invoice" from the invoices grid: a blank invoice that starts at the
+  // picker, or at a named type when the caller picked one.
+  // "Import from template": the template names its own billing type, so the
+  // invoice opens on that grid with the template's lines already in it and
+  // never asks the picker's question.
+  const startReimaginedInvoiceFromTemplate = (templateId: string) => {
+    const tpl = INVOICE_TEMPLATES.find(t => t.id === templateId);
+    if (!tpl) return;
+    pendingKindRef.current = tpl.kind;
+    setInvoice({
+      ...defaultInvoice,
+      title: tpl.name,
+      type: tpl.kind === 'progress' ? 'progress' : 'invoice',
+      lineItems: tpl.lineItems.map(li => ({ ...li })),
+      to: { ...defaultInvoice.to, name: currentJobWithOverrides.name },
+    });
+    setAutoFilledDraw(null);
+    setAutoFilledPeriod(null);
+    setActivePage('invoice-full-page-reimagined');
+  };
+  /* What the "+ Invoice" modal's answer opens. Both documents live on the
+     Invoice page itself, so this only decides which grid it loads with.
+     Payment schedule never reaches here: the invoices page keeps that answer
+     and opens its schedule editor. */
+  const startBaseInvoiceOfType = (choice: InvoiceTypeChoice, makeDefault = false) => {
+    const kind: InvoiceKind = choice === 'progress' ? 'progress' : 'regular';
+    if (makeDefault) setJobInvoiceKindDefault(selectedJob, kind);
+    setInvoice({ ...defaultInvoice, type: choice === 'progress' ? 'progress' : 'invoice' });
+    setAutoFilledDraw(null);
+    setAutoFilledPeriod(null);
+    setActivePage('invoice-3');
+  };
+  // The same question, reopened from inside the invoice.
+  const switchBaseInvoiceType = (choice: InvoiceTypeChoice, makeDefault = false) => {
+    setBaseTypeModalOpen(false);
+    if (makeDefault && choice !== 'payment-schedule') {
+      setJobInvoiceKindDefault(selectedJob, choice === 'progress' ? 'progress' : 'regular');
+    }
+    if (choice === 'payment-schedule') {
+      setOpenScheduleOnGrid(true);
+      setInvoicesLoop('base');
+      setActivePage('owner-invoices');
+      return;
+    }
+    setInvoice(inv => ({ ...inv, type: choice === 'progress' ? 'progress' : 'invoice' }));
+  };
+  const startReimaginedInvoice = (kind?: InvoiceKind) => {
+    // undefined, not null: no named type means "fall back to the job's
+    // default", which is null (the picker) only when the job hasn't set one.
+    pendingKindRef.current = kind;
+    setInvoice(defaultInvoice);
+    setAutoFilledDraw(null);
+    setAutoFilledPeriod(null);
+    setActivePage('invoice-full-page-reimagined');
+  };
   const [customizePanelOpen, setCustomizePanelOpen] = useState(true);
   const [clientHideLineItems, setClientHideLineItems] = useState(false);
   const [clientShowQrCode, setClientShowQrCode] = useState(false);
@@ -170,6 +273,20 @@ export default function App() {
   // "Combined view 2" — the same wizard with Costs as a fourth record type. Its
   // own flag so it and the original combined view can be compared side by side.
   const [addAllV2ModalOpen, setAddAllV2ModalOpen] = useState(false);
+  /* Backing out of the reimagined invoice lands on Invoices with nothing in it:
+     the invoice was never saved, so the mode picker and the demo history would
+     both be lying about the state of the job. Any other route into Invoices
+     clears this and shows the normal page. */
+  /* Which invoice route the builder backed out of, so the grid's "+ Invoice"
+     returns them to that same route instead of crossing the two flows. null =
+     arrived some other way, so the normal (non-empty) page shows. */
+  const [invoicesLoop, setInvoicesLoop] = useState<'reimagined' | 'base' | null>(null);
+  const invoicesEmptyState = invoicesLoop !== null;
+  // Financial > Invoice: the type modal, reachable from the grid's "+ Invoice"
+  // and again from the invoice itself. openScheduleOnGrid carries the payment
+  // schedule answer back to the grid, which owns that editor.
+  const [baseTypeModalOpen, setBaseTypeModalOpen] = useState(false);
+  const [openScheduleOnGrid, setOpenScheduleOnGrid] = useState(false);
   // Width of the docked "Add from" panel on the tabs/modal layout. null = the
   // responsive default; dragging the divider between the invoice form and the
   // panel pins an explicit pixel width so the builder can size it themselves.
@@ -771,6 +888,13 @@ export default function App() {
               onSavePaymentSchedule={(draws) => setDrawScheduleOverrides(prev => ({ ...prev, [job.id]: draws }))}
               onDeletePaymentSchedule={() => setDrawScheduleOverrides(prev => ({ ...prev, [job.id]: [] }))}
               onOpenJobDetails={() => { setJobDetailsReturnPage(activePage); setActivePage('job-details'); }}
+              emptyState={invoicesEmptyState}
+              onAddInvoiceReimagined={invoicesLoop === 'base' ? undefined : startReimaginedInvoice}
+              onImportTemplate={invoicesLoop === 'base' ? undefined : startReimaginedInvoiceFromTemplate}
+              onAddInvoiceDirect={invoicesLoop === 'base' ? startBaseInvoiceOfType : undefined}
+              jobDefaultInvoiceKind={jobDefaultInvoiceKind}
+              openScheduleOnMount={openScheduleOnGrid}
+              onScheduleOpened={() => setOpenScheduleOnGrid(false)}
             />
           </div>
         </div>
@@ -795,6 +919,9 @@ export default function App() {
               onContractTypeChange={(v) => updateJobFinancials(job.id, { contractType: v })}
               fundedByLoan={(fundedByLoanOverrides[job.id] ?? job.fundedByConstructionLoan ?? true) ? 'yes' : 'no'}
               onFundedByLoanChange={(v) => updateJobFinancials(job.id, { fundedByLoan: v === 'yes' })}
+              invoiceKindDefault={jobInvoiceKindDefaults[job.id] ?? 'company'}
+              companyInvoiceKindDefault={defaultInvoiceKind}
+              onInvoiceKindDefaultChange={(v) => setJobInvoiceKindDefault(job.id, v)}
             />
           </div>
         </div>
@@ -1024,6 +1151,24 @@ export default function App() {
   // travels with 'invoice-full-page' through all the layout flags below.
   const isReimaginedFullPage = activePage === 'invoice-full-page-reimagined';
   const isFullPageInvoice = activePage === 'invoice-full-page' || isReimaginedFullPage;
+  /* Financial > Invoice: the reference copy of today's product, the baseline
+     the other routes are compared against. So it carries the shipped field set
+     (description, closing text, QuickBooks, internal notes) and none of the
+     prototype's additions. */
+  const isBaseInvoicePage = activePage === 'invoice-3';
+  const isBaseProgressInvoice = isBaseInvoicePage && invoice.type === 'progress';
+  /* Reopens the same three-way question the grid asked, in place. Standard and
+     progress just swap the grid; payment schedule isn't a document, so it
+     hands back to the invoices page with the schedule editor open. */
+  const renderBaseBillingTypeSwitch = () => (
+    <button
+      type="button"
+      onClick={() => setBaseTypeModalOpen(true)}
+      style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 13, fontWeight: 500, color: 'var(--bt-blue)', fontFamily: 'inherit', whiteSpace: 'nowrap' }}
+    >
+      Switch billing type
+    </button>
+  );
   const isInvoiceV2Like = activePage === 'invoice-2' || activePage === 'invoice-3' || activePage === 'invoice-3-modal' || isFullPageInvoice;
   // 'invoice-3', 'invoice-3-modal' and the full-page routes are the same
   // reimagine builder content — the latter are just presented with the
@@ -1099,7 +1244,11 @@ export default function App() {
   const pickBillingKind = (kind: InvoiceKind | null, makeDefault = false) => {
     setReimaginedKind(kind);
     if (kind) setInvoice(inv => ({ ...inv, type: kind === 'progress' ? 'progress' : 'invoice' }));
-    if (kind && makeDefault) setDefaultInvoiceKind(kind);
+    // The checkbox saves against the job being invoiced, not the company: the
+    // builder is looking at one job's invoice when they check it, and a job
+    // default is the reversible version of the two. Job details > Advanced
+    // settings is where it shows up afterwards.
+    if (kind && makeDefault) setJobInvoiceKindDefault(selectedJob, kind);
   };
 
   const renderBillingKindSwitch = () => (
@@ -1116,15 +1265,23 @@ export default function App() {
      "How are you billing this invoice?" with a clean grid. */
   const leaveInvoice = () => {
     setReimaginedKind(null);
+    setInvoicesLoop(isReimaginedFullPage ? 'reimagined' : isBaseInvoicePage ? 'base' : null);
     setActivePage('owner-invoices');
   };
 
   // The Details tab's form sections. Rendered either on their own (modal) or as
   // the left column beside the QuickBooks rail (full page).
+  /* A pay application's header is its own thing (certifications, portal
+     sharing), so the reimagined progress path swaps the whole top section and
+     drops Client price with it: the taxes control belongs to a line-item
+     invoice, and the continuation sheet carries its own totals. */
+  const isReimaginedProgress = isReimaginedFullPage && reimaginedKind === 'progress';
   const renderDetailsForm = () => (
     <>
-      <InvoiceInfo invoice={invoice} onChange={setInvoice} />
-      <OwnerPrice
+      {isReimaginedProgress
+        ? <ProgressInvoiceInfo invoice={invoice} onChange={setInvoice} />
+        : <InvoiceInfo invoice={invoice} onChange={setInvoice} />}
+      {!isReimaginedProgress && <OwnerPrice
         invoice={invoice}
         onChange={setInvoice}
         // Full page only: the toggle moves inline with "Add from" below.
@@ -1136,7 +1293,7 @@ export default function App() {
           ? (reimaginedKind !== 'regular' || invoice.mode === 'lineItems')
           : (isFullPageInvoice && invoice.mode === 'lineItems')}
         modeToggleExtra={isReimaginedFullPage && reimaginedKind !== null ? renderBillingKindSwitch() : undefined}
-      />
+      />}
 
       {/* Reimagined page: decide Regular vs Progress first, then load that grid. */}
       {isReimaginedFullPage && reimaginedKind === null && (
@@ -1189,11 +1346,12 @@ export default function App() {
           onOpenCosts={() => { setEstModalOpen(false); setSelV5ModalOpen(false); setSelV2on3ModalOpen(false); setAddAllModalOpen(false); setAddAllV2ModalOpen(false); setCostsModalOpen(true); }}
           // Invoice (modal) only — other pages keep the single-source wizards.
           hideSingleSourceOptions={showInvoiceAsModal}
+          hideAutoFill={isBaseInvoicePage}
           billingModel={billingModel}
           notice={invoice.mode === 'lineItems' ? prefillNotice : undefined}
         />
       )}
-      <Notes invoice={invoice} onChange={setInvoice} variant={isFullPageInvoice ? 'full-page' : 'default'} />
+      <Notes invoice={invoice} onChange={setInvoice} variant={isFullPageInvoice || isBaseInvoicePage || showInvoiceAsModal ? 'full-page' : 'default'} />
     </>
   );
 
@@ -1548,12 +1706,27 @@ export default function App() {
               className={"builder" + (previewHidden && isInvoiceV2Like && !isNarrow ? ' builder-full' : '')}
               style={isNarrow && activeView !== 'builder' ? {display: 'none'} : {}}
             >
+              {/* Financial > Invoice carries both documents now: the type chosen
+                  on the way in decides which grid loads, and "Switch billing
+                  type" reopens that same question without leaving the page. */}
+              {isBaseProgressInvoice ? (
+                <>
+                  <ProgressInvoiceInfo invoice={invoice} onChange={setInvoice} />
+                  <div className="sec" style={{ paddingBottom: 0 }}>
+                    <div className="sec-title" style={{ fontSize: 14, margin: '0 0 8px' }}>Schedule of values</div>
+                    <ProgressInvoiceGrid toolbarLeft={renderBaseBillingTypeSwitch()} />
+                  </div>
+                </>
+              ) : (
+              <>
               <InvoiceInfo invoice={invoice} onChange={setInvoice} />
-              <OwnerPrice invoice={invoice} onChange={setInvoice} />
+              <OwnerPrice invoice={invoice} onChange={setInvoice} modeToggleExtra={isBaseInvoicePage ? renderBaseBillingTypeSwitch() : undefined} />
               {invoice.mode === 'lineItems' && (isInvoiceV2Like
-                ? <LineItemsV2 invoice={invoice} onChange={setInvoice} vis={vis} onVisChange={setVis} stackView={stackView} onStackViewChange={setStackView} onOpenEstimate={() => setEstModalOpen(true)} onOpenSelections={() => setSelV2ModalOpen(true)} onOpenSelections2={() => setSelV4ModalOpen(true)} onOpenSelections2b={() => setSelV5ModalOpen(true)} onOpenSelections3={() => setSelV2on3ModalOpen(true)} onOpenAll={() => setAddAllModalOpen(true)} onOpenAll2={() => setAddAllV2ModalOpen(true)} onOpenCosts={() => setCostsModalOpen(true)} billingModel={billingModel} notice={invoice.mode === 'lineItems' ? prefillNotice : undefined} />
+                ? <LineItemsV2 invoice={invoice} onChange={setInvoice} vis={vis} onVisChange={setVis} stackView={stackView} onStackViewChange={setStackView} onOpenEstimate={() => setEstModalOpen(true)} onOpenSelections={() => setSelV2ModalOpen(true)} onOpenSelections2={() => setSelV4ModalOpen(true)} onOpenSelections2b={() => setSelV5ModalOpen(true)} onOpenSelections3={() => setSelV2on3ModalOpen(true)} onOpenAll={() => setAddAllModalOpen(true)} onOpenAll2={() => setAddAllV2ModalOpen(true)} onOpenCosts={() => setCostsModalOpen(true)} hideAutoFill={isBaseInvoicePage} billingModel={billingModel} notice={invoice.mode === 'lineItems' ? prefillNotice : undefined} />
                 : <LineItems invoice={invoice} onChange={setInvoice} vis={vis} onVisChange={setVis} onOpenEstimate={() => setEstModalOpen(true)} onOpenSelections={() => setSelModalOpen(true)} />)}
-              <Notes invoice={invoice} onChange={setInvoice} />
+              </>
+              )}
+              <Notes invoice={invoice} onChange={setInvoice} variant={isBaseInvoicePage ? 'full-page' : 'default'} />
             </div>
             <div className="preview" style={{
               ...(isNarrow && activeView !== 'preview' ? {display: 'none'} : {}),
@@ -1617,7 +1790,11 @@ export default function App() {
         // Both demo presentations show the same plain invoice. Plain "Invoice"
         // resets to a blank one so it never inherits the demo content (or a
         // progress invoice loaded by an earlier flow).
-        if (page === 'invoice-3-modal' || page === 'invoice-full-page') setInvoice(DEMO_INVOICE);
+        setInvoicesLoop(null);
+        // Demo header content, no lines: the grid under an "Auto fill" offer has
+        // to be empty for the offer to mean anything. The lines arrive when the
+        // builder takes it.
+        if (page === 'invoice-3-modal' || page === 'invoice-full-page') setInvoice({ ...DEMO_INVOICE, lineItems: [] });
         else if (page === 'invoice-full-page-reimagined') {
           // Start this one at the decision point with a blank invoice, since
           // picking a billing type is the first step of the flow.
@@ -1642,6 +1819,13 @@ export default function App() {
                 onSavePaymentSchedule={(draws) => setDrawScheduleOverrides(prev => ({ ...prev, [currentJobWithOverrides.id]: draws }))}
                 onDeletePaymentSchedule={() => setDrawScheduleOverrides(prev => ({ ...prev, [currentJobWithOverrides.id]: [] }))}
                 onOpenJobDetails={() => { setJobDetailsReturnPage(activePage); setActivePage('job-details'); }}
+                emptyState={invoicesEmptyState}
+                onAddInvoiceReimagined={invoicesLoop === 'base' ? undefined : startReimaginedInvoice}
+                onImportTemplate={invoicesLoop === 'base' ? undefined : startReimaginedInvoiceFromTemplate}
+                onAddInvoiceDirect={invoicesLoop === 'base' ? startBaseInvoiceOfType : undefined}
+                jobDefaultInvoiceKind={jobDefaultInvoiceKind}
+                openScheduleOnMount={openScheduleOnGrid}
+                onScheduleOpened={() => setOpenScheduleOnGrid(false)}
               />
             : renderInvoiceBuilder()}
         </div>
@@ -1654,6 +1838,13 @@ export default function App() {
             {renderInvoiceBuilder()}
           </div>
         </div>
+      )}
+      {isBaseInvoicePage && baseTypeModalOpen && (
+        <InvoiceTypeModal
+          job={currentJobWithOverrides}
+          onClose={() => setBaseTypeModalOpen(false)}
+          onChoose={switchBaseInvoiceType}
+        />
       )}
       <EstimateModal
         open={estModalOpen && !useTabsLayout}

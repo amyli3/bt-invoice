@@ -125,6 +125,16 @@ export default function TopNav({ onNavigate }: TopNavProps) {
           <button className="topnav-item" onClick={() => { setJobsOpen(!jobsOpen); setPmOpen(false); setFinancialOpen(false); }}>Jobs {caretDown}</button>
           {jobsOpen && (
             <div className="topnav-dropdown">
+              {/* Job Info is how the real product gets to a job's own pages,
+                  Advanced settings included. Without it the only route here
+                  was the sidebar's job row. */}
+              <button className="topnav-dropdown-item" style={{ display: 'flex', alignItems: 'center', gap: 10 }} onClick={() => { setJobsOpen(false); onNavigate?.('job-details'); }}>
+                <svg width="16" height="16" viewBox="0 0 18 18" fill="none" style={{ flexShrink: 0 }}>
+                  <circle cx="9" cy="9" r="6.75" stroke="currentColor" strokeWidth="1.4" />
+                  <path d="M9 8.25v4.5M9 5.75v.1" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+                </svg>
+                Job Info
+              </button>
               <button className="topnav-dropdown-item" onClick={() => { setJobsOpen(false); onNavigate?.('job-price-summary'); }}>Job Price Summary</button>
             </div>
           )}
@@ -145,11 +155,17 @@ export default function TopNav({ onNavigate }: TopNavProps) {
           <button className="topnav-item" onClick={() => { setFinancialOpen(!financialOpen); setJobsOpen(false); setPmOpen(false); }}>Financial {caretDown}</button>
           {financialOpen && (
             <div className="topnav-dropdown">
-              <button className="topnav-dropdown-item" onClick={() => { setFinancialOpen(false); onNavigate?.('invoice-3'); }}>Invoice</button>
+              {/* First, because it's the version being worked on. The others
+                  are references and side-by-sides.
+                  "Invoice (full page)" is hidden: it and the reimagined full
+                  page had converged, so the reimagined one is the live version.
+                  The route still resolves at #invoice-full-page if the old
+                  layout needs comparing. */}
+              <button className="topnav-dropdown-item" onClick={() => { setFinancialOpen(false); onNavigate?.('invoice-full-page-reimagined'); }}>Invoice (full page - reimagined)</button>
+              {/* Opens the invoices grid, not the builder — see setActivePage. */}
+              <button className="topnav-dropdown-item" onClick={() => { setFinancialOpen(false); onNavigate?.('invoice-base-grid'); }}>Invoice</button>
               <button className="topnav-dropdown-item" onClick={() => { setFinancialOpen(false); onNavigate?.('owner-invoices'); }}>Invoice (reimagined)</button>
               <button className="topnav-dropdown-item" onClick={() => { setFinancialOpen(false); onNavigate?.('invoice-3-modal'); }}>Invoice (modal)</button>
-              <button className="topnav-dropdown-item" onClick={() => { setFinancialOpen(false); onNavigate?.('invoice-full-page'); }}>Invoice (full page)</button>
-              <button className="topnav-dropdown-item" onClick={() => { setFinancialOpen(false); onNavigate?.('invoice-full-page-reimagined'); }}>Invoice (full page - reimagined)</button>
               <button className="topnav-dropdown-item" onClick={() => { setFinancialOpen(false); onNavigate?.('client-preview-invoice'); }}>Client preview invoice</button>
               <button className="topnav-dropdown-item" onClick={() => { setFinancialOpen(false); onNavigate?.('progress-invoice'); }}>Progress Invoice</button>
               <button className="topnav-dropdown-item" onClick={() => { setFinancialOpen(false); onNavigate?.('estimate'); }}>Estimate</button>
