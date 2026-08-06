@@ -27,16 +27,13 @@ function stateFor(draw: DrawScheduleLine, index: number, firstUnpaid: number): D
 
 export default function PaymentScheduleTracker({
   draws,
-  jobName,
   onClose,
 }: {
   draws: DrawScheduleLine[];
-  jobName: string;
   onClose: () => void;
 }) {
   const firstUnpaid = draws.findIndex(d => !d.invoiced);
   const today = new Date();
-  const total = draws.reduce((s, d) => s + d.amount, 0);
 
   return (
     <div
@@ -49,12 +46,7 @@ export default function PaymentScheduleTracker({
       }}
     >
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', padding: '22px 24px 12px' }}>
-        <div>
-          <h2 style={{ fontSize: 20, fontWeight: 700, margin: 0, color: 'var(--bds-color-gray-90)' }}>Payment schedule</h2>
-          <div style={{ fontSize: 13, color: 'var(--bds-color-gray-60)', marginTop: 2 }}>
-            {jobName} · {draws.length} draws · ${total.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-          </div>
-        </div>
+        <h2 style={{ fontSize: 20, fontWeight: 700, margin: 0, color: 'var(--bds-color-gray-90)' }}>Payment schedule</h2>
         <button type="button" onClick={onClose} aria-label="Close" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--bds-color-gray-60)', padding: 4 }}>
           <BdsIcon name="x" size={20} />
         </button>

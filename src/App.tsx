@@ -11,7 +11,7 @@ import InvoiceTypeModal, { type InvoiceTypeChoice } from './components/InvoiceTy
 import OwnerPrice, { PriceModeToggle } from './components/OwnerPrice';
 import InvoiceKindPicker, { type InvoiceKind } from './components/InvoiceKindPicker';
 import { type DefaultInvoiceKind } from './components/InvoicesSettingsModal';
-import ProgressInvoiceGrid from './components/ProgressInvoiceGrid';
+import ProgressInvoiceGrid, { INITIAL_LINES as SOV_LINES } from './components/ProgressInvoiceGrid';
 import { AiaPreview } from './components/InvoicePreviewPanel';
 import LineItems from './components/LineItems';
 import LineItemsV2, { AddFromDropdown, type BillingModel } from './components/LineItemsV2';
@@ -211,6 +211,35 @@ export default function App() {
     setAutoFilledDraw(null);
     setAutoFilledPeriod(null);
     setActivePage('invoice-full-page-reimagined');
+  };
+  /* Saving on Financial > Invoice closes the invoice and returns to the grid,
+     where the saved invoice is listed as an Unreleased row. Client price, so
+     the row matches what the client would owe. */
+  const saveBaseInvoice = () => {
+    const jobId = currentJobWithOverrides.id;
+    /* A progress invoice bills this period off the schedule of values, which
+       the grid owns, so its amount comes from there rather than line items. */
+    const amount = invoice.type === 'progress'
+      ? SOV_LINES.reduce((sum, l) => sum + l.thisPeriod, 0)
+      : invoice.mode === 'flatFee'
+      ? invoice.flatFeeAmount
+      : invoice.lineItems.reduce((sum, li) => sum + li.unitCost * li.quantity * (1 + li.markup / 100), 0);
+    setCreatedInvoicesByJob(prev => {
+      const rows = prev[jobId] ?? [];
+      return {
+        ...prev,
+        [jobId]: [...rows, {
+          id: String(rows.length + 1).padStart(4, '0'),
+          title: invoice.title || (invoice.type === 'progress' ? 'Progress invoice' : 'Invoice'),
+          status: 'Unreleased' as const,
+          amount: Math.round(amount),
+        }],
+      };
+    });
+    setInvoice(defaultInvoice);
+    setAutoFilledDraw(null);
+    setAutoFilledPeriod(null);
+    leaveInvoice();
   };
   /* What the "+ Invoice" modal's answer opens. Both documents live on the
      Invoice page itself, so this only decides which grid it loads with.
@@ -1820,7 +1849,7 @@ export default function App() {
               Client preview
             </button>
           )}
-          <button className="btn btn-s">Save</button>
+          <button className="btn btn-s" onClick={isBaseInvoicePage ? saveBaseInvoice : undefined}>Save</button>
           <button className="btn btn-p">Send</button>
         </div>
       )}

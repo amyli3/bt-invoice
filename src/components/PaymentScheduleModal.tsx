@@ -55,7 +55,6 @@ export default function PaymentScheduleModal({
 }) {
   const isEditing = !!existingDraws && existingDraws.length > 0;
   const [rows, setRows] = useState<DraftRow[]>(isEditing ? draftsFromExisting(existingDraws!) : evenSplitDrafts(4));
-  const [collapsed, setCollapsed] = useState(false);
   const total = isEditing ? existingDraws!.reduce((s, d) => s + d.amount, 0) : defaultTotal;
 
   const setDrawCount = (count: number) => {
@@ -117,17 +116,7 @@ export default function PaymentScheduleModal({
               className="bds-r-input" style={{ width: 100 }}
             />
           </div>
-          <div style={{ textAlign: 'right', marginBottom: 8 }}>
-            <button
-              type="button" onClick={() => setCollapsed(c => !c)}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--bds-color-blue-70)', fontSize: 13, fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 4 }}
-            >
-              <BdsIcon name={collapsed ? 'chevron-down' : 'chevron-up'} size={12} />
-              {collapsed ? 'Expand Draw Options' : 'Collapse Draw Options'}
-            </button>
-          </div>
-
-          {!collapsed && (
+          {(
             <>
               <div style={{ display: 'grid', gridTemplateColumns: '80px 90px 1fr 1fr', gap: 12, marginBottom: 8 }}>
                 <div />
@@ -164,14 +153,14 @@ export default function PaymentScheduleModal({
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 20, borderTop: '1px solid var(--bds-color-gray-15)', paddingTop: 20 }}>
-          {isEditing && onDelete && <BdsButton text="Delete" displayType="secondary" onClick={onDelete} />}
+          {/* Delete only once there's a saved schedule to delete: on the way in
+              from "+ Invoice" there's nothing behind this modal yet. */}
+          {isEditing && onDelete && !onCreate && <BdsButton text="Delete" displayType="secondary" onClick={onDelete} />}
           {/* Two ways out, both keeping the schedule. Create is primary because
               a builder who just typed the whole schedule usually wants the
               invoices; Save is for the one who's only setting it up. */}
           <BdsButton text="Save" displayType={onCreate ? 'secondary' : 'primary'} onClick={handleSave} />
-          {onCreate && (
-            <BdsButton text={`Create ${rows.length} invoices`} displayType="primary" onClick={handleCreate} />
-          )}
+          {onCreate && <BdsButton text="Create" displayType="primary" onClick={handleCreate} />}
         </div>
       </div>
     </div>

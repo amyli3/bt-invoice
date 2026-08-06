@@ -174,7 +174,7 @@ export default function OwnerInvoicesPage({
   const money2 = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
   return (
-    <div className="bds-scope" style={{ padding: '24px 32px', width: '100%', background: '#fff' }}>
+    <div className="bds-scope" style={{ padding: '24px 32px', width: '100%', background: '#fff', minHeight: '100%', display: 'flex', flexDirection: 'column' }}>
       <div style={{ color: 'var(--bds-color-gray-60)', fontSize: 13, marginBottom: 2 }}>{job.name}</div>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20, gap: 16 }}>
         <h1 style={{ fontSize: 24, fontWeight: 700, margin: 0, color: 'var(--bds-color-gray-90)' }}>Invoices</h1>
@@ -218,16 +218,72 @@ export default function OwnerInvoicesPage({
           {showPaymentScheduleButton && (
             <BdsButton text="Payment Schedule" displayType="secondary" onClick={() => setShowScheduleModal(true)} />
           )}
-          {onAddInvoiceDirect && (
-            <BdsButton
-              text="+ Invoice"
-              displayType="primary"
-              onClick={() => {
-                // A saved default is the builder having answered this already.
-                if (jobDefaultInvoiceKind) onAddInvoiceDirect(jobDefaultInvoiceKind === 'progress' ? 'progress' : 'standard', false);
-                else setShowTypeModal(true);
-              }}
-            />
+          {/* Before a default exists the button asks the question; after one is
+              set it becomes that answer, with the other type and templates
+              behind the caret. Same two clicks either way, but the common case
+              is one. */}
+          {onAddInvoiceDirect && !jobDefaultInvoiceKind && (
+            <BdsButton text="+ Invoice" displayType="primary" onClick={() => setShowTypeModal(true)} />
+          )}
+          {onAddInvoiceDirect && jobDefaultInvoiceKind && (
+            <div ref={templateMenuRef} style={{ position: 'relative', display: 'inline-flex' }}>
+              <button
+                type="button"
+                onClick={() => onAddInvoiceDirect(jobDefaultInvoiceKind === 'progress' ? 'progress' : 'standard', false)}
+                style={{
+                  background: 'var(--bds-color-blue-70)', color: '#fff', border: 'none',
+                  padding: '0 16px', height: 36, fontSize: 14, fontWeight: 600, cursor: 'pointer',
+                  borderRadius: '6px 0 0 6px', borderRight: '1px solid rgba(255,255,255,0.3)',
+                }}
+              >
+                + {jobDefaultInvoiceKind === 'progress' ? 'Progress invoice' : 'Invoice'}
+              </button>
+              <button
+                type="button"
+                aria-label="More invoice options"
+                onClick={() => setShowTemplateMenu(v => !v)}
+                style={{
+                  background: 'var(--bds-color-blue-70)', color: '#fff', border: 'none',
+                  padding: '0 10px', height: 36, cursor: 'pointer', borderRadius: '0 6px 6px 0',
+                  display: 'flex', alignItems: 'center',
+                }}
+              >
+                <BdsIcon name="chevron-down" size={14} />
+              </button>
+              {showTemplateMenu && (
+                <div style={{
+                  position: 'absolute', top: 40, right: 0, background: '#fff',
+                  border: '1px solid var(--bds-color-gray-15)', borderRadius: 'var(--bds-radius-md)',
+                  boxShadow: '0 8px 24px rgba(0,0,0,0.14)', zIndex: 20, minWidth: 200, padding: 4,
+                }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowTemplateMenu(false);
+                      onAddInvoiceDirect(jobDefaultInvoiceKind === 'progress' ? 'standard' : 'progress', false);
+                    }}
+                    style={{
+                      display: 'block', width: '100%', textAlign: 'left', background: 'none', border: 'none',
+                      padding: '8px 12px', fontSize: 13, color: 'var(--bds-color-gray-90)', cursor: 'pointer', borderRadius: 4,
+                    }}
+                  >
+                    {jobDefaultInvoiceKind === 'progress' ? 'Standard invoice' : 'Progress invoice'}
+                  </button>
+                  {onImportTemplate && (
+                    <button
+                      type="button"
+                      onClick={() => { setShowTemplateMenu(false); setShowTemplateModal(true); }}
+                      style={{
+                        display: 'block', width: '100%', textAlign: 'left', background: 'none', border: 'none',
+                        padding: '8px 12px', fontSize: 13, color: 'var(--bds-color-gray-90)', cursor: 'pointer', borderRadius: 4,
+                      }}
+                    >
+                      Import from template
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
           )}
           {/* Reimagined loop: the caret no longer picks a billing type, since
               the invoice page asks that itself. It offers the one thing that
@@ -452,9 +508,11 @@ export default function OwnerInvoicesPage({
         </>
       )}
 
+      {/* Fills the leftover height so the saved-view footer lands at the bottom
+          of the page rather than under the illustration. */}
       {tab === 'invoices' && emptyState && (createdInvoices?.length ?? 0) === 0 && (
-        <>
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '64px 0' }}>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: '64px 0' }}>
             <svg width="56" height="56" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ marginBottom: 16 }}>
               <path fillRule="evenodd" clipRule="evenodd" d="M27 30H5L4.82356 29.9923L4.63318 29.9662L4.51117 29.9394C3.6939 29.7344 3.07641 29.0264 3.00659 28.1635L3 28V15C3 14.6881 3.13495 14.4266 3.33852 14.2491L3.44525 14.168L7 11.797V5L7.00549 4.85074L7.01261 4.77413L7.03384 4.63169C7.04944 4.54779 7.07034 4.46559 7.09616 4.38553L7.15616 4.22391L7.20769 4.11153L7.29134 3.95998L7.399 3.80114L7.51784 3.65715L7.65374 3.52093L7.77371 3.41994L7.92093 3.31578L8.06315 3.23254L8.12988 3.19869L8.26677 3.13868L8.46998 3.07099L8.59611 3.0408L8.63505 3.03322C8.70557 3.02021 8.77761 3.01088 8.85074 3.00549L9 3H19C19.221 3 19.4345 3.07316 19.608 3.20608L19.7071 3.29289L24.7071 8.29289C24.8634 8.44917 24.9626 8.65185 24.9913 8.86856L25 9V11.797L28.5704 14.1787C28.7921 14.3311 28.9547 14.5727 28.9919 14.8695L29 15V28L28.9942 28.1539L28.9711 28.3396L28.9394 28.4888C28.7344 29.3061 28.0264 29.9236 27.1635 29.9934L27 30ZM27 27.999V16.979L19.3578 22.6101C19.0632 22.8272 18.7156 22.9586 18.3535 22.9917L18.1714 23H13.8286C13.4627 23 13.105 22.8996 12.7937 22.7114L12.6422 22.6101L5 16.979V28L27 27.999ZM9 5H18.585L23 9.415V17.44L18.1714 21H13.8286L9 17.441V5ZM19 15C19.5523 15 20 15.4477 20 16C20 16.5128 19.614 16.9355 19.1166 16.9933L19 17H13C12.4477 17 12 16.5523 12 16C12 15.4872 12.386 15.0645 12.8834 15.0067L13 15H19ZM5.741 15.04L7 14.201V15.968L5.741 15.04ZM25 14.202V15.967L26.258 15.04L25 14.202ZM20 12C20 11.4477 19.5523 11 19 11H13L12.8834 11.0067C12.386 11.0645 12 11.4872 12 12C12 12.5523 12.4477 13 13 13H19L19.1166 12.9933C19.614 12.9355 20 12.5128 20 12Z" fill="#202227" />
             </svg>
@@ -469,9 +527,9 @@ export default function OwnerInvoicesPage({
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, borderTop: '1px solid var(--bds-color-gray-15)', paddingTop: 12, marginTop: 12, fontSize: 13, color: 'var(--bds-color-gray-60)' }}>
             <span>My Saved View ▾</span>
             <span aria-hidden="true">•••</span>
-            <span style={{ marginLeft: 'auto' }}>1-1 of 1 item</span>
+            <span style={{ marginLeft: 'auto' }}>0 of 0 items</span>
           </div>
-        </>
+        </div>
       )}
 
       {tab === 'invoices' && !emptyState && !askingForMode && invoicingMode && (invoicingMode !== 'milestone-draws' || hasSchedule) && (
@@ -633,7 +691,6 @@ export default function OwnerInvoicesPage({
       {showTracker && hasSchedule && (
         <PaymentScheduleTracker
           draws={job.drawSchedule ?? []}
-          jobName={job.name}
           onClose={() => setShowTracker(false)}
         />
       )}

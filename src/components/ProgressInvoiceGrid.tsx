@@ -32,7 +32,7 @@ const GROUP_OPTIONS: { value: GroupBy; label: string }[] = [
 // Schedule of values for the reimagined page's progress-invoice path. Column
 // names match the standalone Progress Invoice (AIA) page so the two read as the
 // same concept, trimmed to the essential set that fits inline in the form.
-const INITIAL_LINES: SovLine[] = [
+export const INITIAL_LINES: SovLine[] = [
   { id: 'sov-1', description: 'Framing labor', costCode: '2100', costCodeName: 'Rough Carpentry', estimateGroup: 'Structure', scheduledValue: 42000, fromPrevious: 21000, thisPeriod: 12500 },
   { id: 'sov-2', description: 'Framing lumber package', costCode: '2100', costCodeName: 'Rough Carpentry', estimateGroup: 'Structure', scheduledValue: 16800, fromPrevious: 8400, thisPeriod: 5200 },
   { id: 'sov-3', description: 'Rough plumbing', costCode: '2200', costCodeName: 'Plumbing', estimateGroup: 'Mechanicals', scheduledValue: 18000, fromPrevious: 9000, thisPeriod: 6800 },
