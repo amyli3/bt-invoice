@@ -181,6 +181,22 @@ export default function App() {
   // "Import from template": the template names its own billing type, so the
   // invoice opens on that grid with the template's lines already in it and
   // never asks the picker's question.
+  // Financial > Invoice's copy of the same thing: the template's type decides
+  // which grid the Invoice page opens with, and its lines come in to edit.
+  const startBaseInvoiceFromTemplate = (templateId: string) => {
+    const tpl = INVOICE_TEMPLATES.find(t => t.id === templateId);
+    if (!tpl) return;
+    setInvoice({
+      ...defaultInvoice,
+      title: tpl.name,
+      type: tpl.kind === 'progress' ? 'progress' : 'invoice',
+      lineItems: tpl.lineItems.map(li => ({ ...li })),
+      to: { ...defaultInvoice.to, name: currentJobWithOverrides.name },
+    });
+    setAutoFilledDraw(null);
+    setAutoFilledPeriod(null);
+    setActivePage('invoice-3');
+  };
   const startReimaginedInvoiceFromTemplate = (templateId: string) => {
     const tpl = INVOICE_TEMPLATES.find(t => t.id === templateId);
     if (!tpl) return;
@@ -287,6 +303,27 @@ export default function App() {
   // schedule answer back to the grid, which owns that editor.
   const [baseTypeModalOpen, setBaseTypeModalOpen] = useState(false);
   const [openScheduleOnGrid, setOpenScheduleOnGrid] = useState(false);
+  // Invoices the job actually has in that loop. Created in one go from a
+  // payment schedule, one per draw.
+  const [createdInvoicesByJob, setCreatedInvoicesByJob] = useState<Record<number, DemoInvoiceRow[]>>({});
+  /* "Create" on the schedule: every draw becomes an Unreleased invoice, and the
+     job's default invoice type becomes Standard. The schedule has answered the
+     cadence question, so the next "+ Invoice" shouldn't ask it again — it opens
+     a standard invoice, switchable from the invoice itself. */
+  const createInvoicesFromSchedule = (draws: DrawScheduleLine[]) => {
+    const jobId = currentJobWithOverrides.id;
+    setDrawScheduleOverrides(prev => ({ ...prev, [jobId]: draws }));
+    setCreatedInvoicesByJob(prev => ({
+      ...prev,
+      [jobId]: draws.map(d => ({
+        id: String(d.drawNumber).padStart(4, '0'),
+        title: d.title,
+        status: 'Unreleased' as const,
+        amount: d.amount,
+      })),
+    }));
+    setJobInvoiceKindDefault(jobId, 'regular');
+  };
   // Width of the docked "Add from" panel on the tabs/modal layout. null = the
   // responsive default; dragging the divider between the invoice form and the
   // panel pins an explicit pixel width so the builder can size it themselves.
@@ -890,11 +927,13 @@ export default function App() {
               onOpenJobDetails={() => { setJobDetailsReturnPage(activePage); setActivePage('job-details'); }}
               emptyState={invoicesEmptyState}
               onAddInvoiceReimagined={invoicesLoop === 'base' ? undefined : startReimaginedInvoice}
-              onImportTemplate={invoicesLoop === 'base' ? undefined : startReimaginedInvoiceFromTemplate}
+              onImportTemplate={invoicesLoop === 'base' ? startBaseInvoiceFromTemplate : startReimaginedInvoiceFromTemplate}
               onAddInvoiceDirect={invoicesLoop === 'base' ? startBaseInvoiceOfType : undefined}
               jobDefaultInvoiceKind={jobDefaultInvoiceKind}
               openScheduleOnMount={openScheduleOnGrid}
               onScheduleOpened={() => setOpenScheduleOnGrid(false)}
+              createdInvoices={invoicesLoop === 'base' ? createdInvoicesByJob[currentJobWithOverrides.id] : undefined}
+              onCreateInvoicesFromSchedule={invoicesLoop === 'base' ? createInvoicesFromSchedule : undefined}
             />
           </div>
         </div>
@@ -1347,7 +1386,11 @@ export default function App() {
           // Invoice (modal) only — other pages keep the single-source wizards.
           hideSingleSourceOptions={showInvoiceAsModal}
           hideAutoFill={isBaseInvoicePage}
-          billingModel={billingModel}
+          /* Invoice (modal) demos the open-book fill regardless of the selected
+             job's contract type: it's the presentation used to show costs
+             coming in, so Auto fill there pulls bills, approved time clock
+             hours and accounting costs, and the banner copy says so. */
+          billingModel={showInvoiceAsModal ? 'openBook' : billingModel}
           notice={invoice.mode === 'lineItems' ? prefillNotice : undefined}
         />
       )}
@@ -1821,11 +1864,13 @@ export default function App() {
                 onOpenJobDetails={() => { setJobDetailsReturnPage(activePage); setActivePage('job-details'); }}
                 emptyState={invoicesEmptyState}
                 onAddInvoiceReimagined={invoicesLoop === 'base' ? undefined : startReimaginedInvoice}
-                onImportTemplate={invoicesLoop === 'base' ? undefined : startReimaginedInvoiceFromTemplate}
+                onImportTemplate={invoicesLoop === 'base' ? startBaseInvoiceFromTemplate : startReimaginedInvoiceFromTemplate}
                 onAddInvoiceDirect={invoicesLoop === 'base' ? startBaseInvoiceOfType : undefined}
                 jobDefaultInvoiceKind={jobDefaultInvoiceKind}
                 openScheduleOnMount={openScheduleOnGrid}
                 onScheduleOpened={() => setOpenScheduleOnGrid(false)}
+                createdInvoices={invoicesLoop === 'base' ? createdInvoicesByJob[currentJobWithOverrides.id] : undefined}
+                onCreateInvoicesFromSchedule={invoicesLoop === 'base' ? createInvoicesFromSchedule : undefined}
               />
             : renderInvoiceBuilder()}
         </div>

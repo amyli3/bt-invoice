@@ -2,10 +2,12 @@ import { useState, useRef, useEffect } from 'react';
 import '../bds-tokens.css';
 import { BdsButton, BdsBadge, BdsTabs, BdsIcon } from '../bds';
 import { Job, InvoicingMode, DrawScheduleLine } from '../types';
-import { INVOICING_MODE_LABELS, TIME_INTERVAL_DEMO_INVOICES, AIA_DEMO_INVOICES, INVOICE_TEMPLATES, type DemoInvoiceRow } from '../mockData';
+import { INVOICING_MODE_LABELS, TIME_INTERVAL_DEMO_INVOICES, AIA_DEMO_INVOICES, type DemoInvoiceRow } from '../mockData';
 import InvoicingModePicker from './InvoicingModePicker';
 import PaymentScheduleModal from './PaymentScheduleModal';
 import InvoiceTypeModal, { type InvoiceTypeChoice as NewInvoiceChoice } from './InvoiceTypeModal';
+import PaymentScheduleTracker from './PaymentScheduleTracker';
+import ImportTemplateModal from './ImportTemplateModal';
 
 type TabKey = 'invoices' | 'payments' | 'credit-memos' | 'deposits';
 type InvoiceTypeChoice = 'progress' | 'invoice';
@@ -40,6 +42,8 @@ export default function OwnerInvoicesPage({
   jobDefaultInvoiceKind,
   openScheduleOnMount,
   onScheduleOpened,
+  createdInvoices,
+  onCreateInvoicesFromSchedule,
   onAddInvoiceReimagined,
   onImportTemplate,
   onAddInvoiceDirect,
@@ -73,12 +77,17 @@ export default function OwnerInvoicesPage({
      back here with the schedule editor already open. */
   openScheduleOnMount?: boolean;
   onScheduleOpened?: () => void;
+  /* Invoices this job actually has in the Financial > Invoice loop — one per
+     draw once a schedule is created. Empty means the "No invoices yet" state. */
+  createdInvoices?: DemoInvoiceRow[];
+  onCreateInvoicesFromSchedule?: (draws: DrawScheduleLine[]) => void;
 }) {
   const [tab, setTab] = useState<TabKey>('invoices');
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [showInvoiceMenu, setShowInvoiceMenu] = useState(false);
   const invoiceMenuRef = useRef<HTMLDivElement>(null);
   const [showTypeModal, setShowTypeModal] = useState(false);
+  const [showTracker, setShowTracker] = useState(false);
   const [showTemplateMenu, setShowTemplateMenu] = useState(false);
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const templateMenuRef = useRef<HTMLDivElement>(null);
@@ -199,7 +208,11 @@ export default function OwnerInvoicesPage({
             <>
               <BdsButton text="..." displayType="secondary" ariaLabel="More actions" />
               <BdsButton text="Filter" displayType="secondary" icon={<FilterGlyph />} />
-              <BdsButton text="Payment schedule" displayType="secondary" icon={<BdsIcon name="plus" size={14} />} onClick={() => setShowScheduleModal(true)} />
+              {/* Once a schedule exists the button stops being "add one" and
+                  becomes the way to look at it. */}
+              {hasSchedule
+                ? <BdsButton text="Payment schedule" displayType="secondary" onClick={() => setShowTracker(true)} />
+                : <BdsButton text="Payment schedule" displayType="secondary" icon={<BdsIcon name="plus" size={14} />} onClick={() => setShowScheduleModal(true)} />}
             </>
           )}
           {showPaymentScheduleButton && (
@@ -383,7 +396,63 @@ export default function OwnerInvoicesPage({
         </div>
       )}
 
-      {tab === 'invoices' && emptyState && (
+      {/* Created from a payment schedule: one invoice per draw, all Unreleased
+          until each is reviewed and sent. */}
+      {tab === 'invoices' && emptyState && (createdInvoices?.length ?? 0) > 0 && (
+        <>
+          <div style={{ border: '1px solid var(--bds-color-gray-15)', borderRadius: 'var(--bds-radius-lg)', background: '#fff', overflow: 'hidden' }}>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', minWidth: 900, borderCollapse: 'collapse', fontSize: 13, whiteSpace: 'nowrap' }}>
+                <thead>
+                  <tr style={{ textAlign: 'left', color: 'var(--bds-color-gray-60)', fontSize: 12, borderBottom: '1px solid var(--bds-color-gray-15)' }}>
+                    <th style={{ padding: '12px 12px 12px 20px', fontWeight: 600 }}>Owner</th>
+                    <th style={{ padding: '8px 12px', fontWeight: 600 }}>Job</th>
+                    <th style={{ padding: '8px 12px', fontWeight: 600 }}>ID #</th>
+                    <th style={{ padding: '8px 12px', fontWeight: 600 }}>Title</th>
+                    <th style={{ padding: '8px 12px', fontWeight: 600 }}>Status</th>
+                    <th style={{ padding: '8px 12px', fontWeight: 600, textAlign: 'right' }}>Total Price</th>
+                    <th style={{ padding: '8px 12px', fontWeight: 600, textAlign: 'right' }}>Total tax</th>
+                    <th style={{ padding: '8px 12px', fontWeight: 600, textAlign: 'right' }}>Amount Paid</th>
+                    <th style={{ padding: '12px 20px 12px 12px', fontWeight: 600, textAlign: 'right' }}>Balance due</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {createdInvoices!.map(row => (
+                    <tr key={row.id} style={{ borderBottom: '1px solid var(--bds-color-gray-10, #f1f2f4)' }}>
+                      <td style={{ padding: '10px 12px 10px 20px', color: 'var(--bds-color-gray-90)' }}>{job.name.split(' ')[0]}</td>
+                      <td style={{ padding: '10px 12px', color: 'var(--bds-color-gray-90)' }}>{job.name}</td>
+                      <td style={{ padding: '10px 12px', color: 'var(--bds-color-blue-70)' }}>{row.id}</td>
+                      <td style={{ padding: '10px 12px', color: 'var(--bds-color-gray-90)' }}>{row.title}</td>
+                      <td style={{ padding: '10px 12px' }}><BdsBadge text={row.status} displayType={row.status === 'Released' ? 'success' : row.status === 'Pending' ? 'warning' : 'default'} /></td>
+                      <td style={{ padding: '10px 12px', textAlign: 'right', color: 'var(--bds-color-gray-90)' }}>{money2(row.amount)}</td>
+                      <td style={{ padding: '10px 12px', textAlign: 'right', color: 'var(--bds-color-gray-90)' }}>$0.00</td>
+                      <td style={{ padding: '10px 12px', textAlign: 'right', color: 'var(--bds-color-gray-90)' }}>$0.00</td>
+                      <td style={{ padding: '10px 20px 10px 12px', textAlign: 'right', color: 'var(--bds-color-gray-90)' }}>{money2(row.amount)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr style={{ background: 'var(--bds-color-gray-5, #f7f8fa)', fontWeight: 700, color: 'var(--bds-color-gray-90)' }}>
+                    <td style={{ padding: '10px 12px 10px 20px' }}>Totals</td>
+                    <td /><td /><td /><td />
+                    <td style={{ padding: '10px 12px', textAlign: 'right' }}>{money2(createdInvoices!.reduce((t, r) => t + r.amount, 0))}</td>
+                    <td style={{ padding: '10px 12px', textAlign: 'right' }}>$0.00</td>
+                    <td style={{ padding: '10px 12px', textAlign: 'right' }}>$0.00</td>
+                    <td style={{ padding: '10px 20px 10px 12px', textAlign: 'right' }}>{money2(createdInvoices!.reduce((t, r) => t + r.amount, 0))}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, borderTop: '1px solid var(--bds-color-gray-15)', paddingTop: 12, marginTop: 12, fontSize: 13, color: 'var(--bds-color-gray-60)' }}>
+            <span>My Saved View ▾</span>
+            <span aria-hidden="true">•••</span>
+            <span style={{ marginLeft: 'auto' }}>1-{createdInvoices!.length} of {createdInvoices!.length} items</span>
+          </div>
+        </>
+      )}
+
+      {tab === 'invoices' && emptyState && (createdInvoices?.length ?? 0) === 0 && (
         <>
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '64px 0' }}>
             <svg width="56" height="56" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ marginBottom: 16 }}>
@@ -554,7 +623,18 @@ export default function OwnerInvoicesPage({
           existingDraws={job.drawSchedule}
           onClose={() => setShowScheduleModal(false)}
           onSave={(draws) => { onSavePaymentSchedule(draws); setShowScheduleModal(false); }}
+          onCreate={onCreateInvoicesFromSchedule
+            ? (draws) => { onCreateInvoicesFromSchedule(draws); setShowScheduleModal(false); }
+            : undefined}
           onDelete={hasSchedule ? () => { onDeletePaymentSchedule(); setShowScheduleModal(false); } : undefined}
+        />
+      )}
+
+      {showTracker && hasSchedule && (
+        <PaymentScheduleTracker
+          draws={job.drawSchedule ?? []}
+          jobName={job.name}
+          onClose={() => setShowTracker(false)}
         />
       )}
 
@@ -562,6 +642,7 @@ export default function OwnerInvoicesPage({
         <InvoiceTypeModal
           job={job}
           onClose={() => setShowTypeModal(false)}
+          onImportTemplate={onImportTemplate ? () => { setShowTypeModal(false); setShowTemplateModal(true); } : undefined}
           onChoose={(choice, makeDefault) => {
             setShowTypeModal(false);
             // Payment schedule is set up here, not in the invoice.
@@ -571,43 +652,13 @@ export default function OwnerInvoicesPage({
         />
       )}
 
-      {/* Picking a template is the whole interaction, so the row IS the button:
-          no radio then Import, which would be two clicks for one decision. */}
-      {showTemplateModal && (
-        <div className="modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) setShowTemplateModal(false); }}>
-          <div className="est-modal bds-scope" style={{ maxWidth: 520 }} onClick={(e) => e.stopPropagation()}>
-            <div className="est-modal-hdr">
-              <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--bds-color-gray-90)', margin: 0 }}>Import from template</h2>
-              <button className="est-modal-close" onClick={() => setShowTemplateModal(false)}>&times;</button>
-            </div>
-            <div className="est-modal-body">
-              <div style={{ fontSize: 13, color: 'var(--bds-color-gray-60)', marginBottom: 14 }}>
-                Templates carry their own billing type and line items, so the invoice opens ready to edit.
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {INVOICE_TEMPLATES.map(t => (
-                  <button
-                    key={t.id}
-                    type="button"
-                    onClick={() => { setShowTemplateModal(false); onImportTemplate?.(t.id); }}
-                    style={{
-                      textAlign: 'left', border: '1px solid var(--bds-color-gray-20)', borderRadius: 'var(--bds-radius-md)',
-                      padding: '12px 14px', background: '#fff', cursor: 'pointer', fontFamily: 'inherit',
-                    }}
-                    onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--bds-color-blue-70)'; e.currentTarget.style.background = 'var(--bds-color-blue-5)'; }}
-                    onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--bds-color-gray-20)'; e.currentTarget.style.background = '#fff'; }}
-                  >
-                    <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--bds-color-gray-90)' }}>{t.name}</div>
-                    <div style={{ fontSize: 12, color: 'var(--bds-color-gray-60)', marginTop: 2 }}>{t.description}</div>
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="est-modal-footer">
-              <BdsButton text="Cancel" displayType="secondary" onClick={() => setShowTemplateModal(false)} />
-            </div>
-          </div>
-        </div>
+      {/* The shipped Import Data From Template modal, reached from the invoice
+          type question with Invoices already checked. */}
+      {showTemplateModal && onImportTemplate && (
+        <ImportTemplateModal
+          onClose={() => setShowTemplateModal(false)}
+          onImport={(templateId) => { setShowTemplateModal(false); onImportTemplate(templateId); }}
+        />
       )}
     </div>
   );

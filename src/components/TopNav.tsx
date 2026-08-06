@@ -155,17 +155,19 @@ export default function TopNav({ onNavigate }: TopNavProps) {
           <button className="topnav-item" onClick={() => { setFinancialOpen(!financialOpen); setJobsOpen(false); setPmOpen(false); }}>Financial {caretDown}</button>
           {financialOpen && (
             <div className="topnav-dropdown">
-              {/* First, because it's the version being worked on. The others
-                  are references and side-by-sides.
+              {/* First, because it's the flow being worked on: the invoices
+                  grid, then the type question, then the invoice. Opens the grid
+                  rather than the builder — see setActivePage.
                   "Invoice (full page)" is hidden: it and the reimagined full
                   page had converged, so the reimagined one is the live version.
                   The route still resolves at #invoice-full-page if the old
                   layout needs comparing. */}
-              <button className="topnav-dropdown-item" onClick={() => { setFinancialOpen(false); onNavigate?.('invoice-full-page-reimagined'); }}>Invoice (full page - reimagined)</button>
-              {/* Opens the invoices grid, not the builder — see setActivePage. */}
               <button className="topnav-dropdown-item" onClick={() => { setFinancialOpen(false); onNavigate?.('invoice-base-grid'); }}>Invoice</button>
+              {/* OB in the label because this presentation runs the open-book
+                  fill regardless of the selected job's contract type. */}
+              <button className="topnav-dropdown-item" onClick={() => { setFinancialOpen(false); onNavigate?.('invoice-3-modal'); }}>Invoice (modal - OB)</button>
+              <button className="topnav-dropdown-item" onClick={() => { setFinancialOpen(false); onNavigate?.('invoice-full-page-reimagined'); }}>Invoice (full page - reimagined)</button>
               <button className="topnav-dropdown-item" onClick={() => { setFinancialOpen(false); onNavigate?.('owner-invoices'); }}>Invoice (reimagined)</button>
-              <button className="topnav-dropdown-item" onClick={() => { setFinancialOpen(false); onNavigate?.('invoice-3-modal'); }}>Invoice (modal)</button>
               <button className="topnav-dropdown-item" onClick={() => { setFinancialOpen(false); onNavigate?.('client-preview-invoice'); }}>Client preview invoice</button>
               <button className="topnav-dropdown-item" onClick={() => { setFinancialOpen(false); onNavigate?.('progress-invoice'); }}>Progress Invoice</button>
               <button className="topnav-dropdown-item" onClick={() => { setFinancialOpen(false); onNavigate?.('estimate'); }}>Estimate</button>

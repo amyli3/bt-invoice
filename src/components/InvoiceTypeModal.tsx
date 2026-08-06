@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import '../bds-tokens.css';
-import { BdsButton, BdsBadge, BdsIcon } from '../bds';
+import { BdsButton, BdsBadge } from '../bds';
 import { Job } from '../types';
 import { recommendInvoicingMode } from '../mockData';
 
@@ -25,12 +25,12 @@ const OPTIONS: { key: InvoiceTypeChoice; label: string; blurb: string }[] = [
   {
     key: 'payment-schedule',
     label: 'Payment schedule',
-    blurb: 'Bill fixed draw amounts from the schedule agreed at signing, as each phase is marked complete.',
+    blurb: 'Split the contract price into draws by percentage. Buildertrend creates an invoice for each draw, ready to send as each phase completes.',
   },
   {
     key: 'progress',
     label: 'Progress invoice',
-    blurb: 'Bill a percent of each contract line against a schedule of values. Certified pay application (G702/G703) format.',
+    blurb: 'Bill a percent of each contract line against a schedule of values. Pay application (G702/G703) format.',
   },
 ];
 
@@ -49,13 +49,16 @@ interface Props {
   job: Job;
   onClose: () => void;
   onChoose: (choice: InvoiceTypeChoice, makeDefault: boolean) => void;
+  /* A template is a fourth way to answer this question, not a fourth type: it
+     carries its own billing type and line items. Kept out of the radio group
+     for that reason, and off to the side so the three types stay the choice. */
+  onImportTemplate?: () => void;
 }
 
-export default function InvoiceTypeModal({ job, onClose, onChoose }: Props) {
+export default function InvoiceTypeModal({ job, onClose, onChoose, onImportTemplate }: Props) {
   const recommendation = recommendedChoice(job);
   const [selected, setSelected] = useState<InvoiceTypeChoice>(recommendation.key);
   const [makeDefault, setMakeDefault] = useState(false);
-  const selectedLabel = OPTIONS.find(o => o.key === selected)!.label;
   const recommendedLabel = OPTIONS.find(o => o.key === recommendation.key)!.label;
 
   return (
@@ -67,22 +70,31 @@ export default function InvoiceTypeModal({ job, onClose, onChoose }: Props) {
         </div>
 
         <div className="est-modal-body">
-          <div style={{ display: 'grid', gap: 14, gridTemplateColumns: 'repeat(3, 1fr)', marginTop: 8, marginBottom: 20 }}>
+          {/* Above the options: it's the reason one of them is already
+              selected, which is unreadable as a footnote after the fact. */}
+          <div style={{
+            padding: 14, marginTop: 4, marginBottom: 20,
+            background: 'var(--bds-color-info-background, #EEF5FF)', borderRadius: 'var(--bds-radius-md)',
+            fontSize: 13, color: 'var(--bds-color-gray-80)', lineHeight: 1.5,
+          }}>
+            <strong>Why we recommend {recommendedLabel}: </strong>{recommendation.reason}
+          </div>
+
+          <div style={{ display: 'grid', gap: 14, gridTemplateColumns: 'repeat(3, 1fr)', marginTop: 16, marginBottom: 18 }}>
+            {/* Radios rather than a "Selected" check line: three mutually
+                exclusive answers read as a radio group, and the control says so
+                before it's clicked. The whole card is still the hit target. */}
             {OPTIONS.map(opt => {
               const isRecommended = opt.key === recommendation.key;
               const isSelected = opt.key === selected;
               return (
-                <div
+                <label
                   key={opt.key}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => setSelected(opt.key)}
-                  onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') setSelected(opt.key); }}
                   style={{
                     textAlign: 'left', cursor: 'pointer', borderRadius: 'var(--bds-radius-lg)',
                     border: isSelected ? '2px solid var(--bds-color-blue-70)' : '1px solid var(--bds-color-gray-25)',
                     background: isSelected ? 'var(--bds-color-blue-5)' : '#fff',
-                    padding: '22px 18px 18px', display: 'flex', flexDirection: 'column', gap: 8, position: 'relative',
+                    padding: '22px 18px 18px', display: 'flex', gap: 10, alignItems: 'flex-start', position: 'relative',
                   }}
                 >
                   {isRecommended && (
@@ -90,26 +102,20 @@ export default function InvoiceTypeModal({ job, onClose, onChoose }: Props) {
                       <BdsBadge text="Recommended" displayType="info" />
                     </div>
                   )}
-                  <div style={{ fontWeight: 600, fontSize: 15, color: 'var(--bds-color-gray-90)' }}>{opt.label}</div>
-                  <div style={{ fontSize: 13, color: 'var(--bds-color-gray-60)', lineHeight: 1.45 }}>{opt.blurb}</div>
-                  {isSelected && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 'auto', paddingTop: 6, color: 'var(--bds-color-blue-70)', fontSize: 13, fontWeight: 500 }}>
-                      <BdsIcon name="check" size={14} /> Selected
-                    </div>
-                  )}
-                </div>
+                  <input
+                    type="radio"
+                    name="invoice-type"
+                    checked={isSelected}
+                    onChange={() => setSelected(opt.key)}
+                    style={{ marginTop: 3, width: 16, height: 16, accentColor: 'var(--bds-color-blue-70)', flexShrink: 0 }}
+                  />
+                  <span style={{ minWidth: 0 }}>
+                    <span style={{ display: 'block', fontWeight: 600, fontSize: 15, color: 'var(--bds-color-gray-90)' }}>{opt.label}</span>
+                    <span style={{ display: 'block', fontSize: 13, color: 'var(--bds-color-gray-60)', lineHeight: 1.45, marginTop: 4 }}>{opt.blurb}</span>
+                  </span>
+                </label>
               );
             })}
-          </div>
-
-          <div style={{
-            display: 'flex', gap: 12, alignItems: 'flex-start', padding: 14,
-            background: 'var(--bds-color-info-background, #EEF5FF)', borderRadius: 'var(--bds-radius-md)',
-          }}>
-            <div style={{ fontSize: 16, lineHeight: 1.2 }}>💡</div>
-            <div style={{ fontSize: 13, color: 'var(--bds-color-gray-80)', lineHeight: 1.5 }}>
-              <strong>Why we recommend {recommendedLabel}: </strong>{recommendation.reason}
-            </div>
           </div>
 
           {/* Payment schedule is a setup step, not a document type, so there's
@@ -132,9 +138,18 @@ export default function InvoiceTypeModal({ job, onClose, onChoose }: Props) {
           )}
         </div>
 
-        <div className="est-modal-footer" style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+        <div className="est-modal-footer" style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'flex-end' }}>
+          {onImportTemplate && (
+            <button
+              type="button"
+              onClick={onImportTemplate}
+              style={{ marginRight: 'auto', background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 13, fontWeight: 500, color: 'var(--bds-color-blue-70)', fontFamily: 'inherit' }}
+            >
+              Import from template
+            </button>
+          )}
           <BdsButton text="Cancel" displayType="secondary" onClick={onClose} />
-          <BdsButton text={`Continue with ${selectedLabel}`} displayType="primary" onClick={() => onChoose(selected, makeDefault && selected !== 'payment-schedule')} />
+          <BdsButton text="Continue" displayType="primary" onClick={() => onChoose(selected, makeDefault && selected !== 'payment-schedule')} />
         </div>
       </div>
     </div>

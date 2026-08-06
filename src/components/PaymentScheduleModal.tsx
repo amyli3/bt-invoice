@@ -39,12 +39,17 @@ export default function PaymentScheduleModal({
   existingDraws,
   defaultTotal = 40000,
   onSave,
+  onCreate,
   onDelete,
   onClose,
 }: {
   existingDraws?: DrawScheduleLine[];
   defaultTotal?: number;
   onSave: (draws: DrawScheduleLine[]) => void;
+  /* Financial > Invoice only. Save keeps the schedule and leaves the invoices
+     to be created draw by draw; Create writes all of them at once, which is
+     what a builder wants when the whole schedule is already agreed. */
+  onCreate?: (draws: DrawScheduleLine[]) => void;
   onDelete?: () => void;
   onClose: () => void;
 }) {
@@ -74,17 +79,17 @@ export default function PaymentScheduleModal({
 
   const percentTotal = rows.reduce((s, r) => s + r.percent, 0);
 
-  const handleSave = () => {
-    const draws: DrawScheduleLine[] = rows.map((r, i) => ({
-      drawNumber: i + 1,
-      milestone: r.scheduleItem,
-      title: r.title,
-      amount: Math.round(total * (r.percent / 100)),
-      phaseComplete: r.phaseComplete ?? false,
-      invoiced: r.invoiced ?? false,
-    }));
-    onSave(draws);
-  };
+  const buildDraws = (): DrawScheduleLine[] => rows.map((r, i) => ({
+    drawNumber: i + 1,
+    milestone: r.scheduleItem,
+    title: r.title,
+    amount: Math.round(total * (r.percent / 100)),
+    phaseComplete: r.phaseComplete ?? false,
+    invoiced: r.invoiced ?? false,
+  }));
+
+  const handleSave = () => onSave(buildDraws());
+  const handleCreate = () => onCreate?.(buildDraws());
 
   return (
     <div style={{
@@ -160,7 +165,13 @@ export default function PaymentScheduleModal({
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 20, borderTop: '1px solid var(--bds-color-gray-15)', paddingTop: 20 }}>
           {isEditing && onDelete && <BdsButton text="Delete" displayType="secondary" onClick={onDelete} />}
-          <BdsButton text="Save" displayType="primary" onClick={handleSave} />
+          {/* Two ways out, both keeping the schedule. Create is primary because
+              a builder who just typed the whole schedule usually wants the
+              invoices; Save is for the one who's only setting it up. */}
+          <BdsButton text="Save" displayType={onCreate ? 'secondary' : 'primary'} onClick={handleSave} />
+          {onCreate && (
+            <BdsButton text={`Create ${rows.length} invoices`} displayType="primary" onClick={handleCreate} />
+          )}
         </div>
       </div>
     </div>
