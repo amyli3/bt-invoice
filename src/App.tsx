@@ -26,7 +26,7 @@ import SelectionsModalV2 from './components/SelectionsModalV2';
 import SelectionsModalV3 from './components/SelectionsModalV3';
 import SelectionsModalV4 from './components/SelectionsModalV4';
 import SelectionsModalV5 from './components/SelectionsModalV5';
-import AddFromAllModal from './components/AddFromAllModal';
+import AddFromAllModal, { type SourceKey } from './components/AddFromAllModal';
 import CostsModal from './components/CostsModal';
 import JobPriceSummary from './components/JobPriceSummary';
 import JobDetailsClients from './components/JobDetailsClients';
@@ -54,9 +54,9 @@ import { getNextId } from './mockData';
 import { TIME_INTERVAL_DEMO_INVOICES, JULY_TIME_INTERVAL_ITEMS, type DemoInvoiceRow } from './mockData';
 import type { InvoicingMode, DrawScheduleLine, Job } from './types';
 
-type PageType = 'invoice' | 'invoice-2' | 'invoice-3' | 'invoice-3-modal' | 'invoice-full-page' | 'invoice-full-page-reimagined' | 'client-preview-invoice' | 'job-price-summary' | 'selections' | 'option-detail' | 'progress-invoice' | 'change-order' | 'change-order-list' | 'client-portal' | 'client-jps' | 'estimate' | 'job-proposal' | 'client-selections' | 'client-selections-2' | 'client-selections-3' | 'job-costing-budget' | 'underage-flows' | 'job-details-clients' | 'owner-invoices' | 'openbook' | 'job-details' | 'company-settings';
+type PageType = 'invoice' | 'invoice-2' | 'invoice-3' | 'invoice-3-modal' | 'invoice-full-page' | 'invoice-full-page-reimagined' | 'client-preview-invoice' | 'job-price-summary' | 'selections' | 'option-detail' | 'progress-invoice' | 'change-order' | 'change-order-list' | 'client-portal' | 'client-jps' | 'estimate' | 'estimate-ob' | 'job-proposal' | 'job-proposal-ob' | 'client-selections' | 'client-selections-2' | 'client-selections-3' | 'job-costing-budget' | 'underage-flows' | 'job-details-clients' | 'owner-invoices' | 'openbook' | 'job-details' | 'company-settings';
 
-const validPages: PageType[] = ['invoice', 'invoice-2', 'invoice-3', 'invoice-3-modal', 'invoice-full-page', 'invoice-full-page-reimagined', 'client-preview-invoice', 'job-price-summary', 'selections', 'option-detail', 'progress-invoice', 'change-order', 'change-order-list', 'client-portal', 'client-jps', 'estimate', 'job-proposal', 'client-selections', 'client-selections-2', 'client-selections-3', 'job-costing-budget', 'underage-flows', 'job-details-clients', 'owner-invoices', 'openbook', 'job-details', 'company-settings'];
+const validPages: PageType[] = ['invoice', 'invoice-2', 'invoice-3', 'invoice-3-modal', 'invoice-full-page', 'invoice-full-page-reimagined', 'client-preview-invoice', 'job-price-summary', 'selections', 'option-detail', 'progress-invoice', 'change-order', 'change-order-list', 'client-portal', 'client-jps', 'estimate', 'estimate-ob', 'job-proposal', 'job-proposal-ob', 'client-selections', 'client-selections-2', 'client-selections-3', 'job-costing-budget', 'underage-flows', 'job-details-clients', 'owner-invoices', 'openbook', 'job-details', 'company-settings'];
 
 function getInitialPage(): PageType {
   // Support ?page=X query param (used when hash is occupied by Figma capture)
@@ -93,11 +93,30 @@ export default function App() {
        "+ Invoice" from there is what opens the form. Its own nav key, so the
        internal jumps to 'invoice-3' (that "+ Invoice", the draws fallback)
        still go to the builder. */
-    if (page === 'invoice-base-grid') {
+    if (page === 'invoice-base-grid' || page === 'invoice-base-grid-ob') {
       setInvoice(defaultInvoice);
-      setInvoicesLoop('base');
+      /* Fixed and OB are the same loop with their own entry point, so the
+         variant rides on the loop state rather than on a second page. */
+      setInvoicesLoop(page === 'invoice-base-grid-ob' ? 'base-ob' : 'base');
+      /* Entering from the nav is a fresh run of the flow, so the job's saved
+         type answer is dropped: both routes open with the plain "+ Invoice",
+         and the split button only appears once "How do you want to invoice this
+         job?" has been answered with "Always invoice this job this way". */
+      setJobInvoiceKindDefault(selectedJob, 'company');
       _setActivePage('owner-invoices');
       window.location.hash = 'owner-invoices';
+      return;
+    }
+    /* Same entry rule for the modal presentation: the route lands on the job's
+       invoices grid with nothing in it, and the invoice itself only opens once
+       "+ Invoice" has been answered. Whatever the last visit left in the
+       builder is cleared on the way in. */
+    if (page === 'invoice-3-modal') {
+      setInvoice({ ...DEMO_INVOICE, lineItems: [] });
+      setModalInvoiceOpen(false);
+      setInvoicesLoop('modal');
+      _setActivePage('invoice-3-modal');
+      window.location.hash = 'invoice-3-modal';
       return;
     }
     if (page === 'change-order') setSelectedCOId(null);
@@ -141,17 +160,15 @@ export default function App() {
   // builder running fixed-price remodels alongside one AIA commercial job.
   // Absent from the map means "use the company setting", so there is exactly
   // one place a job's default can come from at any time.
-  const [jobInvoiceKindDefaults, _setJobInvoiceKindDefaults] = useState<Record<number, InvoiceKind>>(() => {
-    try {
-      const saved = JSON.parse(localStorage.getItem('reimagined-job-default-invoice-kind') || '{}');
-      return saved && typeof saved === 'object' ? saved : {};
-    } catch { return {}; }
-  });
+  /* Session state, deliberately not persisted: a refresh puts the prototype
+     back to a job that hasn't answered the type question, so "+ Invoice" is the
+     plain button and the modal appears again. It still holds across navigation
+     within a session, which is what the "skip this step" promise needs. */
+  const [jobInvoiceKindDefaults, _setJobInvoiceKindDefaults] = useState<Record<number, InvoiceKind>>({});
   const setJobInvoiceKindDefault = (jobId: number, kind: InvoiceKind | 'company') => {
     _setJobInvoiceKindDefaults(prev => {
       const next = { ...prev };
       if (kind === 'company') delete next[jobId]; else next[jobId] = kind;
-      try { localStorage.setItem('reimagined-job-default-invoice-kind', JSON.stringify(next)); } catch {}
       return next;
     });
   };
@@ -261,11 +278,49 @@ export default function App() {
     }
     if (choice === 'payment-schedule') {
       setOpenScheduleOnGrid(true);
-      setInvoicesLoop('base');
+      // Back to whichever of the two entry points this invoice came from.
+      setInvoicesLoop(invoicesLoop === 'base-ob' ? 'base-ob' : 'base');
       setActivePage('owner-invoices');
       return;
     }
     setInvoice(inv => ({ ...inv, type: choice === 'progress' ? 'progress' : 'invoice' }));
+  };
+  /* "+ Invoice" in the modal presentation's loop. Only two documents are
+     offered there, since the job's cadence isn't set up from this grid. Both
+     open the invoice straight away: a standard one lands on an empty grid with
+     "Auto fill" sitting over it, which is where the fill is offered. */
+  const startModalInvoiceOfType = (choice: InvoiceTypeChoice, makeDefault = false) => {
+    if (makeDefault) setJobInvoiceKindDefault(selectedJob, choice === 'progress' ? 'progress' : 'regular');
+    setInvoice({
+      ...DEMO_INVOICE,
+      lineItems: [],
+      type: choice === 'progress' ? 'progress' : 'invoice',
+      to: { ...DEMO_INVOICE.to, name: currentJobWithOverrides.name },
+    });
+    setAutoFilledDraw(null);
+    setAutoFilledPeriod(null);
+    setPrefillPage(null);
+    // A new invoice opens on its own form, whichever tab the last one was left on.
+    setModalDetailsTab('details');
+    setModalInvoiceOpen(true);
+  };
+  /* A template answers the type question and brings its own lines, so the
+     invoice opens filled rather than empty. */
+  const startModalInvoiceFromTemplate = (templateId: string) => {
+    const tpl = INVOICE_TEMPLATES.find(t => t.id === templateId);
+    if (!tpl) return;
+    setInvoice({
+      ...DEMO_INVOICE,
+      title: tpl.name,
+      type: tpl.kind === 'progress' ? 'progress' : 'invoice',
+      lineItems: tpl.lineItems.map(li => ({ ...li })),
+      to: { ...DEMO_INVOICE.to, name: currentJobWithOverrides.name },
+    });
+    setAutoFilledDraw(null);
+    setAutoFilledPeriod(null);
+    setPrefillPage(null);
+    setModalDetailsTab('details');
+    setModalInvoiceOpen(true);
   };
   const startReimaginedInvoice = (kind?: InvoiceKind) => {
     // undefined, not null: no named type means "fall back to the job's
@@ -325,8 +380,16 @@ export default function App() {
   /* Which invoice route the builder backed out of, so the grid's "+ Invoice"
      returns them to that same route instead of crossing the two flows. null =
      arrived some other way, so the normal (non-empty) page shows. */
-  const [invoicesLoop, setInvoicesLoop] = useState<'reimagined' | 'base' | null>(null);
+  const [invoicesLoop, setInvoicesLoop] = useState<'reimagined' | 'base' | 'base-ob' | 'modal' | null>(
+    () => (getInitialPage() === 'invoice-3-modal' ? 'modal' : null),
+  );
   const invoicesEmptyState = invoicesLoop !== null;
+  // Financial > Invoice - Fixed and Invoice - OB run the same loop, so
+  // everything wired to it asks this rather than either variant by name.
+  const isBaseLoop = invoicesLoop === 'base' || invoicesLoop === 'base-ob';
+  /* The modal presentation's loop. The grid is the page; the invoice is a modal
+     over it, opened only once "+ Invoice" has been answered. */
+  const [modalInvoiceOpen, setModalInvoiceOpen] = useState(false);
   // Financial > Invoice: the type modal, reachable from the grid's "+ Invoice"
   // and again from the invoice itself. openScheduleOnGrid carries the payment
   // schedule answer back to the grid, which owns that editor.
@@ -955,14 +1018,27 @@ export default function App() {
               onDeletePaymentSchedule={() => setDrawScheduleOverrides(prev => ({ ...prev, [job.id]: [] }))}
               onOpenJobDetails={() => { setJobDetailsReturnPage(activePage); setActivePage('job-details'); }}
               emptyState={invoicesEmptyState}
-              onAddInvoiceReimagined={invoicesLoop === 'base' ? undefined : startReimaginedInvoice}
-              onImportTemplate={invoicesLoop === 'base' ? startBaseInvoiceFromTemplate : startReimaginedInvoiceFromTemplate}
-              onAddInvoiceDirect={invoicesLoop === 'base' ? startBaseInvoiceOfType : undefined}
+              onAddInvoiceReimagined={isBaseLoop ? undefined : startReimaginedInvoice}
+              onImportTemplate={isBaseLoop ? startBaseInvoiceFromTemplate : startReimaginedInvoiceFromTemplate}
+              onAddInvoiceDirect={isBaseLoop ? startBaseInvoiceOfType : undefined}
               jobDefaultInvoiceKind={jobDefaultInvoiceKind}
               openScheduleOnMount={openScheduleOnGrid}
               onScheduleOpened={() => setOpenScheduleOnGrid(false)}
-              createdInvoices={invoicesLoop === 'base' ? createdInvoicesByJob[currentJobWithOverrides.id] : undefined}
-              onCreateInvoicesFromSchedule={invoicesLoop === 'base' ? createInvoicesFromSchedule : undefined}
+              createdInvoices={isBaseLoop ? createdInvoicesByJob[currentJobWithOverrides.id] : undefined}
+              onCreateInvoicesFromSchedule={isBaseLoop ? createInvoicesFromSchedule : undefined}
+              // The grid's Settings button opens the same Invoices company
+              // settings modal the settings page does, so the default invoice
+              // type it shows is the one "+ Invoice" reads.
+              defaultInvoiceKind={defaultInvoiceKind}
+              onDefaultInvoiceKindChange={setDefaultInvoiceKind}
+              /* "+ Invoice" asks which document is being created, and a payment
+                 schedule isn't one: it's the setup step that produces a job's
+                 worth of them. So it comes out of the question entirely and
+                 lives on its own "+ Payment schedule" button in the toolbar.
+                 An open-book job bills what it spent, so it has no draws to
+                 schedule and drops that button too. */
+              invoiceTypeChoices={['standard', 'progress']}
+              hidePaymentSchedule={invoicesLoop === 'base-ob'}
             />
           </div>
         </div>
@@ -1033,7 +1109,11 @@ export default function App() {
     );
   }
 
-  if (activePage === 'estimate') {
+  if (activePage === 'estimate' || activePage === 'estimate-ob') {
+    /* Two copies of the same worksheet, split by billing model. Open book has
+       no contract price to split into draws, so Send to Budget drops that
+       section and the cadence goes on the proposal instead. */
+    const estimateBillingModel = activePage === 'estimate-ob' ? 'open-book' : 'fixed';
     return (
       <div style={{display: 'flex', flexDirection: 'column', height: '100vh'}}>
         <TopNav onNavigate={(page) => setActivePage(page as PageType)} />
@@ -1045,8 +1125,6 @@ export default function App() {
               onToggleJob={() => setJobOpen(true)}
               locked={!!estimateLockedByJob[1]}
               job={estimateJobWithOverrides}
-              invoicingMode={invoicingModeByJob[1]}
-              onSetInvoicingMode={(mode) => setInvoicingModeByJob(prev => ({ ...prev, [1]: mode }))}
               existingDrawSchedule={drawScheduleOverrides[1] ?? JOBS[0].drawSchedule}
               onScheduleCreated={(draws) => {
                 // EstimatePage is hardcoded to Johnson Residence (job 1) for now.
@@ -1062,7 +1140,8 @@ export default function App() {
                 setActivePage('job-costing-budget');
               }}
               onUnlock={() => setEstimateLockedByJob(prev => ({ ...prev, [1]: false }))}
-              onBuildProposal={() => setActivePage('job-proposal')}
+              billingModel={estimateBillingModel}
+              onBuildProposal={() => setActivePage(estimateBillingModel === 'open-book' ? 'job-proposal-ob' : 'job-proposal')}
             />
           </div>
         </div>
@@ -1070,12 +1149,15 @@ export default function App() {
     );
   }
 
-  if (activePage === 'job-proposal') {
+  if (activePage === 'job-proposal' || activePage === 'job-proposal-ob') {
     return (
       <div style={{display: 'flex', flexDirection: 'column', height: '100vh'}}>
         <TopNav onNavigate={(page) => setActivePage(page as PageType)} />
         <div style={{flex: 1, overflowY: 'auto'}}>
-          <ProposalPage onBack={() => setActivePage('estimate')} />
+          <ProposalPage
+            billingModel={activePage === 'job-proposal-ob' ? 'open-book' : 'fixed'}
+            onBack={() => setActivePage(activePage === 'job-proposal-ob' ? 'estimate-ob' : 'estimate')}
+          />
         </div>
       </div>
     );
@@ -1225,6 +1307,16 @@ export default function App() {
      prototype's additions. */
   const isBaseInvoicePage = activePage === 'invoice-3';
   const isBaseProgressInvoice = isBaseInvoicePage && invoice.type === 'progress';
+  /* Which record types the combined view opens with, per contract. Fixed price
+     bills the contract: the estimate, the change orders that amended it and the
+     selections priced into it, but never costs, which are the builder's own
+     margin. Open book is the mirror image, costs included and the estimate left
+     off. Either way the unchecked one stays in the list, one click away. */
+  const combinedViewDefaultSources: SourceKey[] | undefined = !isBaseInvoicePage
+    ? undefined
+    : invoicesLoop === 'base-ob'
+    ? ['Costs', 'Selections', 'Change Orders']
+    : ['Estimate', 'Change Orders', 'Selections'];
   /* Reopens the same three-way question the grid asked, in place. Standard and
      progress just swap the grid; payment schedule isn't a document, so it
      hands back to the invoices page with the schedule editor open. */
@@ -1250,11 +1342,19 @@ export default function App() {
   // just rendered inline in the content area instead of inside the modal
   // backdrop — see showInvoiceAsModal-only usages below for what stays modal-specific.
   const useTabsLayout = showInvoiceAsModal || isFullPageInvoice;
-  // Progress path on the reimagined page previews as a G702/G703 pay
-  // application, not the regular invoice document — so the Client preview tab
-  // swaps in AiaPreview and drops the Customize panel, whose column/line-item
-  // options only describe the regular invoice.
-  const showProgressClientPreview = isReimaginedFullPage && reimaginedKind === 'progress';
+  /* A pay application's header is its own thing (certifications, portal
+     sharing), so the progress path swaps the whole top section and drops Client
+     price with it: the taxes control belongs to a line-item invoice, and the
+     continuation sheet carries its own totals. The modal presentation carries
+     both documents too, chosen on the way in, so a progress invoice there is
+     the same pay application rather than a line-item invoice wearing the name. */
+  const isProgressDoc = (isReimaginedFullPage && reimaginedKind === 'progress')
+    || (showInvoiceAsModal && invoice.type === 'progress');
+  // It previews as a G702/G703 pay application, not the regular invoice
+  // document — so the Client preview tab swaps in AiaPreview and drops the
+  // Customize panel, whose column/line-item options only describe the regular
+  // invoice.
+  const showProgressClientPreview = isProgressDoc;
 
   // Leaving Details closes any open "Add from" panel — it's docked next to
   // the builder form, which isn't shown on the Client preview tab.
@@ -1333,23 +1433,25 @@ export default function App() {
      "How are you billing this invoice?" with a clean grid. */
   const leaveInvoice = () => {
     setReimaginedKind(null);
-    setInvoicesLoop(isReimaginedFullPage ? 'reimagined' : isBaseInvoicePage ? 'base' : null);
+    /* The modal presentation's grid is already the page underneath, so leaving
+       the invoice closes the modal instead of navigating anywhere. */
+    if (showInvoiceAsModal) { setModalInvoiceOpen(false); return; }
+    setInvoicesLoop(
+      isReimaginedFullPage ? 'reimagined'
+        : isBaseInvoicePage ? (invoicesLoop === 'base-ob' ? 'base-ob' : 'base')
+        : null,
+    );
     setActivePage('owner-invoices');
   };
 
   // The Details tab's form sections. Rendered either on their own (modal) or as
   // the left column beside the QuickBooks rail (full page).
-  /* A pay application's header is its own thing (certifications, portal
-     sharing), so the reimagined progress path swaps the whole top section and
-     drops Client price with it: the taxes control belongs to a line-item
-     invoice, and the continuation sheet carries its own totals. */
-  const isReimaginedProgress = isReimaginedFullPage && reimaginedKind === 'progress';
   const renderDetailsForm = () => (
     <>
-      {isReimaginedProgress
+      {isProgressDoc
         ? <ProgressInvoiceInfo invoice={invoice} onChange={setInvoice} />
         : <InvoiceInfo invoice={invoice} onChange={setInvoice} />}
-      {!isReimaginedProgress && <OwnerPrice
+      {!isProgressDoc && <OwnerPrice
         invoice={invoice}
         onChange={setInvoice}
         // Full page only: the toggle moves inline with "Add from" below.
@@ -1360,7 +1462,9 @@ export default function App() {
         hideModeToggle={isReimaginedFullPage
           ? (reimaginedKind !== 'regular' || invoice.mode === 'lineItems')
           : (isFullPageInvoice && invoice.mode === 'lineItems')}
-        modeToggleExtra={isReimaginedFullPage && reimaginedKind !== null ? renderBillingKindSwitch() : undefined}
+        modeToggleExtra={isReimaginedFullPage && reimaginedKind !== null
+          ? renderBillingKindSwitch()
+          : showInvoiceAsModal ? renderBaseBillingTypeSwitch() : undefined}
       />}
 
       {/* Reimagined page: decide Regular vs Progress first, then load that grid. */}
@@ -1369,7 +1473,7 @@ export default function App() {
           <InvoiceKindPicker onPick={pickBillingKind} />
         </div>
       )}
-      {isReimaginedFullPage && reimaginedKind === 'progress' && (
+      {isProgressDoc && (
         <div className="sec" style={{ paddingBottom: 0 }}>
           {/* The label doesn't repeat the type: the header subtitle above already
               carries it. The switch sits in the grid toolbar's LEFT cluster and
@@ -1377,7 +1481,7 @@ export default function App() {
               line-items path uses, so neither control moves between paths. */}
           <div className="sec-title" style={{ fontSize: 14, margin: '0 0 8px' }}>Schedule of values</div>
           <ProgressInvoiceGrid
-            toolbarLeft={renderBillingKindSwitch()}
+            toolbarLeft={showInvoiceAsModal ? renderBaseBillingTypeSwitch() : renderBillingKindSwitch()}
             toolbarRight={
               <>
                 <AddFromDropdown
@@ -1394,7 +1498,7 @@ export default function App() {
         </div>
       )}
 
-      {(!isReimaginedFullPage || reimaginedKind === 'regular') && invoice.mode === 'lineItems' && (
+      {!isProgressDoc && (!isReimaginedFullPage || reimaginedKind === 'regular') && invoice.mode === 'lineItems' && (
         <LineItemsV2
           invoice={invoice} onChange={setInvoice} vis={vis} onVisChange={setVis} stackView={stackView} onStackViewChange={setStackView}
           modeToggle={isReimaginedFullPage && reimaginedKind !== null ? (
@@ -1414,12 +1518,16 @@ export default function App() {
           onOpenCosts={() => { setEstModalOpen(false); setSelV5ModalOpen(false); setSelV2on3ModalOpen(false); setAddAllModalOpen(false); setAddAllV2ModalOpen(false); setCostsModalOpen(true); }}
           // Invoice (modal) only — other pages keep the single-source wizards.
           hideSingleSourceOptions={showInvoiceAsModal}
-          hideAutoFill={isBaseInvoicePage}
-          /* Invoice (modal) demos the open-book fill regardless of the selected
-             job's contract type: it's the presentation used to show costs
-             coming in, so Auto fill there pulls bills, approved time clock
-             hours and accounting costs, and the banner copy says so. */
-          billingModel={showInvoiceAsModal ? 'openBook' : billingModel}
+          /* Fixed price fills from the contract, which this page doesn't offer
+             yet, so its Auto fill stays hidden. The OB copy of the loop is the
+             one that bills costs, so a standard invoice there opens with the
+             offer over the empty grid. */
+          hideAutoFill={isBaseInvoicePage && invoicesLoop !== 'base-ob'}
+          /* Invoice (modal) and Invoice - OB demo the open-book fill regardless
+             of the selected job's contract type: they're the presentations used
+             to show costs coming in, so Auto fill there pulls bills, approved
+             time clock hours and accounting costs. */
+          billingModel={showInvoiceAsModal || invoicesLoop === 'base-ob' ? 'openBook' : billingModel}
           notice={invoice.mode === 'lineItems' ? prefillNotice : undefined}
         />
       )}
@@ -1794,7 +1902,7 @@ export default function App() {
               <InvoiceInfo invoice={invoice} onChange={setInvoice} />
               <OwnerPrice invoice={invoice} onChange={setInvoice} modeToggleExtra={isBaseInvoicePage ? renderBaseBillingTypeSwitch() : undefined} />
               {invoice.mode === 'lineItems' && (isInvoiceV2Like
-                ? <LineItemsV2 invoice={invoice} onChange={setInvoice} vis={vis} onVisChange={setVis} stackView={stackView} onStackViewChange={setStackView} onOpenEstimate={() => setEstModalOpen(true)} onOpenSelections={() => setSelV2ModalOpen(true)} onOpenSelections2={() => setSelV4ModalOpen(true)} onOpenSelections2b={() => setSelV5ModalOpen(true)} onOpenSelections3={() => setSelV2on3ModalOpen(true)} onOpenAll={() => setAddAllModalOpen(true)} onOpenAll2={() => setAddAllV2ModalOpen(true)} onOpenCosts={() => setCostsModalOpen(true)} hideAutoFill={isBaseInvoicePage} billingModel={billingModel} notice={invoice.mode === 'lineItems' ? prefillNotice : undefined} />
+                ? <LineItemsV2 invoice={invoice} onChange={setInvoice} vis={vis} onVisChange={setVis} stackView={stackView} onStackViewChange={setStackView} onOpenEstimate={() => setEstModalOpen(true)} onOpenSelections={() => setSelV2ModalOpen(true)} onOpenSelections2={() => setSelV4ModalOpen(true)} onOpenSelections2b={() => setSelV5ModalOpen(true)} onOpenSelections3={() => setSelV2on3ModalOpen(true)} onOpenAll={() => setAddAllModalOpen(true)} onOpenAll2={() => setAddAllV2ModalOpen(true)} onOpenCosts={() => setCostsModalOpen(true)} hideAutoFill={isBaseInvoicePage && invoicesLoop !== 'base-ob'} billingModel={invoicesLoop === 'base-ob' ? 'openBook' : billingModel} notice={invoice.mode === 'lineItems' ? prefillNotice : undefined} />
                 : <LineItems invoice={invoice} onChange={setInvoice} vis={vis} onVisChange={setVis} onOpenEstimate={() => setEstModalOpen(true)} onOpenSelections={() => setSelModalOpen(true)} />)}
               </>
               )}
@@ -1837,7 +1945,7 @@ export default function App() {
 
       {!isFullPageInvoice && (
         <div className="bbar" style={useTabsLayout ? { background: 'var(--g50)', boxShadow: '0 -1px 0 var(--g200)' } : undefined}>
-          <button className="btn btn-s" onClick={() => { setInvoice(defaultInvoice); setAutoFilledDraw(null); setReimaginedKind(null); if (useTabsLayout) setActivePage('owner-invoices'); }}>Cancel</button>
+          <button className="btn btn-s" onClick={() => { setInvoice(defaultInvoice); setAutoFilledDraw(null); setReimaginedKind(null); if (showInvoiceAsModal) setModalInvoiceOpen(false); else if (useTabsLayout) setActivePage('owner-invoices'); }}>Cancel</button>
           {isInvoiceV2Like && !isNarrow && !useTabsLayout && (
             <button
               type="button"
@@ -1849,7 +1957,7 @@ export default function App() {
               Client preview
             </button>
           )}
-          <button className="btn btn-s" onClick={isBaseInvoicePage ? saveBaseInvoice : undefined}>Save</button>
+          <button className="btn btn-s" onClick={isBaseInvoicePage || showInvoiceAsModal ? saveBaseInvoice : undefined}>Save</button>
           <button className="btn btn-p">Send</button>
         </div>
       )}
@@ -1861,12 +1969,13 @@ export default function App() {
       <TopNav onNavigate={(page) => {
         // Both demo presentations show the same plain invoice. Plain "Invoice"
         // resets to a blank one so it never inherits the demo content (or a
-        // progress invoice loaded by an earlier flow).
-        setInvoicesLoop(null);
+        // progress invoice loaded by an earlier flow). The modal route sets its
+        // own loop up in setActivePage, so it's left alone here.
+        if (page !== 'invoice-3-modal') setInvoicesLoop(null);
         // Demo header content, no lines: the grid under an "Auto fill" offer has
         // to be empty for the offer to mean anything. The lines arrive when the
         // builder takes it.
-        if (page === 'invoice-3-modal' || page === 'invoice-full-page') setInvoice({ ...DEMO_INVOICE, lineItems: [] });
+        if (page === 'invoice-full-page') setInvoice({ ...DEMO_INVOICE, lineItems: [] });
         else if (page === 'invoice-full-page-reimagined') {
           // Start this one at the decision point with a blank invoice, since
           // picking a billing type is the first step of the flow.
@@ -1892,19 +2001,25 @@ export default function App() {
                 onDeletePaymentSchedule={() => setDrawScheduleOverrides(prev => ({ ...prev, [currentJobWithOverrides.id]: [] }))}
                 onOpenJobDetails={() => { setJobDetailsReturnPage(activePage); setActivePage('job-details'); }}
                 emptyState={invoicesEmptyState}
-                onAddInvoiceReimagined={invoicesLoop === 'base' ? undefined : startReimaginedInvoice}
-                onImportTemplate={invoicesLoop === 'base' ? startBaseInvoiceFromTemplate : startReimaginedInvoiceFromTemplate}
-                onAddInvoiceDirect={invoicesLoop === 'base' ? startBaseInvoiceOfType : undefined}
+                /* This route's own loop: "+ Invoice" asks which of the two
+                   documents it is, and the answer opens the invoice over the
+                   grid. Payment schedule isn't offered here, since the schedule
+                   isn't what this presentation is for. A saved template is
+                   still a way to answer the question, so it stays. */
+                onAddInvoiceDirect={startModalInvoiceOfType}
+                onImportTemplate={startModalInvoiceFromTemplate}
+                invoiceTypeChoices={['standard', 'progress']}
                 jobDefaultInvoiceKind={jobDefaultInvoiceKind}
                 openScheduleOnMount={openScheduleOnGrid}
                 onScheduleOpened={() => setOpenScheduleOnGrid(false)}
-                createdInvoices={invoicesLoop === 'base' ? createdInvoicesByJob[currentJobWithOverrides.id] : undefined}
-                onCreateInvoicesFromSchedule={invoicesLoop === 'base' ? createInvoicesFromSchedule : undefined}
+                createdInvoices={createdInvoicesByJob[currentJobWithOverrides.id]}
               />
             : renderInvoiceBuilder()}
         </div>
       </div>
-      {showInvoiceAsModal && (
+      {/* The "+ Invoice" answer opens the invoice; until then the grid is the
+          whole page. */}
+      {showInvoiceAsModal && modalInvoiceOpen && (
         <div className="modal-backdrop" onClick={leaveInvoice}>
           {/* maxHeight overrides .est-modal's 88vh cap, which would otherwise
               win over the height below and keep the modal short. */}
@@ -1913,9 +2028,17 @@ export default function App() {
           </div>
         </div>
       )}
-      {isBaseInvoicePage && baseTypeModalOpen && (
+      {(isBaseInvoicePage || showInvoiceAsModal) && baseTypeModalOpen && (
         <InvoiceTypeModal
           job={currentJobWithOverrides}
+          variant="switch"
+          /* Switching offers the same two documents "+ Invoice" asked about.
+             Payment schedule isn't one of them anywhere now: it's the setup
+             step that produces invoices, so offering it as something to switch
+             an open invoice into would mean abandoning that invoice to go build
+             a schedule. */
+          choices={['standard', 'progress']}
+          initialChoice={invoice.type === 'progress' ? 'progress' : 'standard'}
           onClose={() => setBaseTypeModalOpen(false)}
           onChoose={switchBaseInvoiceType}
         />
@@ -1979,6 +2102,8 @@ export default function App() {
         onAdd={(items) => setInvoice(inv => ({ ...inv, lineItems: [...inv.lineItems, ...items] }))}
         onAddSelections={handleAddFromSelections}
         addedChildIds={invoice.lineItems.flatMap(li => li.relatedItem?.childIds ?? [])}
+        defaultSources={combinedViewDefaultSources}
+        startCollapsed={isBaseInvoicePage}
       />
       <AddFromAllModal
         includeCosts
@@ -1987,6 +2112,8 @@ export default function App() {
         onAdd={(items) => setInvoice(inv => ({ ...inv, lineItems: [...inv.lineItems, ...items] }))}
         onAddSelections={handleAddFromSelections}
         addedChildIds={invoice.lineItems.flatMap(li => li.relatedItem?.childIds ?? [])}
+        defaultSources={combinedViewDefaultSources}
+        startCollapsed={isBaseInvoicePage}
       />
       <CostsModal
         open={costsModalOpen && isInvoice3Family && !useTabsLayout}

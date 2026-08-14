@@ -546,11 +546,13 @@ export function CostsDateFilter({ s, label = 'Cost date' }: { s: CostsState; lab
 /* The list card — Select all / Expand all toolbar, the two group headings, and
    the bill and time-clock records themselves.
 
-   showReset=false drops "Reset to recommended". Combined view 2 turns it off:
-   the banner that explains what "recommended" means isn't on that surface, so
-   the button would name a concept the builder was never shown. The costs modal
-   keeps both. */
-export function CostsRecordsList({ s, showReset = true }: { s: CostsState; showReset?: boolean }) {
+   showReset=false drops "Reset to recommended", and showGroupHeadings=false
+   drops the "Recommended items to invoice" / "Other unbilled costs" headings.
+   Combined view 2 turns both off for the same reason: the banner that explains
+   what "recommended" means isn't on that surface, so they'd name a concept the
+   builder was never shown. Records stay in the same order either way, so the
+   pre-checked ones still lead. The costs modal keeps all of it. */
+export function CostsRecordsList({ s, showReset = true, showGroupHeadings = true }: { s: CostsState; showReset?: boolean; showGroupHeadings?: boolean }) {
   const {
     checked, setChecked, expanded, setExpanded, kinds, billDescs, billAttachments,
     builderVariance, tcInternalNotes, query, visible, visibleIds, recommended,
@@ -702,7 +704,7 @@ export function CostsRecordsList({ s, showReset = true }: { s: CostsState; showR
             {/* Two groups, each with its own heading, so "why is this checked"
                 and "why isn't this checked" are answered by position rather
                 than by per-row annotation. */}
-            {groupOf(r) !== (i > 0 ? groupOf(visible[i - 1]) : null) && (
+            {showGroupHeadings && groupOf(r) !== (i > 0 ? groupOf(visible[i - 1]) : null) && (
               <BdsText as="h4" size="heavy-sm" style={{ color: 'var(--bds-color-gray-70)', margin: i > 0 ? '8px 0 0' : '2px 0 0' }}>
                 {groupOf(r) === 'recommended' ? 'Recommended items to invoice' : 'Other unbilled costs'}
               </BdsText>

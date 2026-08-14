@@ -43,13 +43,28 @@ const nextMilestoneId = () => `ms-${++milestoneSeq}`;
 
 const milestoneAmountDollars = (m: Milestone) => m.amountType === 'percent' ? proposalSubtotal * m.amount / 100 : m.amount;
 
+/* Open book has no contract price to break into milestones, so the thing a
+   client signs up to is a cadence: how often they'll be billed and starting
+   when. Builders already write this into their proposals in prose, so the
+   proposal is where it's captured, and the summary line is the sentence they
+   would have typed. */
+type Repeat = 'Weekly' | 'Every 2 weeks' | 'Monthly' | 'Quarterly';
+const REPEATS: Repeat[] = ['Weekly', 'Every 2 weeks', 'Monthly', 'Quarterly'];
+const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+const ORDINALS = ['First', 'Second', 'Third', 'Fourth', 'Last'];
+const DAY_ORDINALS = ['1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', '11th', '12th', '13th', '14th', '15th', '16th', '17th', '18th', '19th', '20th', '21st', '22nd', '23rd', '24th', '25th', '26th', '27th', '28th', '29th', '30th', '31st'];
+
 interface Props {
   onBack: () => void;
   clientName?: string;
   jobCode?: string;
+  /* Open book swaps the milestone payment schedule for an invoicing cadence:
+     there are no fixed amounts to promise, only when the bills arrive. */
+  billingModel?: 'fixed' | 'open-book';
 }
 
-export default function ProposalPage({ onBack, clientName = 'Amy', jobCode = 'BWF-26' }: Props) {
+export default function ProposalPage({ onBack, clientName = 'Amy', jobCode = 'BWF-26', billingModel = 'fixed' }: Props) {
+  const isOpenBook = billingModel === 'open-book';
   const [tab, setTab] = useState<'details' | 'preview'>('details');
   const [collectSignatures, setCollectSignatures] = useState(true);
   const [title, setTitle] = useState(`Proposal for ${clientName} (${jobCode})`);
@@ -64,6 +79,31 @@ export default function ProposalPage({ onBack, clientName = 'Amy', jobCode = 'BW
 
   const [scheduleEnabled, setScheduleEnabled] = useState(false);
   const [milestones, setMilestones] = useState<Milestone[]>([]);
+
+  // Open book's cadence, mirroring the recurring-invoice setup.
+  const [cadenceEnabled, setCadenceEnabled] = useState(true);
+  const [repeat, setRepeat] = useState<Repeat>('Monthly');
+  const [cadenceStart, setCadenceStart] = useState('');
+  const [onMode, setOnMode] = useState<'day' | 'weekday'>('day');
+  const [dayOfMonth, setDayOfMonth] = useState(1);
+  const [ordinal, setOrdinal] = useState('First');
+  const [weekday, setWeekday] = useState('Friday');
+  const usesDayOfMonth = repeat === 'Monthly' || repeat === 'Quarterly';
+  const startLabel = cadenceStart
+    ? new Date(cadenceStart + 'T00:00:00').toLocaleDateString('en-US', { month: 'numeric', day: '2-digit', year: 'numeric' })
+    : null;
+  /* One sentence, assembled from whatever is set, so the builder reads the
+     promise the client will read rather than inferring it from four controls. */
+  const cadenceSentence = (() => {
+    const every = repeat === 'Monthly' ? 'every month'
+      : repeat === 'Quarterly' ? 'every quarter'
+      : repeat === 'Weekly' ? 'every week'
+      : 'every 2 weeks';
+    const when = usesDayOfMonth
+      ? (onMode === 'day' ? `${DAY_ORDINALS[dayOfMonth - 1]} of ${every}` : `${ordinal.toLowerCase()} ${weekday} of ${every}`)
+      : `${weekday} of ${every}`;
+    return { when, startLabel };
+  })();
 
   const depositAmount = depositType === 'percent' ? proposalSubtotal * depositPercent / 100 : depositFlat;
 
@@ -211,13 +251,81 @@ export default function ProposalPage({ onBack, clientName = 'Amy', jobCode = 'BW
                 </div>
               )}
 
+              {/* Invoicing cadence, open book only. There are no fixed amounts
+                  to schedule, so what the client is agreeing to is when the
+                  invoices arrive and what period each one covers. */}
+              {isOpenBook && (
+                <>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600, color: '#0f172a', cursor: 'pointer', marginTop: 20 }}>
+                    <input type="checkbox" checked={cadenceEnabled} onChange={e => setCadenceEnabled(e.target.checked)} style={{ width: 16, height: 16, accentColor: '#0065db' }} />
+                    Include the invoicing cadence on this proposal
+                  </label>
+
+                  {cadenceEnabled && (
+                    <div style={{ marginTop: 12, marginLeft: 24, maxWidth: 620 }}>
+                      <div style={{ fontSize: 12, color: '#64748b', marginBottom: 14 }}>
+                        This job bills actual costs, so the proposal states how often you invoice rather than fixed
+                        amounts. Buildertrend uses the same cadence to line up each invoice once the job is running.
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: '110px 1fr', gap: '12px 14px', alignItems: 'center' }}>
+                        <label style={{ ...lbl, marginBottom: 0 }}>Repeat</label>
+                        <select style={{ ...inp, maxWidth: 320 }} value={repeat} onChange={e => setRepeat(e.target.value as Repeat)}>
+                          {REPEATS.map(r => <option key={r} value={r}>{r}</option>)}
+                        </select>
+
+                        <label style={{ ...lbl, marginBottom: 0 }}>Start</label>
+                        <input type="date" style={{ ...inp, maxWidth: 320 }} value={cadenceStart} onChange={e => setCadenceStart(e.target.value)} />
+
+                        <label style={{ ...lbl, marginBottom: 0, alignSelf: usesDayOfMonth ? 'start' : 'center', paddingTop: usesDayOfMonth ? 8 : 0 }}>On</label>
+                        {usesDayOfMonth ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                            {/* Day of the month, or the nth weekday. Radios
+                                because a month has exactly one of these two
+                                shapes, never both. */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                              <input type="radio" name="cadence-on" checked={onMode === 'day'} onChange={() => setOnMode('day')} style={{ width: 16, height: 16, accentColor: '#0065db' }} />
+                              <select style={{ ...inp, width: 150 }} value={dayOfMonth} onChange={e => { setOnMode('day'); setDayOfMonth(Number(e.target.value)); }}>
+                                {Array.from({ length: 31 }, (_, i) => i + 1).map(d => <option key={d} value={d}>{d}</option>)}
+                              </select>
+                              <span style={{ ...inp, width: 150, color: '#94a3b8', background: '#f8fafc' }}>Day</span>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                              <input type="radio" name="cadence-on" checked={onMode === 'weekday'} onChange={() => setOnMode('weekday')} style={{ width: 16, height: 16, accentColor: '#0065db' }} />
+                              <select style={{ ...inp, width: 150 }} value={ordinal} onChange={e => { setOnMode('weekday'); setOrdinal(e.target.value); }}>
+                                {ORDINALS.map(o => <option key={o} value={o}>{o}</option>)}
+                              </select>
+                              <select style={{ ...inp, width: 150 }} value={weekday} onChange={e => { setOnMode('weekday'); setWeekday(e.target.value); }}>
+                                {WEEKDAYS.map(d => <option key={d} value={d}>{d}</option>)}
+                              </select>
+                            </div>
+                          </div>
+                        ) : (
+                          <select style={{ ...inp, maxWidth: 320 }} value={weekday} onChange={e => setWeekday(e.target.value)}>
+                            {WEEKDAYS.map(d => <option key={d} value={d}>{d}</option>)}
+                          </select>
+                        )}
+
+                        <label style={{ ...lbl, marginBottom: 0, alignSelf: 'start' }}>Invoice schedule</label>
+                        <div style={{ fontSize: 13, color: '#334155', lineHeight: 1.5 }}>
+                          Billing occurs on the <strong style={{ color: '#0f172a' }}>{cadenceSentence.when}</strong>
+                          {cadenceSentence.startLabel ? <> starting {cadenceSentence.startLabel}</> : <span style={{ color: '#b45309' }}>. Set a start date to finish the schedule.</span>}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+
               {/* Payment schedule */}
+              {!isOpenBook && (
               <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600, color: '#0f172a', cursor: 'pointer', marginTop: 20 }}>
                 <input type="checkbox" checked={scheduleEnabled} onChange={e => setScheduleEnabled(e.target.checked)} style={{ width: 16, height: 16, accentColor: '#0065db' }} />
                 Include a payment schedule on this proposal
               </label>
+              )}
 
-              {scheduleEnabled && (
+              {!isOpenBook && scheduleEnabled && (
                 <div style={{ marginTop: 12, marginLeft: 24 }}>
                   <div style={{ fontSize: 12, color: '#64748b', marginBottom: 10 }}>
                     The schedule below will be appended to the proposal so the client can see how payments break down over the course of the project.
@@ -392,7 +500,21 @@ export default function ProposalPage({ onBack, clientName = 'Amy', jobCode = 'BW
                 </div>
               )}
 
-              {scheduleEnabled && milestones.length > 0 && (
+              {/* The cadence is the thing the client is agreeing to on an open
+                  book job, so it reads as a stated term, not a table. */}
+              {isOpenBook && cadenceEnabled && (
+                <div style={{ marginBottom: 24 }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: '#0f172a', marginBottom: 6 }}>Invoicing</div>
+                  <div style={{ fontSize: 13, color: '#334155', lineHeight: 1.6 }}>
+                    This project is billed on actual costs. Invoices are issued on the{' '}
+                    <strong style={{ color: '#0f172a' }}>{cadenceSentence.when}</strong>
+                    {cadenceSentence.startLabel ? <> starting {cadenceSentence.startLabel}</> : null}, covering the
+                    costs incurred since the previous invoice.
+                  </div>
+                </div>
+              )}
+
+              {!isOpenBook && scheduleEnabled && milestones.length > 0 && (
                 <div style={{ marginBottom: 24 }}>
                   <div style={{ fontSize: 14, fontWeight: 700, color: '#0f172a', marginBottom: 10 }}>Payment schedule</div>
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>

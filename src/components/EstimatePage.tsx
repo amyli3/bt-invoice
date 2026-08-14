@@ -1,10 +1,8 @@
 import { useState, Fragment, useRef, useEffect } from 'react';
 import { allAllowances, allSelections } from '../allowanceMockData';
-import { DrawScheduleLine, InvoicingMode, Job } from '../types';
+import { DrawScheduleLine, Job } from '../types';
 import SendToBudgetModal from './SendToBudgetModal';
 import PaymentScheduleModal from './PaymentScheduleModal';
-import InvoicingModePicker from './InvoicingModePicker';
-import { BdsIcon } from '../bds';
 
 type EstimateItem = { id: string; name: string; costCode: string; costCodeRaw: string; desc: string; qty: number; unit: string; unitCost: number; costType: string; builderCost: number; markup: number; };
 type EstimateGroup = { group: string; budgetAmount: number; items: EstimateItem[]; };
@@ -90,18 +88,23 @@ interface Props {
   onScheduleCreated?: (draws: DrawScheduleLine[]) => void;
   onBuildProposal?: () => void;
   job: Job;
-  invoicingMode?: InvoicingMode;
-  onSetInvoicingMode?: (mode: InvoicingMode) => void;
+  /* Which billing model this estimate is being run for. Open book bills what
+     the job spends, so there are no draws to split a contract price into: the
+     Send to Budget modal drops that section, and the cadence the client is
+     promised goes on the proposal instead. Forced by the route rather than read
+     off the job, so either estimate can be demoed against any job. */
+  billingModel?: 'fixed' | 'open-book';
 }
 
-export default function EstimatePage({ jobOpen, onToggleJob, locked, onSendToBudget, onUnlock, existingDrawSchedule, onScheduleCreated, onBuildProposal, job, invoicingMode, onSetInvoicingMode }: Props) {
+export default function EstimatePage({ jobOpen, onToggleJob, locked, onSendToBudget, onUnlock, existingDrawSchedule, onScheduleCreated, onBuildProposal, job, billingModel = 'fixed' }: Props) {
   const [groupBy, setGroupBy] = useState<'proposal' | 'costcode'>('proposal');
-  // The Send to Budget flow is a confirm step plus two optional side-steps in
-  // the same dialog: pick/confirm the invoicing mode, and set up a draw
-  // schedule, both since the contract price they depend on has just become
-  // final. "mode"/"schedule" always return to "confirm" so Send to Budget
-  // stays an explicit, separate click.
-  const [budgetFlowStep, setBudgetFlowStep] = useState<'confirm' | 'mode' | 'schedule' | null>(null);
+  // The Send to Budget flow is a confirm step plus one optional side-step in
+  // the same dialog: setting up a draw schedule, since the contract price it
+  // depends on has just become final. "schedule" returns to "confirm" so Send
+  // to Budget stays an explicit, separate click.
+  const [budgetFlowStep, setBudgetFlowStep] = useState<'confirm' | 'schedule' | null>(null);
+  const hasDrawSchedule = !!existingDrawSchedule && existingDrawSchedule.length > 0;
+  const isOpenBook = billingModel === 'open-book';
   const estimateData = groupBy === 'proposal' ? proposalData : costCodeData;
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set(proposalData.map(g => g.group)));
   const [groupByOpen, setGroupByOpen] = useState(false);
@@ -149,7 +152,7 @@ export default function EstimatePage({ jobOpen, onToggleJob, locked, onSendToBud
               </button>
             )}
             <div>
-              <div className="pg-hdr-sub">Johnson Residence — Full Remodel &nbsp;›&nbsp; Estimate</div>
+              <div className="pg-hdr-sub">Johnson Residence — Full Remodel &nbsp;›&nbsp; Estimate{isOpenBook ? ' (open book)' : ''}</div>
               <div className="pg-title">Estimate</div>
             </div>
           </div>
@@ -203,14 +206,15 @@ export default function EstimatePage({ jobOpen, onToggleJob, locked, onSendToBud
 
       {budgetFlowStep === 'confirm' && (
         <SendToBudgetModal
-          job={job}
           builderCost={totalBuilderCost}
           profit={estimatedProfit}
           totalOwnerPrice={totalOwnerPrice}
           margin={(estimatedProfit / totalOwnerPrice) * 100}
-          hasDrawSchedule={!!existingDrawSchedule && existingDrawSchedule.length > 0}
-          invoicingMode={invoicingMode}
-          onChangeInvoicingMode={() => setBudgetFlowStep('mode')}
+          hasDrawSchedule={hasDrawSchedule}
+          /* Draws split a locked contract price, so they're a fixed-price
+             instrument. An existing schedule stays reachable either way, so
+             changing the contract type can't strand one out of sight. */
+          showDrawSchedule={billingModel === 'fixed' && (job.contractType === 'fixed-price' || hasDrawSchedule)}
           onCancel={() => setBudgetFlowStep(null)}
           onOpenDrawSchedule={() => setBudgetFlowStep('schedule')}
           onConfirm={() => {
@@ -220,36 +224,17 @@ export default function EstimatePage({ jobOpen, onToggleJob, locked, onSendToBud
         />
       )}
 
-      {budgetFlowStep === 'mode' && (
-        <div style={{
-          position: 'fixed', inset: 0, background: 'rgba(20, 24, 33, 0.5)', zIndex: 1000,
-          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24,
-        }}>
-          <div className="bds-scope" style={{ background: '#fff', borderRadius: 'var(--bds-radius-lg)', width: 920, maxWidth: '95vw', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.25)', position: 'relative' }}>
-            <button
-              type="button"
-              onClick={() => setBudgetFlowStep('confirm')}
-              style={{ position: 'absolute', top: 20, right: 20, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--bds-color-gray-70)' }}
-            >
-              <BdsIcon name="x" size={20} />
-            </button>
-            <InvoicingModePicker
-              job={job}
-              onContinue={(mode) => {
-                onSetInvoicingMode?.(mode);
-                setBudgetFlowStep('confirm');
-              }}
-            />
-          </div>
-        </div>
-      )}
-
       {budgetFlowStep === 'schedule' && (
         <PaymentScheduleModal
           existingDraws={existingDrawSchedule}
           defaultTotal={totalOwnerPrice}
           onClose={() => setBudgetFlowStep('confirm')}
           onSave={(draws) => {
+            /* Building a schedule here settles how the job bills without
+               having to ask: the builder just split the contract into draws,
+               and the parent records that alongside the schedule. Nothing is
+               inferred when they don't, so the Invoices page can still ask (or
+               work it out) later. */
             onScheduleCreated?.(draws);
             setBudgetFlowStep('confirm');
           }}

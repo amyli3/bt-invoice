@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, Fragment } from 'react';
 import { createPortal } from 'react-dom';
 import { fmt } from '../utils';
 import { getNextId } from '../mockData';
@@ -29,14 +29,14 @@ import { useCostsState, CostsDateFilter, CostsRecordsList, costOptions, OptionCh
        record list as the standalone "Add costs to invoice" modal, rendered from
        CostsModal's exported list so the two can't drift. Here it arrives
        without that modal's banner or filter card: the cost kinds nest under
-       "Costs" in this bar's Record type menu, and the import options fold into
-       the single Options menu beside it. That modal still exists on its own in
+       "Costs" in this bar's Record type menu, and its import options fold into
+       a "Costs options" menu beside it. That modal still exists on its own in
        the "Add from" menu; this is a second, wider entry point, not a
        replacement.
    Styled with BDS components + design tokens.
    ───────────────────────────────────────────────────────────────────────── */
 
-type SourceKey = 'Estimate' | 'Change Orders' | 'Selections' | 'Costs';
+export type SourceKey = 'Estimate' | 'Change Orders' | 'Selections' | 'Costs';
 const BASE_SOURCES: SourceKey[] = ['Estimate', 'Change Orders', 'Selections'];
 
 interface PctRow { id: string; title: string; costCode: string; costType: string; clientPrice: number; prevPct: number; }
@@ -73,6 +73,14 @@ interface Props {
       so one pass covers estimate, change orders, selections AND job costs. Off
       by default, which leaves the original combined view untouched. */
   includeCosts?: boolean;
+  /* Which record types start checked. Omitted means all of them, which is what
+     every route did before this existed. Set it to open on the record types
+     that contract's invoices are actually built from: fixed price bills the
+     estimate, open book bills costs, selections and change orders. The rest
+     stay one click away rather than hidden. */
+  defaultSources?: SourceKey[];
+  /** Cards open collapsed, so the record types read as a list of headings. */
+  startCollapsed?: boolean;
   // "Invoice (modal)" only — renders as a panel docked beside the invoice
   // modal instead of its own centered dialog + backdrop. Defaults to the
   // original centered-modal presentation everywhere else.
@@ -98,9 +106,30 @@ function NumField({ value, onChange, suffix, prefix, width = 46 }: { value: stri
   );
 }
 
-export default function AddFromAllModal({ open, onClose, onAdd, onAddSelections, addedChildIds = [], variant = 'modal', includeCosts = false }: Props) {
+const resolveSources = (only?: SourceKey[]): Record<SourceKey, boolean> => ({
+  Estimate: !only || only.includes('Estimate'),
+  'Change Orders': !only || only.includes('Change Orders'),
+  Selections: !only || only.includes('Selections'),
+  Costs: !only || only.includes('Costs'),
+});
+
+export default function AddFromAllModal({ open, onClose, onAdd, onAddSelections, addedChildIds = [], variant = 'modal', includeCosts = false, defaultSources, startCollapsed = false }: Props) {
   const [checked, setChecked] = useState<Record<string, boolean>>({});
-  const [sources, setSources] = useState<Record<SourceKey, boolean>>({ Estimate: true, 'Change Orders': true, Selections: true, Costs: true });
+  const [sources, setSources] = useState<Record<SourceKey, boolean>>(() => resolveSources(defaultSources));
+  /* Reopening starts from the route's defaults again. Without this the modal
+     would remember the last visit's toggles, and the two invoice routes share
+     one instance, so Fixed would inherit whatever OB was left on. Only routes
+     that name their defaults are reset; the others keep the old behaviour of
+     holding whatever the builder last set. */
+  const sourcesKey = defaultSources?.join('|');
+  useEffect(() => {
+    if (open && sourcesKey !== undefined) {
+      setSources(resolveSources(sourcesKey.split('|') as SourceKey[]));
+      // Cards go back to their collapsed default too, so reopening reads as the
+      // same short list every time rather than however it was left.
+      setCollapsed({});
+    }
+  }, [open, sourcesKey]);
   const [sourceMenuOpen, setSourceMenuOpen] = useState(false);
   // Combined view 2's single "Options" menu — every on/off import option in one
   // place, so the filter bar stays four controls wide.
@@ -111,9 +140,13 @@ export default function AddFromAllModal({ open, onClose, onAdd, onAddSelections,
   const [query, setQuery] = useState('');
   const [pct, setPct] = useState<Record<string, number>>({});
   const [adjust, setAdjust] = useState<Record<SourceKey, string>>({ Estimate: '100.00', 'Change Orders': '100.00', Selections: '100.00', Costs: '100.00' });
-  // Cards start expanded, same as the selections wizard; undefined = expanded.
+  /* Per-card expand state; no key means "whatever this route starts on". The
+     selections wizard opens expanded, but with four record types stacked in one
+     modal the cards' line items push the sections below off the screen, so the
+     invoice routes open collapsed and the builder expands what they want to
+     check. */
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
-  const isExpanded = (id: string) => !collapsed[id];
+  const isExpanded = (id: string) => (id in collapsed ? !collapsed[id] : !startCollapsed);
   const toggleExpand = (id: string) => setCollapsed(c => ({ ...c, [id]: !c[id] }));
   /* Costs keep their own state (record checks, date / record-type filters, bill
      and time-clock import options) because they're the same records the costs
@@ -124,6 +157,17 @@ export default function AddFromAllModal({ open, onClose, onAdd, onAddSelections,
   if (!open) return null;
 
   const SOURCE_ORDER: SourceKey[] = includeCosts ? [...BASE_SOURCES, 'Costs'] : BASE_SOURCES;
+  /* The body leads with the record types this route starts checked, in the order
+     they were named, so an open-book invoice opens on Costs instead of scrolling
+     past two sections to reach it. The Record type menu keeps the canonical
+     order: that list is a settings list, and reshuffling it would move the
+     checkboxes around between routes. */
+  const BODY_ORDER: SourceKey[] = defaultSources
+    ? [
+        ...defaultSources.filter(s => SOURCE_ORDER.includes(s)),
+        ...SOURCE_ORDER.filter(s => !defaultSources.includes(s)),
+      ]
+    : SOURCE_ORDER;
   const costsOn = includeCosts && sources['Costs'];
 
   // Selections come from the same source of truth as the selections wizard.
@@ -426,21 +470,36 @@ export default function AddFromAllModal({ open, onClose, onAdd, onAddSelections,
   const renderCostsSection = () => (
     <div>
       {sectionHeading('Costs')}
-      <CostsRecordsList s={costs} showReset={false} />
+      <CostsRecordsList s={costs} showReset={false} showGroupHeadings={false} />
     </div>
   );
 
   const anyActive = SOURCE_ORDER.some(s => sources[s]);
-  /* The Options menu's contents: the wizard-level descriptions toggle plus,
-     when Costs is showing, that section's import options. The count on the
-     button reads off this same list, so it can't drift from the menu. */
-  const allOptions = [
-    { on: includeDescs, toggle: () => setIncludeDescs(v => !v), label: 'Include line item descriptions & notes' },
-    ...(costsOn ? costOptions(costs) : []),
-  ];
-  const optionsLabel = (
-    <BdsText as="div" size="heavy-sm" style={{ marginBottom: 6 }}>Options</BdsText>
+  /* The descriptions toggle applies to every record type, so it reads as its
+     own checkbox in the bar rather than sharing a menu with options that only
+     govern Costs. The menu beside it is therefore Costs-only, and the
+     descriptions row drops out of it: this checkbox already drives the bill
+     description import, so listing it twice would read as two settings. */
+  const DESCS_LABEL = 'Include line item descriptions & notes';
+  const toggleDescs = () => setIncludeDescs(v => {
+    const next = !v;
+    costs.setBillDescs(next);
+    return next;
+  });
+  const descsCheck = (
+    <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', alignSelf: 'flex-end', paddingBottom: 8 }}>
+      <input
+        type="checkbox"
+        checked={includeDescs}
+        onChange={toggleDescs}
+        style={{ width: 16, height: 16, accentColor: 'var(--bds-color-blue-60)', cursor: 'pointer' }}
+      />
+      <BdsText as="span" size="normal-md" style={{ fontSize: 13 }}>{DESCS_LABEL}</BdsText>
+    </label>
   );
+  /* The count on the button reads off this same list, so it can't drift from
+     the menu's contents. */
+  const costsOptions = costsOn ? costOptions(costs).filter(o => o.label !== DESCS_LABEL) : [];
 
   const cardContent = (
     <>
@@ -529,55 +588,39 @@ export default function AddFromAllModal({ open, onClose, onAdd, onAddSelections,
                 say which record types are showing, so chips only repeated them. */}
           </div>
         </div>
-        {/* Combined view 2 has one more source and a set of costs options, so
-            loose checkboxes in this bar don't scale: everything that is an
-            on/off import option collapses into a single Options menu, which
-            keeps the bar to Search · Record type · Cost date · Options. The
-            original combined view has only the one checkbox, so it stays
-            inline there rather than hiding a single toggle behind a click. */}
+        {/* Combined view 2 carries a set of Costs-only import options, so those
+            fold into one "Costs options" menu that appears beside Cost date
+            while Costs is on. The descriptions checkbox stays out of it and
+            inline, since it governs every record type, which keeps the bar to
+            Search · Record type · Cost date · Costs options · descriptions. */}
         {includeCosts ? (
           <>
             {costsOn && <CostsDateFilter s={costs} />}
-            <div>
-              {optionsLabel}
-              <div style={{ position: 'relative' }}>
-                <BdsButton
-                  displayType="secondary"
-                  text={`${allOptions.filter(o => o.on).length} of ${allOptions.length} on`}
-                  iconRight={<BdsIcon name="chevron-down" size={12} />}
-                  onClick={() => setOptionsMenuOpen(o => !o)}
-                />
-                {optionsMenuOpen && (
-                  <>
-                    <div style={{ position: 'fixed', inset: 0, zIndex: 1 }} onClick={() => setOptionsMenuOpen(false)} />
-                    <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: 4, background: 'var(--bds-color-base-background)', border: '1px solid var(--bds-color-gray-15)', borderRadius: 8, boxShadow: '0 8px 24px rgba(0,0,0,0.12)', padding: '8px 12px', zIndex: 2, minWidth: 300 }}>
-                      <OptionCheck o={{ on: includeDescs, toggle: () => setIncludeDescs(v => !v), label: 'Include line item descriptions & notes' }} />
-                      {costsOn && costOptions(costs).length > 0 && (
-                        <>
-                          {/* Subhead, because these apply to the Costs section
-                              only — the one above applies to every source. */}
-                          <BdsText as="div" size="heavy-sm" style={{ color: 'var(--bds-color-gray-50)', margin: '8px 0 2px', paddingTop: 6, borderTop: '1px solid var(--bds-color-gray-15)' }}>
-                            Costs
-                          </BdsText>
-                          {costOptions(costs).map(o => <OptionCheck key={o.label} o={o} />)}
-                        </>
-                      )}
-                    </div>
-                  </>
-                )}
+            {costsOptions.length > 0 && (
+              <div>
+                <BdsText as="div" size="heavy-sm" style={{ marginBottom: 6 }}>Costs options</BdsText>
+                <div style={{ position: 'relative' }}>
+                  <BdsButton
+                    displayType="secondary"
+                    text={`${costsOptions.filter(o => o.on).length} of ${costsOptions.length} on`}
+                    iconRight={<BdsIcon name="chevron-down" size={12} />}
+                    onClick={() => setOptionsMenuOpen(o => !o)}
+                  />
+                  {optionsMenuOpen && (
+                    <>
+                      <div style={{ position: 'fixed', inset: 0, zIndex: 1 }} onClick={() => setOptionsMenuOpen(false)} />
+                      <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: 4, background: 'var(--bds-color-base-background)', border: '1px solid var(--bds-color-gray-15)', borderRadius: 8, boxShadow: '0 8px 24px rgba(0,0,0,0.12)', padding: '8px 12px', zIndex: 2, minWidth: 300 }}>
+                        {costsOptions.map(o => <OptionCheck key={o.label} o={o} />)}
+                      </div>
+                    </>
+                  )}
+                </div>
               </div>
-            </div>
+            )}
+            {descsCheck}
           </>
         ) : (
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', alignSelf: 'flex-end', paddingBottom: 8 }}>
-            <input
-              type="checkbox"
-              checked={includeDescs}
-              onChange={() => setIncludeDescs(v => !v)}
-              style={{ width: 16, height: 16, accentColor: 'var(--bds-color-blue-60)', cursor: 'pointer' }}
-            />
-            <BdsText as="span" size="normal-md" style={{ fontSize: 13 }}>Include line item descriptions &amp; notes</BdsText>
-          </label>
+          descsCheck
         )}
         {sources['Selections'] && selectionCardIds.length > 0 && (
           <div style={{ marginLeft: 'auto', alignSelf: 'center' }}>{expandAllBtn}</div>
@@ -593,10 +636,14 @@ export default function AddFromAllModal({ open, onClose, onAdd, onAddSelections,
           <div style={{ ...cardStyle, padding: 32, textAlign: 'center' }}><BdsText as="span" size="normal-md" style={{ color: 'var(--bds-color-gray-40)' }}>No items match &ldquo;{query.trim()}&rdquo;.</BdsText></div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: GROUP_GAP }}>
-            {sources['Estimate'] && visibleEstimate.length > 0 && renderPctSection('Estimate', visibleEstimate)}
-            {sources['Change Orders'] && visibleCO.length > 0 && renderPctSection('Change Orders', visibleCO)}
-            {sources['Selections'] && (visibleSelectionCount > 0 || !q) && renderSelectionSection()}
-            {costsOn && (visibleCostCount > 0 || !q) && renderCostsSection()}
+            {BODY_ORDER.map(s => (
+              <Fragment key={s}>
+                {s === 'Estimate' && sources['Estimate'] && visibleEstimate.length > 0 && renderPctSection('Estimate', visibleEstimate)}
+                {s === 'Change Orders' && sources['Change Orders'] && visibleCO.length > 0 && renderPctSection('Change Orders', visibleCO)}
+                {s === 'Selections' && sources['Selections'] && (visibleSelectionCount > 0 || !q) && renderSelectionSection()}
+                {s === 'Costs' && costsOn && (visibleCostCount > 0 || !q) && renderCostsSection()}
+              </Fragment>
+            ))}
           </div>
         )}
       </div>

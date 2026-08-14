@@ -54,38 +54,44 @@ export const JOBS: Job[] = [
  * draw schedule was set up, commercial vs. residential). Builder can always
  * override; this only sets what's pre-selected.
  */
+/* The reason states the signal that was read off the job, not a conclusion
+   about how the builder runs their business: "this job has a 6-draw schedule"
+   is checkable at a glance, where "invoicing follows that schedule" is an
+   assertion the builder may disagree with and can't verify. It's also read
+   under a "Recommended" badge that already says what's being suggested, so it
+   only has to supply the because. */
 export function recommendInvoicingMode(job: Job): { mode: InvoicingMode; reason: string } {
   if (job.sector === 'commercial') {
     return {
       mode: 'aia-percent-complete',
-      reason: `${job.name} is a commercial job — these are typically billed on certified AIA pay applications (G702/G703), so we recommend percent-complete billing.`,
+      reason: 'This job is marked commercial, and commercial work is usually billed on certified pay applications (G702/G703).',
     };
   }
   if (job.drawSchedule && job.drawSchedule.length > 0) {
     return {
       mode: 'milestone-draws',
-      reason: `The signed proposal for ${job.name} set up a ${job.drawSchedule.length}-draw payment schedule tied to schedule phases — invoicing follows that schedule.`,
+      reason: `The signed proposal for this job set up a ${job.drawSchedule.length}-draw payment schedule.`,
     };
   }
   if (job.contractType === 'fixed-price' && job.fundedByConstructionLoan) {
     return {
       mode: 'milestone-draws',
-      reason: `${job.name} is fixed-price and financed by a construction loan — lenders typically require draw-based disbursements tied to inspected progress, so we recommend billing in milestone draws.`,
+      reason: 'This job is fixed price and financed by a construction loan. Lenders usually require draws tied to inspected progress.',
     };
   }
   if (job.contractType === 'cost-plus' || job.contractType === 'time-and-materials') {
     return {
       mode: 'time-interval',
-      reason: `${job.name} is billed ${job.contractType === 'cost-plus' ? 'cost-plus' : 'on time & materials'} — invoices are built from bills and time entries as they're logged.`,
+      reason: `This job is billed ${job.contractType === 'cost-plus' ? 'cost plus' : 'on time and materials'}, so its invoices come from bills and time entries as they're logged.`,
     };
   }
-  // Catch-all — no sector/schedule/contract-type signal points to anything
-  // more structured. Time interval / Open book covers this fine: gathering
-  // costs into an invoice works whether that happens on a regular schedule
-  // or just once for a short, one-and-done job.
+  // Catch-all: no sector/schedule/contract-type signal points to anything more
+  // structured. Time interval / Open book covers this fine: gathering costs
+  // into an invoice works whether that happens on a regular schedule or just
+  // once for a short, one-and-done job.
   return {
     mode: 'time-interval',
-    reason: `Nothing on file for ${job.name} points to a draw schedule or certified billing — we recommend gathering costs into an invoice whenever you're ready, whether that's on a regular schedule or just once for a short job.`,
+    reason: 'Nothing on file for this job points to a draw schedule or certified billing.',
   };
 }
 

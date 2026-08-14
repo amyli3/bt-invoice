@@ -8,6 +8,7 @@ import PaymentScheduleModal from './PaymentScheduleModal';
 import InvoiceTypeModal, { type InvoiceTypeChoice as NewInvoiceChoice } from './InvoiceTypeModal';
 import PaymentScheduleTracker from './PaymentScheduleTracker';
 import ImportTemplateModal from './ImportTemplateModal';
+import InvoicesSettingsModal from './InvoicesSettingsModal';
 
 type TabKey = 'invoices' | 'payments' | 'credit-memos' | 'deposits';
 type InvoiceTypeChoice = 'progress' | 'invoice';
@@ -24,6 +25,14 @@ const InfoGlyph = () => (
 const FilterGlyph = () => (
   <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
     <path d="M2 3.5h12l-4.6 5.2v4L6.6 11V8.7z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+  </svg>
+);
+
+const GearGlyph = () => (
+  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+    <circle cx="8" cy="8" r="2.1" stroke="currentColor" strokeWidth="1.3" />
+    <path d="M8 1.6v1.7M8 12.7v1.7M2.5 8H.8M15.2 8h-1.7M4.1 4.1 2.9 2.9M13.1 13.1l-1.2-1.2M11.9 4.1l1.2-1.2M2.9 13.1l1.2-1.2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+    <circle cx="8" cy="8" r="5.4" stroke="currentColor" strokeWidth="1.3" />
   </svg>
 );
 
@@ -47,6 +56,10 @@ export default function OwnerInvoicesPage({
   onAddInvoiceReimagined,
   onImportTemplate,
   onAddInvoiceDirect,
+  invoiceTypeChoices,
+  defaultInvoiceKind,
+  onDefaultInvoiceKindChange,
+  hidePaymentSchedule = false,
 }: {
   job: Job;
   invoicingMode?: InvoicingMode;
@@ -70,6 +83,9 @@ export default function OwnerInvoicesPage({
   /* Financial > Invoice's loop. "+ Invoice" asks which of the three documents
      they're creating first, then hands the answer back. */
   onAddInvoiceDirect?: (choice: NewInvoiceChoice, makeDefault: boolean) => void;
+  /* Which documents "+ Invoice" offers. Default is all three; a loop that
+     doesn't set up payment schedules here passes the two it can create. */
+  invoiceTypeChoices?: NewInvoiceChoice[];
   /* The job's saved Default invoice type. Set means the builder answered the
      type question for this job, so "+ Invoice" skips the modal. */
   jobDefaultInvoiceKind?: 'regular' | 'progress' | null;
@@ -81,6 +97,13 @@ export default function OwnerInvoicesPage({
      draw once a schedule is created. Empty means the "No invoices yet" state. */
   createdInvoices?: DemoInvoiceRow[];
   onCreateInvoicesFromSchedule?: (draws: DrawScheduleLine[]) => void;
+  /* The company's Default invoice type, so the grid's Settings button opens the
+     Invoices settings modal already showing which type new invoices use. */
+  defaultInvoiceKind?: 'regular' | 'progress';
+  onDefaultInvoiceKindChange?: (kind: 'regular' | 'progress') => void;
+  /* Open book bills what the job spent, so it has no draws to schedule: the
+     toolbar button goes with the choice being dropped from "+ Invoice". */
+  hidePaymentSchedule?: boolean;
 }) {
   const [tab, setTab] = useState<TabKey>('invoices');
   const [showScheduleModal, setShowScheduleModal] = useState(false);
@@ -90,6 +113,7 @@ export default function OwnerInvoicesPage({
   const [showTracker, setShowTracker] = useState(false);
   const [showTemplateMenu, setShowTemplateMenu] = useState(false);
   const [showTemplateModal, setShowTemplateModal] = useState(false);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
   const templateMenuRef = useRef<HTMLDivElement>(null);
   // The split button's own local "which type did I last pick" — independent
   // of the job's persisted billing mode, so switching this doesn't change
@@ -116,6 +140,12 @@ export default function OwnerInvoicesPage({
   }, []);
 
   const hasSchedule = (job.drawSchedule ?? []).length > 0;
+  /* Financial > Invoice starts the job from nothing: the grid is empty even
+     though the mock job carries a baked draw schedule. The toolbar has to agree,
+     or "+ Payment schedule" is already spent before the builder arrives and the
+     modal opens on six draws they never entered. So in that loop the schedule
+     counts as existing only once it was created here. */
+  const scheduleReady = onCreateInvoicesFromSchedule ? (createdInvoices?.length ?? 0) > 0 : hasSchedule;
   const readyDraw = invoicingMode === 'milestone-draws'
     ? (job.drawSchedule ?? []).find(d => d.phaseComplete && !d.invoiced)
     : undefined;
@@ -144,7 +174,7 @@ export default function OwnerInvoicesPage({
   // end, so a separate payment-schedule reference doesn't apply there — it
   // does for both draws (the schedule itself) and regular/open-book billing
   // (so builders still have something to point to for cadence).
-  const showPaymentScheduleButton = !askingForMode && (invoicingMode === 'milestone-draws' || invoicingMode === 'time-interval');
+  const showPaymentScheduleButton = !hidePaymentSchedule && !askingForMode && (invoicingMode === 'milestone-draws' || invoicingMode === 'time-interval');
 
   // Owner Invoices shows very different content per billing mode — the
   // milestone-draws grid comes from the job's real drawSchedule, while
@@ -207,12 +237,17 @@ export default function OwnerInvoicesPage({
           {emptyState && (
             <>
               <BdsButton text="..." displayType="secondary" ariaLabel="More actions" />
+              {/* Opens the Invoices company settings, where the default invoice
+                  type lives. The grid is where a builder notices the default is
+                  wrong, so the way to change it is here rather than three
+                  levels into the settings page. */}
+              <BdsButton text="Settings" displayType="secondary" icon={<GearGlyph />} onClick={() => setShowSettingsModal(true)} />
               <BdsButton text="Filter" displayType="secondary" icon={<FilterGlyph />} />
               {/* Once a schedule exists the button stops being "add one" and
                   becomes the way to look at it. */}
-              {hasSchedule
+              {!hidePaymentSchedule && (scheduleReady
                 ? <BdsButton text="Payment schedule" displayType="secondary" onClick={() => setShowTracker(true)} />
-                : <BdsButton text="Payment schedule" displayType="secondary" icon={<BdsIcon name="plus" size={14} />} onClick={() => setShowScheduleModal(true)} />}
+                : <BdsButton text="Payment schedule" displayType="secondary" icon={<BdsIcon name="plus" size={14} />} onClick={() => setShowScheduleModal(true)} />)}
             </>
           )}
           {showPaymentScheduleButton && (
@@ -678,17 +713,17 @@ export default function OwnerInvoicesPage({
 
       {showScheduleModal && (
         <PaymentScheduleModal
-          existingDraws={job.drawSchedule}
+          existingDraws={scheduleReady ? job.drawSchedule : undefined}
           onClose={() => setShowScheduleModal(false)}
           onSave={(draws) => { onSavePaymentSchedule(draws); setShowScheduleModal(false); }}
           onCreate={onCreateInvoicesFromSchedule
             ? (draws) => { onCreateInvoicesFromSchedule(draws); setShowScheduleModal(false); }
             : undefined}
-          onDelete={hasSchedule ? () => { onDeletePaymentSchedule(); setShowScheduleModal(false); } : undefined}
+          onDelete={scheduleReady ? () => { onDeletePaymentSchedule(); setShowScheduleModal(false); } : undefined}
         />
       )}
 
-      {showTracker && hasSchedule && (
+      {showTracker && scheduleReady && (
         <PaymentScheduleTracker
           draws={job.drawSchedule ?? []}
           onClose={() => setShowTracker(false)}
@@ -698,6 +733,7 @@ export default function OwnerInvoicesPage({
       {showTypeModal && onAddInvoiceDirect && (
         <InvoiceTypeModal
           job={job}
+          choices={invoiceTypeChoices}
           onClose={() => setShowTypeModal(false)}
           onImportTemplate={onImportTemplate ? () => { setShowTypeModal(false); setShowTemplateModal(true); } : undefined}
           onChoose={(choice, makeDefault) => {
@@ -715,6 +751,14 @@ export default function OwnerInvoicesPage({
         <ImportTemplateModal
           onClose={() => setShowTemplateModal(false)}
           onImport={(templateId) => { setShowTemplateModal(false); onImportTemplate(templateId); }}
+        />
+      )}
+
+      {showSettingsModal && (
+        <InvoicesSettingsModal
+          onClose={() => setShowSettingsModal(false)}
+          defaultInvoiceKind={defaultInvoiceKind}
+          onDefaultInvoiceKindChange={onDefaultInvoiceKindChange}
         />
       )}
     </div>

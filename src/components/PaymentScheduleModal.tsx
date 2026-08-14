@@ -104,8 +104,14 @@ export default function PaymentScheduleModal({
             <BdsIcon name="x" size={20} />
           </button>
         </div>
+        {/* Says what the button will do, not what a payment schedule is. The
+            builder is one click from a job's worth of invoices appearing, and
+            finding that out afterwards reads as the prototype having run away
+            with itself. */}
         <p style={{ fontSize: 14, color: 'var(--bds-color-gray-70)', marginBottom: 20 }}>
-          Create a payment schedule to auto-generate invoices based on a percentage of all estimated line items once Estimate is sent to Budget.
+          {onCreate && !isEditing
+            ? 'Split the contract price into draws. Buildertrend creates one draft invoice per draw on the Invoices page, ready to send as each phase completes. Nothing goes to the client until you send it.'
+            : 'Create a payment schedule to auto-generate invoices based on a percentage of all estimated line items once Estimate is sent to Budget.'}
         </p>
         <div style={{ borderTop: '1px solid var(--bds-color-gray-15)', paddingTop: 20 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 8 }}>
@@ -154,13 +160,17 @@ export default function PaymentScheduleModal({
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 20, borderTop: '1px solid var(--bds-color-gray-15)', paddingTop: 20 }}>
           {/* Delete only once there's a saved schedule to delete: on the way in
-              from "+ Invoice" there's nothing behind this modal yet. */}
-          {isEditing && onDelete && !onCreate && <BdsButton text="Delete" displayType="secondary" onClick={onDelete} />}
-          {/* Two ways out, both keeping the schedule. Create is primary because
-              a builder who just typed the whole schedule usually wants the
-              invoices; Save is for the one who's only setting it up. */}
-          <BdsButton text="Save" displayType={onCreate ? 'secondary' : 'primary'} onClick={handleSave} />
-          {onCreate && <BdsButton text="Create" displayType="primary" onClick={handleCreate} />}
+              from "+ Payment schedule" there's nothing behind this modal yet. */}
+          {isEditing && onDelete && <BdsButton text="Delete" displayType="secondary" onClick={onDelete} />}
+          {/* One way out when the schedule is new. Splitting this into Save and
+              Create asked the builder to distinguish keeping the schedule from
+              using it, which is not a distinction they have: they typed a draw
+              schedule because they want the invoices. Editing an existing
+              schedule keeps Save, since the invoices already exist and
+              regenerating them would throw away their progress. */}
+          {(!onCreate || isEditing)
+            ? <BdsButton text="Save" displayType="primary" onClick={handleSave} />
+            : <BdsButton text="Create payment schedule" displayType="primary" onClick={handleCreate} />}
         </div>
       </div>
     </div>

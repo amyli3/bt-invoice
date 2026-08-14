@@ -162,7 +162,10 @@ export default function TopNav({ onNavigate }: TopNavProps) {
                   page had converged, so the reimagined one is the live version.
                   The route still resolves at #invoice-full-page if the old
                   layout needs comparing. */}
-              <button className="topnav-dropdown-item" onClick={() => { setFinancialOpen(false); onNavigate?.('invoice-base-grid'); }}>Invoice</button>
+              <button className="topnav-dropdown-item" onClick={() => { setFinancialOpen(false); onNavigate?.('invoice-base-grid'); }}>Invoice - Fixed</button>
+              {/* The open-book copy of the same loop. Its own route so the two
+                  contract types can diverge without either flow moving. */}
+              <button className="topnav-dropdown-item" onClick={() => { setFinancialOpen(false); onNavigate?.('invoice-base-grid-ob'); }}>Invoice - OB</button>
               {/* OB in the label because this presentation runs the open-book
                   fill regardless of the selected job's contract type. */}
               <button className="topnav-dropdown-item" onClick={() => { setFinancialOpen(false); onNavigate?.('invoice-3-modal'); }}>Invoice (modal - OB)</button>
@@ -170,7 +173,12 @@ export default function TopNav({ onNavigate }: TopNavProps) {
               <button className="topnav-dropdown-item" onClick={() => { setFinancialOpen(false); onNavigate?.('owner-invoices'); }}>Invoice (reimagined)</button>
               <button className="topnav-dropdown-item" onClick={() => { setFinancialOpen(false); onNavigate?.('client-preview-invoice'); }}>Client preview invoice</button>
               <button className="topnav-dropdown-item" onClick={() => { setFinancialOpen(false); onNavigate?.('progress-invoice'); }}>Progress Invoice</button>
-              <button className="topnav-dropdown-item" onClick={() => { setFinancialOpen(false); onNavigate?.('estimate'); }}>Estimate</button>
+              {/* Two estimates, split by how the job bills. Fixed price locks a
+                  contract price that draws can be built from; open book bills
+                  what the job spends, so it carries an invoicing cadence on the
+                  proposal instead of a draw schedule. */}
+              <button className="topnav-dropdown-item" onClick={() => { setFinancialOpen(false); onNavigate?.('estimate'); }}>Estimate - Fixed</button>
+              <button className="topnav-dropdown-item" onClick={() => { setFinancialOpen(false); onNavigate?.('estimate-ob'); }}>Estimate - OB</button>
               <button className="topnav-dropdown-item" onClick={() => { setFinancialOpen(false); onNavigate?.('job-costing-budget'); }}>Job Costing Budget</button>
             </div>
           )}

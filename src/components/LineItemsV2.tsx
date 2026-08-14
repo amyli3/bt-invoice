@@ -550,18 +550,13 @@ export default function LineItems({ invoice, onChange, vis, stackView = 'summary
                   book change orders are 2.4% of invoice lines. No date language,
                   since bills over 180 days old invoice more (86.0%) than newer
                   ones and any window would lose revenue. */}
-              {/* Fixed price never mentions costs: on a fixed-price contract a
-                  bill is the builder's own margin problem, not something the
-                  client owes. What they owe is the contracted value of finished
-                  work, so the copy names the schedule and the change orders. */}
+              {/* One wording for every presentation of the offer, fixed price
+                  included: the banner reads the same wherever a builder meets
+                  it, so the promise doesn't change shape between routes. */}
               <div style={{ fontSize: 12, color: 'var(--bds-color-gray-70)', marginTop: 2, lineHeight: 1.45 }}>
-                {isFixedPrice
-                  ? `We'll bill the contract lines the schedule says have moved since your last invoice, at their
-                     percent complete, plus approved change orders you haven't billed yet. You can review and make
-                     changes before you send it to your client.`
-                  : `We'll pull in the unbilled costs you usually bill on this job (bills, approved time clock hours,
-                     and accounting costs) and add them as line items. You can review and make changes before you
-                     send it to your client.`}
+                We'll pull in the unbilled costs you usually bill on this job (bills, approved time clock hours,
+                and accounting costs) and add them as line items. You can review and make changes before you
+                send it to your client.
               </div>
             </div>
           </div>

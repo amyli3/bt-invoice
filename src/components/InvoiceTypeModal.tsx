@@ -53,11 +53,31 @@ interface Props {
      carries its own billing type and line items. Kept out of the radio group
      for that reason, and off to the side so the three types stay the choice. */
   onImportTemplate?: () => void;
+  /* 'switch' is the same modal reopened from inside an invoice. The builder
+     already made this call once, so the recommendation and its reasoning come
+     off: what's left is the three options and which one is on now. */
+  variant?: 'new' | 'switch';
+  /* What to open on. Defaults to the recommendation, which is right for a new
+     invoice; switching passes the type the invoice already is, so Continue
+     without a change is a no-op rather than a silent switch. */
+  initialChoice?: InvoiceTypeChoice;
+  /* Which of the three this caller offers. A flow that sets its cadence
+     elsewhere (or doesn't have one) passes the documents it can actually
+     create, so the modal never shows an answer that leads nowhere. */
+  choices?: InvoiceTypeChoice[];
 }
 
-export default function InvoiceTypeModal({ job, onClose, onChoose, onImportTemplate }: Props) {
+export default function InvoiceTypeModal({ job, onClose, onChoose, onImportTemplate, variant = 'new', initialChoice, choices }: Props) {
+  const options = choices ? OPTIONS.filter(o => choices.includes(o.key)) : OPTIONS;
   const recommendation = recommendedChoice(job);
-  const [selected, setSelected] = useState<InvoiceTypeChoice>(recommendation.key);
+  /* The recommender answers across all three documents, so it can land on one
+     this caller doesn't offer. Rather than redirect it to a second-best answer
+     and state a reason that no longer matches, the recommendation comes off
+     entirely and the first option is simply what's selected. */
+  const showRecommendation = variant === 'new' && options.some(o => o.key === recommendation.key);
+  const [selected, setSelected] = useState<InvoiceTypeChoice>(
+    initialChoice ?? (showRecommendation ? recommendation.key : options[0].key)
+  );
   const [makeDefault, setMakeDefault] = useState(false);
   const recommendedLabel = OPTIONS.find(o => o.key === recommendation.key)!.label;
 
@@ -72,20 +92,22 @@ export default function InvoiceTypeModal({ job, onClose, onChoose, onImportTempl
         <div className="est-modal-body">
           {/* Above the options: it's the reason one of them is already
               selected, which is unreadable as a footnote after the fact. */}
-          <div style={{
-            padding: 14, marginTop: 4, marginBottom: 20,
-            background: 'var(--bds-color-info-background, #EEF5FF)', borderRadius: 'var(--bds-radius-md)',
-            fontSize: 13, color: 'var(--bds-color-gray-80)', lineHeight: 1.5,
-          }}>
-            <strong>Why we recommend {recommendedLabel}: </strong>{recommendation.reason}
-          </div>
+          {showRecommendation && (
+            <div style={{
+              padding: 14, marginTop: 4, marginBottom: 20,
+              background: 'var(--bds-color-info-background, #EEF5FF)', borderRadius: 'var(--bds-radius-md)',
+              fontSize: 13, color: 'var(--bds-color-gray-80)', lineHeight: 1.5,
+            }}>
+              <strong>Why we recommend {recommendedLabel}: </strong>{recommendation.reason}
+            </div>
+          )}
 
-          <div style={{ display: 'grid', gap: 14, gridTemplateColumns: 'repeat(3, 1fr)', marginTop: 16, marginBottom: 18 }}>
-            {/* Radios rather than a "Selected" check line: three mutually
-                exclusive answers read as a radio group, and the control says so
-                before it's clicked. The whole card is still the hit target. */}
-            {OPTIONS.map(opt => {
-              const isRecommended = opt.key === recommendation.key;
+          <div style={{ display: 'grid', gap: 14, gridTemplateColumns: `repeat(${options.length}, 1fr)`, marginTop: showRecommendation ? 16 : 4, marginBottom: 18 }}>
+            {/* Radios rather than a "Selected" check line: mutually exclusive
+                answers read as a radio group, and the control says so before
+                it's clicked. The whole card is still the hit target. */}
+            {options.map(opt => {
+              const isRecommended = showRecommendation && opt.key === recommendation.key;
               const isSelected = opt.key === selected;
               return (
                 <label
@@ -119,9 +141,9 @@ export default function InvoiceTypeModal({ job, onClose, onChoose, onImportTempl
           </div>
 
           {/* Payment schedule is a setup step, not a document type, so there's
-              nothing for it to default to. The checkbox only appears for the
-              two that map to the job's Default invoice type. */}
-          {selected !== 'payment-schedule' ? (
+              nothing for it to default to and nothing to say in its place:
+              the schedule modal it opens explains itself. */}
+          {selected !== 'payment-schedule' && (
             <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, marginTop: 14, fontSize: 13, color: 'var(--bds-color-gray-80)', cursor: 'pointer', userSelect: 'none' }}>
               <input
                 type="checkbox"
@@ -131,15 +153,11 @@ export default function InvoiceTypeModal({ job, onClose, onChoose, onImportTempl
               />
               Always invoice this job this way. Skip this step on new invoices.
             </label>
-          ) : (
-            <div style={{ fontSize: 12, color: 'var(--bds-color-gray-60)', marginTop: 14 }}>
-              This applies to this invoice. You can invoice a different way next time.
-            </div>
           )}
         </div>
 
         <div className="est-modal-footer" style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'flex-end' }}>
-          {onImportTemplate && (
+          {onImportTemplate && variant === 'new' && (
             <button
               type="button"
               onClick={onImportTemplate}
