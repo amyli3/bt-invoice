@@ -1,5 +1,7 @@
+import { useState } from 'react';
 import '../bds-tokens.css';
-import { BdsButton, BdsIcon } from '../bds';
+import { BdsAlert, BdsButton, BdsIcon, BdsPill } from '../bds';
+import type { DrawScheduleLine } from '../types';
 
 /* Sending to budget locks the contract price, which is the one thing a draw
    schedule can't be built without, so this is the right moment to build one
@@ -15,6 +17,56 @@ import { BdsButton, BdsIcon } from '../bds';
    it's used, and wrong invisibly. Both are asked at "+ Invoice", where the
    builder can see what the answer does. */
 
+/* ── Invoice preview ────────────────────────────────────────────────────────
+   Send to Budget generates one invoice per draw as a side effect. The count is
+   already shown in production ("we'll automatically generate 5 invoices"), but
+   it is the raw draw count: it says nothing about what those invoices will be
+   worth, or whether they duplicate invoices the job already has.
+
+   What counts as "already billed" is the whole question, and draft is the line:
+
+     - Released (sent or paid) invoices have actually billed the owner, so the
+       remaining contract price is what is left to invoice. Contract 15,000 with
+       5,000 released means the new invoices total 10,000.
+     - Draft invoices have billed nobody. They do not reduce what is left, so a
+       re-send creates a full set again. That is correct, but it means the drafts
+       from the previous send are now duplicates and the builder has to delete
+       them, which is what the existing warning is for.
+     - Fully released means nothing is left, no invoices are created, and the
+       builder needs telling rather than silence.
+
+   NOTE: the engine does not implement this rule yet. GetInvoicedOwnerPriceByRelatedLineItem
+   filters only on VoidedByDate IS NULL, so drafts are counted as billed today. */
+export interface DrawInvoicePreview {
+  /** Draws that will actually produce an invoice. */
+  willCreate: number;
+  /** Draws configured in the schedule. */
+  configured: number;
+  /** What those invoices will total: the contract price less what is released. */
+  total: number;
+}
+
+export function previewDrawInvoices(
+  draws: DrawScheduleLine[],
+  contractPrice: number,
+  /** Owner price on invoices that have actually been sent or paid. Drafts excluded. */
+  releasedAmount: number,
+): DrawInvoicePreview {
+  /* The draws define the split, the contract price defines the amount. The
+     engine is percent-driven (each draw bills `percent x line value`, with the
+     last draw taking the remainder), so netting is a scale on the percentage
+     rather than a dollar subtraction. Clamped at 0 so an over-released job drops
+     every draw instead of emitting a negative correction. */
+  const remainingRatio = contractPrice > 0
+    ? Math.max(0, (contractPrice - releasedAmount) / contractPrice)
+    : 0;
+  return {
+    willCreate: remainingRatio > 0 ? draws.length : 0,
+    configured: draws.length,
+    total: contractPrice * remainingRatio,
+  };
+}
+
 export default function SendToBudgetModal({
   builderCost,
   profit,
@@ -22,6 +74,7 @@ export default function SendToBudgetModal({
   margin,
   hasDrawSchedule,
   showDrawSchedule = true,
+  draws = [],
   onCancel,
   onOpenDrawSchedule,
   onConfirm,
@@ -34,11 +87,29 @@ export default function SendToBudgetModal({
   /* Whether draws apply to this job at all. Open book has nothing to split, so
      the section comes off rather than sitting there inert. */
   showDrawSchedule?: boolean;
+  /* The draw schedule this send will generate invoices from. Needed to say how
+     many invoices are actually coming, which is the whole point of the preview. */
+  draws?: DrawScheduleLine[];
   onCancel: () => void;
   onOpenDrawSchedule: () => void;
   onConfirm: () => void;
 }) {
   const fmt = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+  /* Prototype-only scenario switcher. In production these come from the job's
+     existing invoices: `releasedAmount` from invoices with a released/sent date,
+     `draftCount` from those without one. Remove with the switcher below. */
+  const [scenario, setScenario] = useState<'first' | 'drafts' | 'partly-paid' | 'fully-paid'>('first');
+  /* Only released invoices reduce what is left to bill. Drafts are counted
+     separately because they drive a duplicate warning, not the netting. */
+  const releasedAmount =
+    scenario === 'partly-paid' ? 5000
+    : scenario === 'fully-paid' ? totalOwnerPrice
+    : 0;
+  const draftCount = scenario === 'drafts' ? draws.length : 0;
+  const preview = previewDrawInvoices(draws, totalOwnerPrice, releasedAmount);
+  const nothingToInvoice = preview.willCreate === 0;
+  const isReduced = releasedAmount > 0 && !nothingToInvoice;
 
   const rows: [string, string][] = [
     ['Builder cost', fmt(builderCost)],
@@ -88,21 +159,84 @@ export default function SendToBudgetModal({
           ))}
         </div>
 
+        {/* One section, one heading. A draw schedule and a payment schedule are
+            the same object: the schedule is the payment schedule, the rows in it
+            are draws. */}
         {showDrawSchedule && (
           <div style={{ marginTop: 24 }}>
             <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--bds-color-gray-90)', marginBottom: 8 }}>
-              Draw schedule
+              Payment schedule
             </div>
-            <p style={{ fontSize: 14, color: 'var(--bds-color-gray-80)', lineHeight: 1.5, marginBottom: 12 }}>
-              {hasDrawSchedule
-                ? 'This job has a draw schedule. Review or update it against the contract price before sending to budget.'
-                : `Optional. Split ${fmt(totalOwnerPrice)} into draws and Buildertrend creates an invoice for each one, ready to send as its phase is marked complete. You can also do this later from the job's Invoices page.`}
-            </p>
+
+            {/* Any warning sits directly under the heading, ahead of the
+                descriptive copy. It is the thing that changes what the builder
+                does next, so it should not be reachable only by reading past a
+                paragraph that says everything is fine. */}
+            {hasDrawSchedule && draftCount > 0 && (
+              /* Draft invoices do not reduce what is left to bill, so a re-send
+                 creates a full set alongside them and the old ones become
+                 duplicates. Production's existing wording, kept verbatim. */
+              <BdsAlert
+                type="warning"
+                showIcon
+                style={{ marginBottom: 12 }}
+                message="Delete any existing invoices before sending to budget to avoid duplicates"
+              />
+            )}
+
+            {hasDrawSchedule && nothingToInvoice && (
+              /* Fully released. The builder pulled the budget back, changed
+                 something that did not move the contract price, and is sending
+                 again. Nothing is left to bill, and silence would read as a bug. */
+              <BdsAlert
+                type="warning"
+                showIcon
+                style={{ marginBottom: 12 }}
+                title="We won't create any invoices"
+                message={<>You've invoiced the full contract price and been paid, so there's nothing
+                  left to bill. Sending to budget still locks the contract price.</>}
+              />
+            )}
+
+            {!hasDrawSchedule ? (
+              <p style={{ fontSize: 14, color: 'var(--bds-color-gray-80)', lineHeight: 1.5, marginBottom: 12 }}>
+                Optional. Split {fmt(totalOwnerPrice)} into draws and Buildertrend creates an invoice
+                for each one, ready to send as its phase is marked complete. You can also do this
+                later from the job's Invoices page.
+              </p>
+            ) : !nothingToInvoice && (
+              <p style={{ fontSize: 14, color: 'var(--bds-color-gray-80)', lineHeight: 1.5, marginBottom: 12 }}>
+                After you send the Estimate to the Budget, we'll automatically generate{' '}
+                <strong>{preview.configured} {preview.configured === 1 ? 'invoice' : 'invoices'}</strong>{' '}
+                totaling <strong>{fmt(preview.total)}</strong>.{' '}
+                {isReduced
+                  ? `That's the contract price minus the ${fmt(releasedAmount)} you've already been paid.`
+                  : 'Each invoice will include a percentage of all line items in the Estimate.'}
+              </p>
+            )}
+
             <BdsButton
-              text={hasDrawSchedule ? 'Edit draw schedule' : '+ Draw schedule'}
+              text={hasDrawSchedule ? 'Edit payment schedule' : '+ Payment schedule'}
               displayType="secondary"
               onClick={onOpenDrawSchedule}
             />
+          </div>
+        )}
+
+        {/* ── Prototype-only scenario switcher ──────────────────────────────
+            Stands in for the job's existing invoices. Delete alongside the
+            `scenario` state when productionizing. */}
+        {showDrawSchedule && hasDrawSchedule && (
+          <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px dashed var(--bds-color-gray-30)' }}>
+            <div style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: 0.4, color: 'var(--bds-color-gray-70)', marginBottom: 8 }}>
+              Prototype: invoices already on this job
+            </div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <BdsPill text="None" selected={scenario === 'first'} onClick={() => setScenario('first')} />
+              <BdsPill text="All draft" selected={scenario === 'drafts'} onClick={() => setScenario('drafts')} />
+              <BdsPill text="$5,000 paid" selected={scenario === 'partly-paid'} onClick={() => setScenario('partly-paid')} />
+              <BdsPill text="Fully paid" selected={scenario === 'fully-paid'} onClick={() => setScenario('fully-paid')} />
+            </div>
           </div>
         )}
 

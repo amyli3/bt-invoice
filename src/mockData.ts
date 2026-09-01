@@ -111,6 +111,20 @@ export interface DemoInvoiceRow {
   period?: string;
 }
 
+/* The job's schedule, as far as anything that links to a schedule item is
+   concerned. Shared so two surfaces can't show the same phase starting on two
+   different dates: these are the dates the Option detail page has been using.
+   (Invoice information still carries its own older list; it's on the reference
+   invoice route and moving its dates isn't part of this.) */
+export const JOB_SCHEDULE_ITEMS: { id: string; name: string; start: string; end: string }[] = [
+  { id: 'sch-0', name: 'Cabinet shop drawings', start: '2026-05-15', end: '2026-05-20' },
+  { id: 'sch-1', name: 'Plumbing rough-in',     start: '2026-06-20', end: '2026-06-25' },
+  { id: 'sch-2', name: 'Tile install',          start: '2026-07-25', end: '2026-08-05' },
+  { id: 'sch-3', name: 'Flooring install',      start: '2026-08-15', end: '2026-08-22' },
+  { id: 'sch-4', name: 'Cabinet install',       start: '2026-08-25', end: '2026-09-01' },
+  { id: 'sch-5', name: 'Final paint',           start: '2026-09-15', end: '2026-09-22' },
+];
+
 // Demo-only rows for Owner Invoices — illustrate what each billing mode's
 // invoice history actually looks like, since it's very different in shape
 // from the milestone-draws schedule (which is real job.drawSchedule data).

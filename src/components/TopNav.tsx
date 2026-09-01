@@ -88,6 +88,9 @@ export default function TopNav({ onNavigate }: TopNavProps) {
   const [jobsOpen, setJobsOpen] = useState(false);
   const [pmOpen, setPmOpen] = useState(false);
   const [financialOpen, setFinancialOpen] = useState(false);
+  /* Which Financial submenu is flown out. One at a time, and cleared whenever
+     the parent menu closes, so reopening Financial starts collapsed. */
+  const [financialSubmenu, setFinancialSubmenu] = useState<'invoice' | 'estimate' | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
   const [bellOpen, setBellOpen] = useState(false);
   const [notifications, setNotifications] = useState<NotificationItem[]>(INITIAL_NOTIFICATIONS);
@@ -113,6 +116,12 @@ export default function TopNav({ onNavigate }: TopNavProps) {
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
+  // Points at the flyout rather than down: this caret opens a menu to the side.
+  const caretRight = (
+    <svg width="14" height="14" viewBox="0 0 20 20" fill="none" aria-hidden="true" style={{ flexShrink: 0 }}>
+      <path d="M7.5 5L12.5 10L7.5 15" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  );
   const caretDown = (
     <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
       <path d="M5 7.5L10 12.5L15 7.5" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
@@ -152,7 +161,7 @@ export default function TopNav({ onNavigate }: TopNavProps) {
         <button className="topnav-item">Files {caretDown}</button>
         <button className="topnav-item">Messaging {caretDown}</button>
         <div className="topnav-dropdown-wrap" ref={financialRef}>
-          <button className="topnav-item" onClick={() => { setFinancialOpen(!financialOpen); setJobsOpen(false); setPmOpen(false); }}>Financial {caretDown}</button>
+          <button className="topnav-item" onClick={() => { setFinancialOpen(!financialOpen); setFinancialSubmenu(null); setJobsOpen(false); setPmOpen(false); }}>Financial {caretDown}</button>
           {financialOpen && (
             <div className="topnav-dropdown">
               {/* First, because it's the flow being worked on: the invoices
@@ -162,24 +171,78 @@ export default function TopNav({ onNavigate }: TopNavProps) {
                   page had converged, so the reimagined one is the live version.
                   The route still resolves at #invoice-full-page if the old
                   layout needs comparing. */}
-              <button className="topnav-dropdown-item" onClick={() => { setFinancialOpen(false); onNavigate?.('invoice-base-grid'); }}>Invoice - Fixed</button>
-              {/* The open-book copy of the same loop. Its own route so the two
-                  contract types can diverge without either flow moving. */}
-              <button className="topnav-dropdown-item" onClick={() => { setFinancialOpen(false); onNavigate?.('invoice-base-grid-ob'); }}>Invoice - OB</button>
-              {/* OB in the label because this presentation runs the open-book
-                  fill regardless of the selected job's contract type. */}
-              <button className="topnav-dropdown-item" onClick={() => { setFinancialOpen(false); onNavigate?.('invoice-3-modal'); }}>Invoice (modal - OB)</button>
-              <button className="topnav-dropdown-item" onClick={() => { setFinancialOpen(false); onNavigate?.('invoice-full-page-reimagined'); }}>Invoice (full page - reimagined)</button>
-              <button className="topnav-dropdown-item" onClick={() => { setFinancialOpen(false); onNavigate?.('owner-invoices'); }}>Invoice (reimagined)</button>
+              {/* Invoice is one entry with its presentations behind a caret.
+                  Five sibling routes at the top level buried Client preview and
+                  Progress Invoice below them; nested, the list reads as the
+                  documents a builder works on, not the prototype's variants. */}
+              <div
+                className="topnav-submenu-wrap"
+                onMouseEnter={() => setFinancialSubmenu('invoice')}
+                onMouseLeave={() => setFinancialSubmenu(s => (s === 'invoice' ? null : s))}
+              >
+                <button
+                  className="topnav-submenu-parent"
+                  onClick={() => setFinancialSubmenu('invoice')}
+                >
+                  Invoice {caretRight}
+                </button>
+                {financialSubmenu === 'invoice' && (
+                  <div className="topnav-submenu">
+                    <button className="topnav-dropdown-item" onClick={() => { setFinancialOpen(false); setFinancialSubmenu(null); onNavigate?.('invoice-base-grid'); }}>Fixed</button>
+                    {/* The open-book copy of the same loop. Its own route so the
+                        two contract types can diverge without either flow moving. */}
+                    <button className="topnav-dropdown-item" onClick={() => { setFinancialOpen(false); setFinancialSubmenu(null); onNavigate?.('invoice-base-grid-ob'); }}>Openbook</button>
+                    {/* OB in the label because this presentation runs the
+                        open-book fill regardless of the job's contract type. */}
+                    <button className="topnav-dropdown-item" onClick={() => { setFinancialOpen(false); setFinancialSubmenu(null); onNavigate?.('invoice-3-modal'); }}>Modal - OB</button>
+                    {/* "Invoice (full page)" is hidden: it and the reimagined
+                        full page had converged, so the reimagined one is the
+                        live version. The route still resolves at
+                        #invoice-full-page if the old layout needs comparing. */}
+                    <button className="topnav-dropdown-item" onClick={() => { setFinancialOpen(false); setFinancialSubmenu(null); onNavigate?.('invoice-full-page-reimagined'); }}>Full page - reimagined</button>
+                    {/* Grid, not invoice: this one opens the invoices list, and
+                        the old label read as another invoice presentation. */}
+                    <button className="topnav-dropdown-item" onClick={() => { setFinancialOpen(false); setFinancialSubmenu(null); onNavigate?.('owner-invoices'); }}>Invoice grid (reimagined)</button>
+                    {/* Type picked on the invoice, document a tab away. Sits
+                        with the other presentations because that's what it is:
+                        the same invoice, laid out differently. */}
+                    <button className="topnav-dropdown-item" onClick={() => { setFinancialOpen(false); setFinancialSubmenu(null); onNavigate?.('invoice-type-preview'); }}>Type + preview</button>
+                    {/* Scratch surface, last in the list: it holds ideas that
+                        aren't a route yet, so it shouldn't sit among the
+                        presentations a stakeholder is walked through. */}
+                    <button className="topnav-dropdown-item" onClick={() => { setFinancialOpen(false); setFinancialSubmenu(null); onNavigate?.('invoice-exploration'); }}>Exploration</button>
+                  </div>
+                )}
+              </div>
               <button className="topnav-dropdown-item" onClick={() => { setFinancialOpen(false); onNavigate?.('client-preview-invoice'); }}>Client preview invoice</button>
               <button className="topnav-dropdown-item" onClick={() => { setFinancialOpen(false); onNavigate?.('progress-invoice'); }}>Progress Invoice</button>
               {/* Two estimates, split by how the job bills. Fixed price locks a
                   contract price that draws can be built from; open book bills
                   what the job spends, so it carries an invoicing cadence on the
                   proposal instead of a draw schedule. */}
-              <button className="topnav-dropdown-item" onClick={() => { setFinancialOpen(false); onNavigate?.('estimate'); }}>Estimate - Fixed</button>
-              <button className="topnav-dropdown-item" onClick={() => { setFinancialOpen(false); onNavigate?.('estimate-ob'); }}>Estimate - OB</button>
+              <div
+                className="topnav-submenu-wrap"
+                onMouseEnter={() => setFinancialSubmenu('estimate')}
+                onMouseLeave={() => setFinancialSubmenu(s => (s === 'estimate' ? null : s))}
+              >
+                <button
+                  className="topnav-submenu-parent"
+                  onClick={() => setFinancialSubmenu('estimate')}
+                >
+                  Estimate {caretRight}
+                </button>
+                {financialSubmenu === 'estimate' && (
+                  <div className="topnav-submenu">
+                    <button className="topnav-dropdown-item" onClick={() => { setFinancialOpen(false); setFinancialSubmenu(null); onNavigate?.('estimate'); }}>Fixed</button>
+                    <button className="topnav-dropdown-item" onClick={() => { setFinancialOpen(false); setFinancialSubmenu(null); onNavigate?.('estimate-ob'); }}>Openbook</button>
+                  </div>
+                )}
+              </div>
               <button className="topnav-dropdown-item" onClick={() => { setFinancialOpen(false); onNavigate?.('job-costing-budget'); }}>Job Costing Budget</button>
+              {/* The cost side of the job. Sits with the money documents rather
+                  than under Invoice, since a bill is what the builder owes out,
+                  not what the client owes in. */}
+              <button className="topnav-dropdown-item" onClick={() => { setFinancialOpen(false); onNavigate?.('bills'); }}>Bills</button>
             </div>
           )}
         </div>

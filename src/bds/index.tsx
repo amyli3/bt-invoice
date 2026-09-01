@@ -133,6 +133,51 @@ export function BdsTextArea({ id, value, onChange, placeholder, disabled, rows =
   );
 }
 
+/* ───────────── BdsAlert ─────────────
+   Prototype shim of the real BTAlert (Storybook: common-components-btalert).
+   API mirrors the stories' props (type, message, title, showIcon, banner,
+   closable, closeText). Productionize by importing BTAlert from clients-app
+   and deleting this. Hand-rolling a styled div instead of using this is what
+   this component exists to prevent. */
+export function BdsAlert({ type = 'default', message, title, showIcon, style }: {
+  type?: 'default' | 'info' | 'success' | 'warning' | 'error';
+  message: ReactNode;
+  title?: ReactNode;
+  showIcon?: boolean;
+  style?: CSSProperties;
+}) {
+  const palette: Record<string, { bg: string; fg: string; border: string }> = {
+    default: { bg: 'var(--bds-color-gray-10)', fg: 'var(--bds-color-gray-90)', border: 'var(--bds-color-gray-15)' },
+    info: { bg: 'var(--bds-color-blue-10)', fg: 'var(--bds-color-blue-80)', border: 'var(--bds-color-blue-10)' },
+    success: { bg: 'var(--bds-color-green-10)', fg: 'var(--bds-color-green-80)', border: 'var(--bds-color-green-10)' },
+    warning: { bg: 'var(--bds-color-warning-background)', fg: 'var(--bds-color-warning-foreground)', border: 'var(--bds-color-yellow-15)' },
+    error: { bg: 'var(--bds-color-red-10, #FDECEC)', fg: 'var(--bds-color-red-80, #8A1C1C)', border: 'var(--bds-color-red-10, #FDECEC)' },
+  };
+  const c = palette[type] ?? palette.default;
+  return (
+    <div
+      role="alert"
+      style={{
+        background: c.bg, color: c.fg, border: `1px solid ${c.border}`,
+        borderRadius: 'var(--bds-radius-md, 6px)', padding: '12px 14px',
+        fontSize: 14, lineHeight: 1.5, display: 'flex', gap: 10,
+        alignItems: 'flex-start', ...style,
+      }}
+    >
+      {showIcon && (
+        <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+          strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ flexShrink: 0, marginTop: 2 }}>
+          <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
+        </svg>
+      )}
+      <div>
+        {title && <div style={{ fontWeight: 700, marginBottom: 2 }}>{title}</div>}
+        <div>{message}</div>
+      </div>
+    </div>
+  );
+}
+
 export function BdsPanel({ children, className = '', style }: { children: ReactNode; className?: string; style?: CSSProperties }) {
   return <div className={`bds-r-panel ${className}`} style={style}>{children}</div>;
 }

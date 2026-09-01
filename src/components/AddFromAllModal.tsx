@@ -205,6 +205,15 @@ export default function AddFromAllModal({ open, onClose, onAdd, onAddSelections,
     && visibleEstimate.length === 0 && visibleCO.length === 0 && visibleSelectionCount === 0
     && visibleCostCount === 0;
 
+  /* What a "select all" is allowed to check, per selections sub-section. A
+     settled on-budget allowance has nothing to invoice and its own card refuses
+     the click, so a section header that checked it would produce a selection the
+     card then contradicts. Visible-only, matching the costs list: search filters
+     what's listed, and select all acts on what's listed. */
+  const selectableCharges = visibleCharges.filter(a => variance(a) !== 0).map(a => a.id);
+  const selectableCredits = visibleCredits.filter(a => variance(a) !== 0).map(a => a.id);
+  const selectableStandalone = visibleStandalone.filter(g => standaloneTotal(g) !== 0).map(g => g.id);
+
   const pctAmount = (r: PctRow) => r.clientPrice * (pct[r.id] ?? 0) / 100;
   const rowAmount = (id: string): number => {
     const e = ESTIMATE_ROWS.find(r => r.id === id); if (e) return pctAmount(e);
@@ -384,21 +393,79 @@ export default function AddFromAllModal({ open, onClose, onAdd, onAddSelections,
   // Change Orders, using the SAME cards as the selections wizard.
   // Section titles are text only — no source glyphs. Expand all / Collapse all
   // lives in the filter bar up top, not on these rows.
+  /* Section heading: select-all checkbox, title, and an expand control scoped
+     to this section's cards. Same three affordances the costs list carries, so
+     every record type behaves the same way. `ids` omitted means there's nothing
+     selectable under it (Costs, whose own list already carries a Select all,
+     and which would otherwise show two). */
+  // Title only. Select all and the section's expand control share the row
+  // below it, the same pairing the costs list uses above its records.
   const sectionHeading = (label: string) => (
     <div style={{ marginBottom: 8 }}>
       <BdsText as="span" size="heavy-md">{label}</BdsText>
     </div>
   );
 
-  // One control for every allowance + selection card, on the first section's
-  // heading row. Collapsed is keyed per card, so "expand all" clears the keys.
+  /* The section's own toolbar, directly above the cards both controls act on:
+     select all on the left, expand all on the right. Rendered per section so it
+     can sit after that section's help text rather than between the heading and
+     the sentence explaining it. */
+  const sectionToolbar = (ids: string[], cardIds: string[]) => {
+    if (ids.length === 0 && cardIds.length === 0) return null;
+    const st = sectionState(ids);
+    const sectionExpanded = cardIds.length > 0 && cardIds.every(id => isExpanded(id));
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        {ids.length > 0 && (
+          <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              ref={el => { if (el) el.indeterminate = st === 'some'; }}
+              checked={st === 'all'}
+              onChange={() => toggleSection(ids)}
+              style={{ width: 16, height: 16, accentColor: 'var(--bds-color-blue-60)', cursor: 'pointer' }}
+            />
+            <BdsText as="span" size="normal-md" style={{ fontSize: 13 }}>Select all</BdsText>
+          </label>
+        )}
+        {cardIds.length > 0 && (
+          <button
+            type="button"
+            className="est-expand-btn"
+            onClick={() => setCollapsed(c => {
+              const n = { ...c };
+              cardIds.forEach(id => { n[id] = sectionExpanded; });
+              return n;
+            })}
+            style={{ marginLeft: 'auto', height: 30, boxSizing: 'border-box', padding: '0 12px', borderRadius: 6, fontSize: 13 }}
+          >
+            {sectionExpanded ? 'Collapse all' : 'Expand all'}
+          </button>
+        )}
+      </div>
+    );
+  };
+
+  /* The header control is the modal-wide one: it drives every expandable card
+     in every section, selections and costs both. The per-section buttons on the
+     headings do the same job for one section, so the two aren't redundant, they
+     are different scopes of the same action. */
   const selectionCardIds = [...allowances.map(a => a.id), ...standalone.map(g => g.id)];
-  const allExpanded = selectionCardIds.length > 0 && selectionCardIds.every(id => isExpanded(id));
-  const toggleExpandAll = () => setCollapsed(() => {
-    const next: Record<string, boolean> = {};
-    selectionCardIds.forEach(id => { next[id] = allExpanded; });
-    return next;
-  });
+  const headerExpandIds = sources['Selections'] ? selectionCardIds : [];
+  const costsExpandable = costsOn && costs.visibleIds.length > 0;
+  const everythingExpanded =
+    (headerExpandIds.length > 0 || costsExpandable)
+    && headerExpandIds.every(id => isExpanded(id))
+    && (!costsExpandable || costs.allExpanded);
+  const toggleExpandAll = () => {
+    const collapse = everythingExpanded;
+    setCollapsed(() => {
+      const next: Record<string, boolean> = {};
+      headerExpandIds.forEach(id => { next[id] = collapse; });
+      return next;
+    });
+    if (costsExpandable) costs.setAllExpanded(!collapse);
+  };
   const expandAllBtn = (
     <button
       type="button"
@@ -407,8 +474,44 @@ export default function AddFromAllModal({ open, onClose, onAdd, onAddSelections,
       style={{ height: 38, boxSizing: 'border-box', padding: '0 16px', borderRadius: 8, fontSize: 14 }}
     >
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M7 20l5-5 5 5" /><path d="M7 4l5 5 5-5" /></svg>
-      {allExpanded ? 'Collapse all' : 'Expand all'}
+      {everythingExpanded ? 'Collapse all' : 'Expand all'}
     </button>
+  );
+
+  /* Modal-wide select all. Spans every line item in every active record type,
+     including cost records, which keep their checked state in the costs hook
+     rather than here, so this writes to both stores. Scoped to what's listed:
+     with a search on, it selects the matches, not the whole job. */
+  const globalIds = [
+    ...(sources['Estimate'] ? visibleEstimate.map(r => r.id) : []),
+    ...(sources['Change Orders'] ? visibleCO.map(r => r.id) : []),
+    ...(sources['Selections'] ? [...selectableCharges, ...selectableCredits, ...selectableStandalone] : []),
+  ];
+  const globalCostIds = costsOn ? costs.visibleIds : [];
+  const globalTotal = globalIds.length + globalCostIds.length;
+  const globalOn = globalIds.filter(id => checked[id]).length
+    + globalCostIds.filter(id => costs.checked[id]).length;
+  const globalAllChecked = globalTotal > 0 && globalOn === globalTotal;
+  const toggleGlobal = () => {
+    const v = !globalAllChecked;
+    setChecked(p => { const n = { ...p }; globalIds.forEach(id => { n[id] = v; }); return n; });
+    if (globalCostIds.length > 0) {
+      costs.setChecked(p => { const n = { ...p }; globalCostIds.forEach(id => { n[id] = v; }); return n; });
+    }
+  };
+  const selectAllCheck = (
+    <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+      <input
+        type="checkbox"
+        checked={globalAllChecked}
+        ref={el => { if (el) el.indeterminate = globalOn > 0 && !globalAllChecked; }}
+        onChange={toggleGlobal}
+        style={{ width: 16, height: 16, accentColor: 'var(--bds-color-blue-60)', cursor: 'pointer' }}
+      />
+      {/* Not just "Select all": the Record type menu a few pixels away already
+          owns that label for record types. This one is about line items. */}
+      <BdsText as="span" size="normal-md" style={{ fontSize: 13 }}>Select all line items</BdsText>
+    </label>
   );
 
   const renderAllowanceCard = (a: (typeof allowances)[number]) => (
@@ -429,6 +532,7 @@ export default function AddFromAllModal({ open, onClose, onAdd, onAddSelections,
       {visibleCharges.length > 0 && (
         <>
           {sectionHeading('Allowances with selections')}
+          {sectionToolbar(selectableCharges, visibleCharges.map(a => a.id))}
           {visibleCharges.map(renderAllowanceCard)}
         </>
       )}
@@ -438,12 +542,14 @@ export default function AddFromAllModal({ open, onClose, onAdd, onAddSelections,
         <div style={{ marginTop: visibleCharges.length > 0 ? GROUP_GAP - 10 : 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
           {sectionHeading('Credits owed')}
           <div className="selv2-section-help">You've invoiced more than the approved selections on these completed allowances. Apply the credit to this invoice, or refund it at the end of the job.</div>
+          {sectionToolbar(selectableCredits, visibleCredits.map(a => a.id))}
           {visibleCredits.map(renderAllowanceCard)}
         </div>
       )}
       {visibleStandalone.length > 0 && (
         <div style={{ marginTop: visibleCharges.length + visibleCredits.length > 0 ? GROUP_GAP - 10 : 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
           {sectionHeading('Selections')}
+          {sectionToolbar(selectableStandalone, visibleStandalone.map(g => g.id))}
           {visibleStandalone.map(g => (
             <StandaloneCard
               key={g.id}
@@ -486,16 +592,27 @@ export default function AddFromAllModal({ open, onClose, onAdd, onAddSelections,
     costs.setBillDescs(next);
     return next;
   });
+  /* Holds the space a real label would take, so an unlabeled control lands on
+     the same 38px row as Search and Record type. */
+  const labelSpacer = (
+    <BdsText as="div" size="heavy-sm" style={{ marginBottom: 8, visibility: 'hidden' }}>&nbsp;</BdsText>
+  );
+  const barRow: React.CSSProperties = { height: 38, display: 'flex', alignItems: 'center' };
   const descsCheck = (
-    <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', alignSelf: 'flex-end', paddingBottom: 8 }}>
-      <input
-        type="checkbox"
-        checked={includeDescs}
-        onChange={toggleDescs}
-        style={{ width: 16, height: 16, accentColor: 'var(--bds-color-blue-60)', cursor: 'pointer' }}
-      />
-      <BdsText as="span" size="normal-md" style={{ fontSize: 13 }}>{DESCS_LABEL}</BdsText>
-    </label>
+    <div>
+      {labelSpacer}
+      <div style={barRow}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+          <input
+            type="checkbox"
+            checked={includeDescs}
+            onChange={toggleDescs}
+            style={{ width: 16, height: 16, accentColor: 'var(--bds-color-blue-60)', cursor: 'pointer' }}
+          />
+          <BdsText as="span" size="normal-md" style={{ fontSize: 13 }}>{DESCS_LABEL}</BdsText>
+        </label>
+      </div>
+    </div>
   );
   /* The count on the button reads off this same list, so it can't drift from
      the menu's contents. */
@@ -514,9 +631,9 @@ export default function AddFromAllModal({ open, onClose, onAdd, onAddSelections,
 
       {/* Filter bar */}
       <div style={{ borderBottom: '1px solid var(--bds-color-gray-15)', flexShrink: 0 }}>
-      <div style={{ padding: '0 28px 18px', display: 'flex', gap: 32, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+      <div style={{ padding: '0 28px 18px', display: 'flex', gap: 24, alignItems: 'flex-start', flexWrap: 'wrap' }}>
         <div>
-          <BdsText as="div" size="heavy-sm" style={{ marginBottom: 6 }}>Search</BdsText>
+          <BdsText as="div" size="heavy-sm" style={{ marginBottom: 8 }}>Search</BdsText>
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, height: 38, boxSizing: 'border-box', padding: '0 12px', border: '1px solid var(--bds-color-gray-15)', borderRadius: 8, background: 'var(--bds-color-base-background)', minWidth: 260 }}>
             <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0, color: 'var(--bds-color-gray-50)' }}><circle cx="7" cy="7" r="4.5" stroke="currentColor" strokeWidth="1.4"/><path d="M10.5 10.5L14 14" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
             <input
@@ -534,7 +651,7 @@ export default function AddFromAllModal({ open, onClose, onAdd, onAddSelections,
           </div>
         </div>
         <div>
-          <BdsText as="div" size="heavy-sm" style={{ marginBottom: 6 }}>Record type</BdsText>
+          <BdsText as="div" size="heavy-sm" style={{ marginBottom: 8 }}>Record type</BdsText>
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, flexWrap: 'wrap' }}>
             <div style={{ position: 'relative' }}>
               <BdsButton
@@ -598,11 +715,11 @@ export default function AddFromAllModal({ open, onClose, onAdd, onAddSelections,
             {costsOn && <CostsDateFilter s={costs} />}
             {costsOptions.length > 0 && (
               <div>
-                <BdsText as="div" size="heavy-sm" style={{ marginBottom: 6 }}>Costs options</BdsText>
+                <BdsText as="div" size="heavy-sm" style={{ marginBottom: 8 }}>Costs options</BdsText>
                 <div style={{ position: 'relative' }}>
                   <BdsButton
                     displayType="secondary"
-                    text={`${costsOptions.filter(o => o.on).length} of ${costsOptions.length} on`}
+                    text={`${costsOptions.filter(o => o.on).length} of ${costsOptions.length}`}
                     iconRight={<BdsIcon name="chevron-down" size={12} />}
                     onClick={() => setOptionsMenuOpen(o => !o)}
                   />
@@ -622,8 +739,14 @@ export default function AddFromAllModal({ open, onClose, onAdd, onAddSelections,
         ) : (
           descsCheck
         )}
-        {sources['Selections'] && selectionCardIds.length > 0 && (
-          <div style={{ marginLeft: 'auto', alignSelf: 'center' }}>{expandAllBtn}</div>
+        {(globalTotal > 0 || headerExpandIds.length > 0 || costsExpandable) && (
+          <div style={{ marginLeft: 'auto' }}>
+            {labelSpacer}
+            <div style={{ ...barRow, gap: 16 }}>
+              {globalTotal > 0 && selectAllCheck}
+              {(headerExpandIds.length > 0 || costsExpandable) && expandAllBtn}
+            </div>
+          </div>
         )}
       </div>
       </div>

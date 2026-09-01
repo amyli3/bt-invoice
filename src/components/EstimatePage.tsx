@@ -86,6 +86,10 @@ interface Props {
   onUnlock?: () => void;
   existingDrawSchedule?: DrawScheduleLine[];
   onScheduleCreated?: (draws: DrawScheduleLine[]) => void;
+  /* Deleting the schedule is reachable from the same place it is edited, so a
+     builder who opened it to review against a changed contract price can drop
+     it instead of being stuck with draws that no longer fit. */
+  onScheduleDeleted?: () => void;
   onBuildProposal?: () => void;
   job: Job;
   /* Which billing model this estimate is being run for. Open book bills what
@@ -96,7 +100,7 @@ interface Props {
   billingModel?: 'fixed' | 'open-book';
 }
 
-export default function EstimatePage({ jobOpen, onToggleJob, locked, onSendToBudget, onUnlock, existingDrawSchedule, onScheduleCreated, onBuildProposal, job, billingModel = 'fixed' }: Props) {
+export default function EstimatePage({ jobOpen, onToggleJob, locked, onSendToBudget, onUnlock, existingDrawSchedule, onScheduleCreated, onScheduleDeleted, onBuildProposal, job, billingModel = 'fixed' }: Props) {
   const [groupBy, setGroupBy] = useState<'proposal' | 'costcode'>('proposal');
   // The Send to Budget flow is a confirm step plus one optional side-step in
   // the same dialog: setting up a draw schedule, since the contract price it
@@ -211,6 +215,7 @@ export default function EstimatePage({ jobOpen, onToggleJob, locked, onSendToBud
           totalOwnerPrice={totalOwnerPrice}
           margin={(estimatedProfit / totalOwnerPrice) * 100}
           hasDrawSchedule={hasDrawSchedule}
+          draws={existingDrawSchedule}
           /* Draws split a locked contract price, so they're a fixed-price
              instrument. An existing schedule stays reachable either way, so
              changing the contract type can't strand one out of sight. */
@@ -229,6 +234,10 @@ export default function EstimatePage({ jobOpen, onToggleJob, locked, onSendToBud
           existingDraws={existingDrawSchedule}
           defaultTotal={totalOwnerPrice}
           onClose={() => setBudgetFlowStep('confirm')}
+          onDelete={onScheduleDeleted && (() => {
+            onScheduleDeleted();
+            setBudgetFlowStep('confirm');
+          })}
           onSave={(draws) => {
             /* Building a schedule here settles how the job bills without
                having to ask: the builder just split the contract into draws,

@@ -1,6 +1,9 @@
 import { useState } from 'react';
 import { allAllowances, allSelections } from '../allowanceMockData';
+import { JOB_SCHEDULE_ITEMS } from '../mockData';
 import { BdsButton, BdsIcon } from '../bds';
+import PaymentScheduleModal from './PaymentScheduleModal';
+import { type DrawScheduleLine } from '../types';
 
 const fmt = (n: number) => n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -27,27 +30,19 @@ const proposalItems: ProposalItem[] = allAllowances.flatMap(allowance => {
 });
 const proposalSubtotal = proposalItems.reduce((s, i) => s + i.price, 0);
 
-type DueTrigger = 'Upon signing' | 'Upon approval' | 'At project start' | 'At project midpoint' | 'Upon substantial completion' | 'Upon final completion' | 'Custom date';
-const DUE_TRIGGERS: DueTrigger[] = ['Upon signing', 'Upon approval', 'At project start', 'At project midpoint', 'Upon substantial completion', 'Upon final completion', 'Custom date'];
-
-type Milestone = { id: string; name: string; due: DueTrigger; dueDate: string; amountType: 'percent' | 'flat'; amount: number };
-
-const STANDARD_TEMPLATE: Omit<Milestone, 'id'>[] = [
-  { name: 'Deposit', due: 'Upon signing', dueDate: '', amountType: 'percent', amount: 10 },
-  { name: 'Progress payment', due: 'At project midpoint', dueDate: '', amountType: 'percent', amount: 60 },
-  { name: 'Final payment', due: 'Upon final completion', dueDate: '', amountType: 'percent', amount: 30 },
-];
-
-let milestoneSeq = 0;
-const nextMilestoneId = () => `ms-${++milestoneSeq}`;
-
-const milestoneAmountDollars = (m: Milestone) => m.amountType === 'percent' ? proposalSubtotal * m.amount / 100 : m.amount;
-
 /* Open book has no contract price to break into milestones, so the thing a
    client signs up to is a cadence: how often they'll be billed and starting
    when. Builders already write this into their proposals in prose, so the
    proposal is where it's captured, and the summary line is the sentence they
    would have typed. */
+/* Net terms answer a different question than the milestone triggers do. A
+   trigger says what event earns the payment ("upon signing"); the terms say how
+   long the client has to pay once that invoice goes out. Both models need it,
+   so it sits above the fixed/open book split, and it's the field that gives an
+   invoice a deadline instead of a blank Due date. */
+type Terms = 'Not specified' | 'Due on receipt' | 'Net 15' | 'Net 30' | 'Net 45' | 'Net 60' | 'Custom';
+const TERMS_OPTIONS: Terms[] = ['Not specified', 'Due on receipt', 'Net 15', 'Net 30', 'Net 45', 'Net 60', 'Custom'];
+
 type Repeat = 'Weekly' | 'Every 2 weeks' | 'Monthly' | 'Quarterly';
 const REPEATS: Repeat[] = ['Weekly', 'Every 2 weeks', 'Monthly', 'Quarterly'];
 const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
@@ -61,16 +56,39 @@ interface Props {
   /* Open book swaps the milestone payment schedule for an invoicing cadence:
      there are no fixed amounts to promise, only when the bills arrive. */
   billingModel?: 'fixed' | 'open-book';
+  /* Contract type is settable here, not just inherited from the estimate: the
+     proposal is where the builder is deciding what to promise the client, and
+     the answer is the same field Job Details records. Passing a handler is what
+     turns the selector on; without one the page reads whatever it was given. */
+  onBillingModelChange?: (model: 'fixed' | 'open-book') => void;
+  /* Whether a construction loan funds this job. The same field Job Details
+     writes, not a second copy: two places to set one fact is how the
+     invoicing-mode recommendation ends up disagreeing with the proposal. The
+     proposal is simply the earlier of the two surfaces, and it's where the
+     answer changes what the client reads. */
+  fundedByLoan?: boolean;
+  onFundedByLoanChange?: (funded: boolean) => void;
 }
 
-export default function ProposalPage({ onBack, clientName = 'Amy', jobCode = 'BWF-26', billingModel = 'fixed' }: Props) {
+export default function ProposalPage({ onBack, clientName = 'Amy', jobCode = 'BWF-26', billingModel = 'fixed', onBillingModelChange, fundedByLoan, onFundedByLoanChange }: Props) {
   const isOpenBook = billingModel === 'open-book';
-  const [tab, setTab] = useState<'details' | 'preview'>('details');
   const [collectSignatures, setCollectSignatures] = useState(true);
   const [title, setTitle] = useState(`Proposal for ${clientName} (${jobCode})`);
   const [approvalDeadline, setApprovalDeadline] = useState('');
   const [introText, setIntroText] = useState('');
   const [closingText, setClosingText] = useState('');
+
+  /* Net 30 rather than blank: leaving it unset is how invoices end up with no
+     deadline, which is the case builders are trying to get out of. "Not
+     specified" is still there for whoever writes terms into the contract. */
+  const [terms, setTerms] = useState<Terms>('Net 30');
+  const [customNetDays, setCustomNetDays] = useState(30);
+
+  /* Whether this client's invoices have to arrive as certified pay
+     applications. Local to the proposal for now: nothing else in the prototype
+     records it per job yet, and the answer's job is to set what the first
+     invoice opens as. */
+  const [requiresPayApps, setRequiresPayApps] = useState(false);
 
   const [requestDeposit, setRequestDeposit] = useState(false);
   const [depositType, setDepositType] = useState<'percent' | 'flat'>('percent');
@@ -78,20 +96,39 @@ export default function ProposalPage({ onBack, clientName = 'Amy', jobCode = 'BW
   const [depositFlat, setDepositFlat] = useState(Math.round(proposalSubtotal * 0.1));
 
   const [scheduleEnabled, setScheduleEnabled] = useState(false);
-  const [milestones, setMilestones] = useState<Milestone[]>([]);
+  /* The same draw schedule the Invoices grid edits, in the same shape, so the
+     proposal isn't a second place that models this differently. */
+  const [draws, setDraws] = useState<DrawScheduleLine[]>([]);
+  const [showScheduleModal, setShowScheduleModal] = useState(false);
 
   // Open book's cadence, mirroring the recurring-invoice setup.
   const [cadenceEnabled, setCadenceEnabled] = useState(true);
   const [repeat, setRepeat] = useState<Repeat>('Monthly');
   const [cadenceStart, setCadenceStart] = useState('');
+  /* A cadence usually starts when work does, and the job's schedule already
+     says when that is. Linking beats typing a date twice: if the phase moves,
+     the first invoice moves with it instead of going out against a date that
+     is no longer true. Same "Link to schedule item" pattern the invoice date
+     uses, so it's one idea in two places rather than two. */
+  const [startMode, setStartMode] = useState<'date' | 'schedule'>('date');
+  const [startScheduleId, setStartScheduleId] = useState(JOB_SCHEDULE_ITEMS[0].id);
   const [onMode, setOnMode] = useState<'day' | 'weekday'>('day');
   const [dayOfMonth, setDayOfMonth] = useState(1);
   const [ordinal, setOrdinal] = useState('First');
   const [weekday, setWeekday] = useState('Friday');
   const usesDayOfMonth = repeat === 'Monthly' || repeat === 'Quarterly';
-  const startLabel = cadenceStart
-    ? new Date(cadenceStart + 'T00:00:00').toLocaleDateString('en-US', { month: 'numeric', day: '2-digit', year: 'numeric' })
-    : null;
+  const startScheduleItem = JOB_SCHEDULE_ITEMS.find(i => i.id === startScheduleId) ?? JOB_SCHEDULE_ITEMS[0];
+  /* One start date, whichever way it was set, so everything downstream (the
+     summary line, the client's paragraph) reads from the same value. */
+  const effectiveStart = startMode === 'schedule' ? startScheduleItem.start : cadenceStart;
+  const fmtStart = (iso: string) => new Date(iso + 'T00:00:00').toLocaleDateString('en-US', { month: 'numeric', day: '2-digit', year: 'numeric' });
+  const startLabel = effectiveStart ? fmtStart(effectiveStart) : null;
+  /* The linked version names the phase rather than only the date: that's the
+     promise the client is being given, and the date is what it works out to
+     today. */
+  const startPhrase = startMode === 'schedule'
+    ? `when ${startScheduleItem.name} starts (${fmtStart(startScheduleItem.start)})`
+    : startLabel;
   /* One sentence, assembled from whatever is set, so the builder reads the
      promise the client will read rather than inferring it from four controls. */
   const cadenceSentence = (() => {
@@ -102,33 +139,40 @@ export default function ProposalPage({ onBack, clientName = 'Amy', jobCode = 'BW
     const when = usesDayOfMonth
       ? (onMode === 'day' ? `${DAY_ORDINALS[dayOfMonth - 1]} of ${every}` : `${ordinal.toLowerCase()} ${weekday} of ${every}`)
       : `${weekday} of ${every}`;
-    return { when, startLabel };
+    return { when, startLabel: startPhrase };
   })();
+
+  const netDays = terms === 'Custom' ? customNetDays : Number(terms.replace('Net ', '')) || 0;
+  /* The sentence the client will read, assembled here so the builder sees the
+     same words in the setup and in the preview. */
+  const termsSentence = terms === 'Not specified' ? null
+    : terms === 'Due on receipt' ? 'Invoices are due upon receipt.'
+    : `Invoices are due within ${netDays} days of the invoice date.`;
 
   const depositAmount = depositType === 'percent' ? proposalSubtotal * depositPercent / 100 : depositFlat;
 
-  const applyTemplate = () => {
-    setMilestones(STANDARD_TEMPLATE.map(m => ({ ...m, id: nextMilestoneId() })));
-  };
-  const addMilestone = () => {
-    setMilestones(prev => [...prev, { id: nextMilestoneId(), name: '', due: 'Upon signing', dueDate: '', amountType: 'percent', amount: 0 }]);
-  };
-  const updateMilestone = (id: string, patch: Partial<Milestone>) => {
-    setMilestones(prev => prev.map(m => m.id === id ? { ...m, ...patch } : m));
-  };
-  const removeMilestone = (id: string) => {
-    setMilestones(prev => prev.filter(m => m.id !== id));
-  };
+  /* A deposit and Draw #1 are the same payment, so the deposit owns that row
+     rather than being scheduled twice. Derived on read instead of copied into
+     state, so changing the deposit can't leave a stale draw behind. */
+  const depositPercentOfTotal = proposalSubtotal > 0 ? (depositAmount / proposalSubtotal) * 100 : 0;
+  const depositOwnsFirstDraw = requestDeposit && depositAmount > 0;
+  const scheduleDraws: DrawScheduleLine[] = depositOwnsFirstDraw
+    ? draws.map((d, i) => i === 0
+      ? { ...d, title: 'Deposit', milestone: 'Project Start', amount: Math.round(depositAmount) }
+      : d)
+    : draws;
 
-  const scheduledTotal = milestones.reduce((s, m) => s + milestoneAmountDollars(m), 0);
+  const scheduledTotal = scheduleDraws.reduce((s, d) => s + d.amount, 0);
   const unscheduled = proposalSubtotal - scheduledTotal;
   const isFullyAllocated = Math.abs(unscheduled) < 0.01;
 
-  const dueLabel = (m: Milestone) => m.due === 'Custom date' && m.dueDate ? new Date(m.dueDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : m.due;
-
   return (
-    <div style={{ fontFamily: "'Inter', sans-serif", background: '#f1f5f9', minHeight: '100%' }}>
-      <div style={{ maxWidth: 960, margin: '24px auto', background: 'white', borderRadius: 12, border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+    /* Split screen: what the builder fills in on the left, what the client will
+       receive on the right, updating as they type. The old Details / Client
+       preview tabs made the document something you went and checked; side by
+       side it's the thing being edited. */
+    <div style={{ fontFamily: "'Inter', sans-serif", background: '#f1f5f9', height: '100%', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+      <div style={{ background: 'white', flexShrink: 0 }}>
         {/* Header */}
         <div style={{ padding: '20px 28px', borderBottom: '1px solid #e2e8f0' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -149,28 +193,16 @@ export default function ProposalPage({ onBack, clientName = 'Amy', jobCode = 'BW
               <BdsButton text="Send" displayType="primary" icon={<BdsIcon name="send" size={14} />} />
             </div>
           </div>
-
-          {/* Tabs */}
-          <div style={{ display: 'flex', gap: 0, marginTop: 16, borderBottom: '2px solid #e2e8f0', marginBottom: -20, marginLeft: -28, marginRight: -28, paddingLeft: 28 }}>
-            {(['details', 'preview'] as const).map(key => (
-              <button
-                key={key}
-                onClick={() => setTab(key)}
-                style={{
-                  padding: '10px 16px', fontSize: 13, fontFamily: 'inherit', cursor: 'pointer',
-                  background: 'none', border: 'none', marginBottom: -2,
-                  color: tab === key ? '#0065db' : '#64748b',
-                  fontWeight: tab === key ? 600 : 400,
-                  borderBottom: tab === key ? '2px solid #0065db' : '2px solid transparent',
-                }}
-              >
-                {key === 'details' ? 'Details' : 'Client preview'}
-              </button>
-            ))}
-          </div>
         </div>
+      </div>
 
-        {tab === 'details' ? (
+      <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
+        {/* Left: the form. Its own scroll, so a long form never pushes the
+            document out of view. */}
+        <div style={{
+          width: 'clamp(400px, 42%, 640px)', flexShrink: 0, background: 'white',
+          borderRight: '1px solid #e2e8f0', overflowY: 'auto',
+        }}>
           <div style={{ padding: '24px 28px' }}>
             {/* Signatures */}
             <div style={{ marginBottom: 24 }}>
@@ -202,7 +234,123 @@ export default function ProposalPage({ onBack, clientName = 'Amy', jobCode = 'BW
             <div style={{ marginBottom: 28, borderTop: '1px solid #e2e8f0', paddingTop: 20 }}>
               <div style={{ fontSize: 15, fontWeight: 700, color: '#0f172a', marginBottom: 6 }}>Payment</div>
               <div style={{ fontSize: 13, color: '#64748b', marginBottom: 16 }}>
-                Set up how and when the client pays for this proposal. Proposal total: <strong style={{ color: '#0f172a' }}>${fmt(proposalSubtotal)}</strong>
+                Set up how and when the client pays for this job. Contract total: <strong style={{ color: '#0f172a' }}>${fmt(proposalSubtotal)}</strong>
+              </div>
+
+              {/* Contract type ahead of everything else in this section:
+                  fixed price promises amounts, open book promises a cadence, so
+                  it decides which of the two setups below is even shown. */}
+              {onBillingModelChange && (
+                <div style={{ marginBottom: 20 }}>
+                  <div style={{ ...lbl, marginBottom: 8 }}>Contract type <span style={{ color: '#dc2626' }}>*</span></div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxWidth: 560 }}>
+                    {([
+                      { key: 'fixed', label: 'Fixed price', blurb: 'You set the price for the owner' },
+                      { key: 'open-book', label: 'Open book', blurb: 'Actual costs plus markup/margin (i.e. Cost Plus and Time & Materials)' },
+                    ] as const).map(opt => (
+                      <label key={opt.key} style={{
+                        display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 12px', borderRadius: 6, cursor: 'pointer',
+                        border: billingModel === opt.key ? '2px solid #0065db' : '1px solid #e2e8f0',
+                        background: billingModel === opt.key ? '#eff6ff' : 'white',
+                      }}>
+                        <input
+                          type="radio" name="proposal-contract-type"
+                          checked={billingModel === opt.key}
+                          onChange={() => onBillingModelChange(opt.key)}
+                          style={{ width: 16, height: 16, marginTop: 2, accentColor: '#0065db' }}
+                        />
+                        <div>
+                          <div style={{ fontSize: 13, fontWeight: 600, color: '#0f172a' }}>{opt.label}</div>
+                          <div style={{ fontSize: 12, color: '#64748b', lineHeight: 1.5 }}>{opt.blurb}</div>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Funding first, because it changes what the rest of this
+                  section means. A lender disburses after inspection, so on a
+                  loan-funded job the net terms below are not what decides when
+                  the money actually lands. */}
+              {onFundedByLoanChange && (
+                <div style={{ marginBottom: 20 }}>
+                  <div style={{ ...lbl, marginBottom: 8 }}>Funded by construction loan</div>
+                  <div style={{ display: 'flex', gap: 20 }}>
+                    {([['yes', true], ['no', false]] as const).map(([label, val]) => (
+                      <label key={label} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#334155', cursor: 'pointer' }}>
+                        <input
+                          type="radio" name="proposal-funded-by-loan"
+                          checked={fundedByLoan === val}
+                          onChange={() => onFundedByLoanChange(val)}
+                          style={{ width: 16, height: 16, accentColor: '#0065db' }}
+                        />
+                        {label === 'yes' ? 'Yes' : 'No'}
+                      </label>
+                    ))}
+                  </div>
+                  {/* Sub-question, because the lender is usually who hands
+                      the builder the form: a loan-funded or commercial job is
+                      where G702/G703 gets required. Asked here rather than
+                      discovered at the first invoice, since it decides what
+                      every invoice on this job looks like. Vocabulary stays as
+                      the AIA forms name it. */}
+                  <div style={{ marginTop: 14, marginLeft: 24, paddingLeft: 14, borderLeft: '2px solid #e2e8f0' }}>
+                    <div style={{ ...lbl, marginBottom: 8 }}>Does this client require pay applications (G702/G703)?</div>
+                    <div style={{ display: 'flex', gap: 20 }}>
+                      {([['Yes', true], ['No', false]] as const).map(([label, val]) => (
+                        <label key={label} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#334155', cursor: 'pointer' }}>
+                          <input
+                            type="radio" name="proposal-pay-apps"
+                            checked={requiresPayApps === val}
+                            onChange={() => setRequiresPayApps(val)}
+                            style={{ width: 16, height: 16, accentColor: '#0065db' }}
+                          />
+                          {label}
+                        </label>
+                      ))}
+                    </div>
+                    <div style={{ fontSize: 12, color: '#64748b', marginTop: 6, maxWidth: 540, lineHeight: 1.5 }}>
+                      {requiresPayApps
+                        ? 'Invoices on this job open as progress invoices: percent complete against a schedule of values pulled from your estimate, in G702/G703 format.'
+                        : fundedByLoan
+                          ? 'Lenders and their inspectors often require them. Worth confirming before the first draw.'
+                          : 'Invoices on this job open as standard invoices.'}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Terms first: it frames every invoice the job will send, where
+                  the deposit and the schedule are each one payment. Fixed and
+                  open book both get it. */}
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10 }}>
+                  <div style={{ width: 180 }}>
+                    <label style={lbl}>Payment terms</label>
+                    <select style={inp} value={terms} onChange={e => setTerms(e.target.value as Terms)}>
+                      {TERMS_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                  </div>
+                  {terms === 'Custom' && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontSize: 13, color: '#64748b' }}>Net</span>
+                      <input
+                        type="number" min={1} style={{ ...inp, width: 80 }}
+                        value={customNetDays} onChange={e => setCustomNetDays(Number(e.target.value))}
+                      />
+                      <span style={{ fontSize: 13, color: '#64748b' }}>days</span>
+                    </div>
+                  )}
+                </div>
+                <div style={{ fontSize: 12, color: '#64748b', marginTop: 6, maxWidth: 560, lineHeight: 1.5 }}>
+                  {/* Terms are job-level, not per document: every invoice this
+                      job sends gets its due date from here, including ones
+                      created outside this proposal. */}
+                  {termsSentence
+                    ? <>{termsSentence} Buildertrend applies this to every invoice on this job.</>
+                    : <>No terms will appear on the proposal, and invoices for this job will go out without a due date.</>}
+                </div>
               </div>
 
               {/* Deposit / payment upon approval */}
@@ -212,9 +360,12 @@ export default function ProposalPage({ onBack, clientName = 'Amy', jobCode = 'BW
               </label>
 
               {requestDeposit && (
-                <div style={{ marginTop: 12, marginLeft: 24, maxWidth: 460, background: 'var(--g50)', border: '1px solid var(--g200)', borderRadius: 'var(--radius)', padding: '14px 16px' }}>
-                  <div style={{ display: 'inline-flex', marginBottom: 12, border: '1px solid #B1B4B5', borderRadius: 5, overflow: 'hidden' }}>
-                    {(['percent', 'flat'] as const).map(t => (
+                <div style={{ marginTop: 12, marginLeft: 24, maxWidth: 620, background: 'var(--g50)', border: '1px solid var(--g200)', borderRadius: 'var(--radius)', padding: '14px 16px' }}>
+                  {/* Flat fee first, matching the order the deposit dialog uses
+                      elsewhere. Copy is the contract-price vocabulary rather
+                      than "% of total", since that's the number being cut. */}
+                  <div style={{ display: 'inline-flex', marginBottom: 14, border: '1px solid #B1B4B5', borderRadius: 5, overflow: 'hidden' }}>
+                    {(['flat', 'percent'] as const).map(t => (
                       <button
                         key={t}
                         onClick={() => setDepositType(t)}
@@ -229,24 +380,67 @@ export default function ProposalPage({ onBack, clientName = 'Amy', jobCode = 'BW
                           position: 'relative', zIndex: depositType === t ? 1 : 0,
                         }}
                       >
-                        {t === 'percent' ? '% of total' : 'Flat amount'}
+                        {t === 'percent' ? '% of contract price' : 'Flat fee'}
                       </button>
                     ))}
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <div style={{ position: 'relative', width: 140 }}>
-                      <span style={{ position: 'absolute', left: 10, top: 8, fontSize: 13, color: '#64748b' }}>{depositType === 'percent' ? '' : '$'}</span>
-                      <input
-                        type="number"
-                        style={{ ...inp, paddingLeft: depositType === 'flat' ? 20 : 10, paddingRight: depositType === 'percent' ? 20 : 10 }}
-                        value={depositType === 'percent' ? depositPercent : depositFlat}
-                        onChange={e => depositType === 'percent' ? setDepositPercent(Number(e.target.value)) : setDepositFlat(Number(e.target.value))}
-                      />
-                      {depositType === 'percent' && <span style={{ position: 'absolute', right: 10, top: 8, fontSize: 13, color: '#64748b' }}>%</span>}
+
+                  {/* Percent needs its arithmetic shown: what it's a cut of,
+                      the cut, what that comes to, read across one line. A flat
+                      fee is already the answer, so it's just the field. */}
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 24, flexWrap: 'wrap' }}>
+                    {depositType === 'percent' && (
+                      <div>
+                        <div style={fieldLbl}>Contract price</div>
+                        <div style={fieldVal}>${fmt(proposalSubtotal)}</div>
+                      </div>
+                    )}
+
+                    <div>
+                      <div style={fieldLbl}>
+                        {depositType === 'percent' ? '% of contract price' : 'Flat fee'} <span style={{ color: '#dc2626' }}>*</span>
+                      </div>
+                      {/* Longhand borders on every side: mixing the `border`
+                          shorthand with a single-side longhand drops the
+                          shorthand on the others, and the UA's 2px inset border
+                          shows through where the seam should be. */}
+                      <div style={{ display: 'flex', alignItems: 'stretch', width: 140 }}>
+                        {depositType === 'flat' && <span style={affix}>$</span>}
+                        <input
+                          type="number"
+                          style={{
+                            ...inpNoBorder,
+                            flex: 1, minWidth: 0,
+                            borderTop: FIELD_BORDER,
+                            borderBottom: FIELD_BORDER,
+                            borderLeft: depositType === 'flat' ? 'none' : FIELD_BORDER,
+                            borderRight: depositType === 'percent' ? 'none' : FIELD_BORDER,
+                            borderRadius: depositType === 'flat' ? '0 6px 6px 0' : '6px 0 0 6px',
+                          }}
+                          value={depositType === 'percent' ? depositPercent : depositFlat}
+                          /* Same rule as the draws: a payment on approval is a
+                             cut of the contract price, so it stops at the whole
+                             thing. */
+                          onChange={e => {
+                            const v = Number(e.target.value);
+                            if (depositType === 'percent') setDepositPercent(Math.max(0, Math.min(v, 100)));
+                            else setDepositFlat(Math.max(0, Math.min(v, Math.round(proposalSubtotal))));
+                          }}
+                        />
+                        {depositType === 'percent' && <span style={{ ...affix, borderRadius: '0 6px 6px 0' }}>%</span>}
+                      </div>
                     </div>
-                    <div style={{ fontSize: 13, color: '#64748b' }}>
-                      = <strong style={{ color: '#0f172a' }}>${fmt(depositAmount)}</strong> due when the client approves
-                    </div>
+
+                    {depositType === 'percent' && (
+                      <div>
+                        <div style={fieldLbl}>Amount</div>
+                        <div style={fieldVal}>${fmt(depositAmount)}</div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div style={{ fontSize: 12, color: '#64748b', marginTop: 12 }}>
+                    Due when the client approves the proposal.
                   </div>
                 </div>
               )}
@@ -263,19 +457,52 @@ export default function ProposalPage({ onBack, clientName = 'Amy', jobCode = 'BW
 
                   {cadenceEnabled && (
                     <div style={{ marginTop: 12, marginLeft: 24, maxWidth: 620 }}>
-                      <div style={{ fontSize: 12, color: '#64748b', marginBottom: 14 }}>
-                        This job bills actual costs, so the proposal states how often you invoice rather than fixed
-                        amounts. Buildertrend uses the same cadence to line up each invoice once the job is running.
-                      </div>
-
                       <div style={{ display: 'grid', gridTemplateColumns: '110px 1fr', gap: '12px 14px', alignItems: 'center' }}>
                         <label style={{ ...lbl, marginBottom: 0 }}>Repeat</label>
                         <select style={{ ...inp, maxWidth: 320 }} value={repeat} onChange={e => setRepeat(e.target.value as Repeat)}>
                           {REPEATS.map(r => <option key={r} value={r}>{r}</option>)}
                         </select>
 
-                        <label style={{ ...lbl, marginBottom: 0 }}>Start</label>
-                        <input type="date" style={{ ...inp, maxWidth: 320 }} value={cadenceStart} onChange={e => setCadenceStart(e.target.value)} />
+                        <label style={{ ...lbl, marginBottom: 0, alignSelf: 'start', paddingTop: 8 }}>Start</label>
+                        <div style={{ maxWidth: 320 }}>
+                          {/* Date or schedule item, the same two answers the
+                              invoice date offers. */}
+                          <div style={{ display: 'inline-flex', marginBottom: 8, border: '1px solid #B1B4B5', borderRadius: 5, overflow: 'hidden' }}>
+                            {([['date', 'Date'], ['schedule', 'Schedule item']] as const).map(([key, label]) => (
+                              <button
+                                key={key}
+                                type="button"
+                                onClick={() => setStartMode(key)}
+                                style={{
+                                  padding: '6px 14px', fontSize: 13, fontFamily: 'inherit', cursor: 'pointer',
+                                  border: startMode === key ? '1px solid #0763FB' : '1px solid transparent',
+                                  borderRadius: startMode === key ? 4 : 0,
+                                  background: 'white',
+                                  color: startMode === key ? '#004FD6' : '#26292E',
+                                  fontWeight: startMode === key ? 500 : 400,
+                                  margin: startMode === key ? -1 : 0,
+                                  position: 'relative', zIndex: startMode === key ? 1 : 0,
+                                }}
+                              >
+                                {label}
+                              </button>
+                            ))}
+                          </div>
+                          {startMode === 'date' ? (
+                            <input type="date" style={inp} value={cadenceStart} onChange={e => setCadenceStart(e.target.value)} />
+                          ) : (
+                            <>
+                              <select style={inp} value={startScheduleId} onChange={e => setStartScheduleId(e.target.value)}>
+                                {JOB_SCHEDULE_ITEMS.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+                              </select>
+                              {/* What the link resolves to today, and what
+                                  happens if the schedule moves. */}
+                              <div style={{ fontSize: 12, color: '#64748b', marginTop: 6, lineHeight: 1.5 }}>
+                                Starts {fmtStart(startScheduleItem.start)}. If the phase moves, the first invoice moves with it.
+                              </div>
+                            </>
+                          )}
+                        </div>
 
                         <label style={{ ...lbl, marginBottom: 0, alignSelf: usesDayOfMonth ? 'start' : 'center', paddingTop: usesDayOfMonth ? 8 : 0 }}>On</label>
                         {usesDayOfMonth ? (
@@ -320,90 +547,70 @@ export default function ProposalPage({ onBack, clientName = 'Amy', jobCode = 'BW
               {/* Payment schedule */}
               {!isOpenBook && (
               <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600, color: '#0f172a', cursor: 'pointer', marginTop: 20 }}>
-                <input type="checkbox" checked={scheduleEnabled} onChange={e => setScheduleEnabled(e.target.checked)} style={{ width: 16, height: 16, accentColor: '#0065db' }} />
+                <input
+                  type="checkbox" checked={scheduleEnabled}
+                  onChange={e => setScheduleEnabled(e.target.checked)}
+                  style={{ width: 16, height: 16, accentColor: '#0065db' }}
+                />
                 Include a payment schedule on this proposal
               </label>
               )}
 
               {!isOpenBook && scheduleEnabled && (
                 <div style={{ marginTop: 12, marginLeft: 24 }}>
-                  <div style={{ fontSize: 12, color: '#64748b', marginBottom: 10 }}>
-                    The schedule below will be appended to the proposal so the client can see how payments break down over the course of the project.
+                  <div style={{ fontSize: 12, color: '#64748b', marginBottom: 12, maxWidth: 620 }}>
+                    The schedule is appended to the proposal so the client can see how payments break down over the
+                    course of the project. It's the same schedule the Invoices page uses to create a draft per draw.
                   </div>
 
-                  {milestones.length === 0 && (
-                    <button
-                      onClick={applyTemplate}
-                      style={{ fontSize: 13, padding: '6px 14px', border: '1px solid #e2e8f0', borderRadius: 6, background: 'white', cursor: 'pointer', color: '#0065db', fontFamily: 'inherit', fontWeight: 500, marginBottom: 14 }}
-                    >
-                      Use standard 3-payment schedule
-                    </button>
-                  )}
-
-                  {milestones.length > 0 && (
-                    <div style={{ border: '1px solid #e2e8f0', borderRadius: 8, overflow: 'hidden', marginBottom: 10 }}>
-                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-                        <thead>
-                          <tr style={{ borderBottom: '2px solid #e2e8f0', background: '#f8fafc' }}>
-                            <th style={th}>Milestone</th>
-                            <th style={th}>Due</th>
-                            <th style={{ ...th, width: 100 }}>Type</th>
-                            <th style={{ ...th, width: 110 }}>Amount</th>
-                            <th style={{ ...th, textAlign: 'right', width: 110 }}>= $</th>
-                            <th style={{ ...th, width: 32 }}></th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {milestones.map(m => (
-                            <tr key={m.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                              <td style={td}>
-                                <input style={{ ...inp, minWidth: 140 }} placeholder="Milestone name" value={m.name} onChange={e => updateMilestone(m.id, { name: e.target.value })} />
-                              </td>
-                              <td style={td}>
-                                <select style={{ ...inp, minWidth: 160 }} value={m.due} onChange={e => updateMilestone(m.id, { due: e.target.value as DueTrigger })}>
-                                  {DUE_TRIGGERS.map(d => <option key={d} value={d}>{d}</option>)}
-                                </select>
-                                {m.due === 'Custom date' && (
-                                  <input type="date" style={{ ...inp, marginTop: 6, minWidth: 160 }} value={m.dueDate} onChange={e => updateMilestone(m.id, { dueDate: e.target.value })} />
-                                )}
-                              </td>
-                              <td style={td}>
-                                <select style={inp} value={m.amountType} onChange={e => updateMilestone(m.id, { amountType: e.target.value as 'percent' | 'flat' })}>
-                                  <option value="percent">%</option>
-                                  <option value="flat">$</option>
-                                </select>
-                              </td>
-                              <td style={td}>
-                                <input type="number" style={inp} value={m.amount} onChange={e => updateMilestone(m.id, { amount: Number(e.target.value) })} />
-                              </td>
-                              <td style={{ ...td, textAlign: 'right', fontWeight: 600 }}>${fmt(milestoneAmountDollars(m))}</td>
-                              <td style={{ ...td, textAlign: 'center' }}>
-                                <button onClick={() => removeMilestone(m.id)} title="Remove" style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: 2 }}>
-                                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-
-                  {milestones.length > 0 && (
+                  {/* Nothing set yet: one button into the same editor the grid
+                      opens, rather than a second inline table that models draws
+                      its own way. */}
+                  {scheduleDraws.length === 0 ? (
+                    <BdsButton
+                      text="Payment schedule" displayType="secondary" icon={<BdsIcon name="plus" size={14} />}
+                      onClick={() => setShowScheduleModal(true)}
+                    />
+                  ) : (
                     <>
-                      <button
-                        onClick={addMilestone}
-                        style={{ fontSize: 13, color: '#0065db', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 500, padding: '4px 0', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}
-                      >
-                        <span style={{ width: 18, height: 18, borderRadius: '50%', background: '#0065db', color: 'white', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700 }}>+</span>
-                        Add milestone
-                      </button>
-                      <div style={{ fontSize: 12, fontWeight: 500, color: isFullyAllocated ? '#15803d' : '#b45309' }}>
-                        {isFullyAllocated
-                          ? `✓ Fully allocated — ${fmt(scheduledTotal)} scheduled`
-                          : unscheduled > 0
-                            ? `$${fmt(unscheduled)} of the proposal total is not yet scheduled`
-                            : `Schedule exceeds the proposal total by $${fmt(-unscheduled)}`}
+                      {/* What was set, read-only. Editing happens in the modal,
+                          so there's one editor for a draw schedule. */}
+                      <div style={{ border: '1px solid #e2e8f0', borderRadius: 8, overflow: 'hidden', marginBottom: 12, maxWidth: 620 }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                          <thead>
+                            <tr style={{ borderBottom: '2px solid #e2e8f0', background: '#f8fafc' }}>
+                              <th style={{ ...th, width: 80 }}></th>
+                              <th style={th}>Invoice title</th>
+                              <th style={th}>Schedule item</th>
+                              <th style={{ ...th, textAlign: 'right' }}>Amount</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {scheduleDraws.map((d, i) => (
+                              <tr key={d.drawNumber} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                                <td style={{ ...td, fontWeight: 600, color: '#334155', whiteSpace: 'nowrap' }}>Draw #{i + 1}</td>
+                                <td style={td}>
+                                  {d.title || '—'}
+                                  {i === 0 && depositOwnsFirstDraw && (
+                                    <span style={{ fontSize: 11, color: '#64748b' }}> · from payment upon approval</span>
+                                  )}
+                                </td>
+                                <td style={td}>{d.milestone}</td>
+                                <td style={{ ...td, textAlign: 'right', fontWeight: 600 }}>${fmt(d.amount)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+                        <BdsButton text="Edit payment schedule" displayType="secondary" onClick={() => setShowScheduleModal(true)} />
+                        <div style={{ fontSize: 12, fontWeight: 500, color: isFullyAllocated ? '#15803d' : '#b45309' }}>
+                          {isFullyAllocated
+                            ? `✓ Fully allocated. $${fmt(scheduledTotal)} scheduled`
+                            : unscheduled > 0
+                              ? `$${fmt(unscheduled)} of the proposal total is not yet scheduled`
+                              : `Schedule exceeds the proposal total by $${fmt(-unscheduled)}`}
+                        </div>
                       </div>
                     </>
                   )}
@@ -432,10 +639,15 @@ export default function ProposalPage({ onBack, clientName = 'Amy', jobCode = 'BW
               </div>
             </div>
           </div>
-        ) : (
-          <div style={{ padding: '24px 28px' }}>
-            <div style={{ fontSize: 13, color: '#64748b', marginBottom: 20 }}>
-              Clients will be able to access this proposal through the emailed link or the client site while this is released and can be signed digitally.
+        </div>
+
+        {/* Right: the document, on the gray canvas that reads as paper. Scrolls
+            independently of the form. */}
+        <div style={{ flex: 1, minWidth: 0, overflowY: 'auto', background: '#f1f5f9' }}>
+          <div style={{ padding: '20px 24px 32px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, maxWidth: 700, margin: '0 auto 12px', flexWrap: 'wrap' }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.4 }}>Client preview</div>
+              <div style={{ fontSize: 12, color: '#94a3b8' }}>Updates as you edit</div>
             </div>
 
             {/* Document preview */}
@@ -493,7 +705,9 @@ export default function ProposalPage({ onBack, clientName = 'Amy', jobCode = 'BW
                 </div>
               </div>
 
-              {requestDeposit && (
+              {/* Hidden when the schedule below already opens with this same
+                  payment as Draw #1: stating it twice reads as owing it twice. */}
+              {requestDeposit && !(scheduleEnabled && scheduleDraws.length > 0 && depositOwnsFirstDraw) && (
                 <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8, padding: '12px 16px', marginBottom: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span style={{ fontSize: 13, fontWeight: 600, color: '#1e3a8a' }}>Payment due upon approval</span>
                   <span style={{ fontSize: 15, fontWeight: 700, color: '#1e3a8a' }}>${fmt(depositAmount)}</span>
@@ -510,31 +724,62 @@ export default function ProposalPage({ onBack, clientName = 'Amy', jobCode = 'BW
                     <strong style={{ color: '#0f172a' }}>{cadenceSentence.when}</strong>
                     {cadenceSentence.startLabel ? <> starting {cadenceSentence.startLabel}</> : null}, covering the
                     costs incurred since the previous invoice.
+                    {/* The cadence says when the bill arrives; the terms say how
+                        long they have to pay it. Same paragraph, because the
+                        client reads them as one promise. */}
+                    {termsSentence && <> {termsSentence}</>}
                   </div>
                 </div>
               )}
 
-              {!isOpenBook && scheduleEnabled && milestones.length > 0 && (
+              {!isOpenBook && scheduleEnabled && scheduleDraws.length > 0 && (
                 <div style={{ marginBottom: 24 }}>
                   <div style={{ fontSize: 14, fontWeight: 700, color: '#0f172a', marginBottom: 10 }}>Payment schedule</div>
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                     <thead>
                       <tr>
-                        <th style={{ ...th, borderBottom: '1px solid #e2e8f0' }}>Milestone</th>
-                        <th style={{ ...th, borderBottom: '1px solid #e2e8f0' }}>Due</th>
+                        <th style={{ ...th, borderBottom: '1px solid #e2e8f0' }}>Draw</th>
+                        <th style={{ ...th, borderBottom: '1px solid #e2e8f0' }}>Invoiced on</th>
                         <th style={{ ...th, borderBottom: '1px solid #e2e8f0', textAlign: 'right' }}>Amount</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {milestones.map(m => (
-                        <tr key={m.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                          <td style={td}>{m.name || '—'}</td>
-                          <td style={td}>{dueLabel(m)}</td>
-                          <td style={{ ...td, textAlign: 'right', fontWeight: 600 }}>${fmt(milestoneAmountDollars(m))} {m.amountType === 'percent' ? `(${m.amount}%)` : ''}</td>
+                      {scheduleDraws.map((d, i) => (
+                        <tr key={d.drawNumber} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                          <td style={td}>Draw #{i + 1}{d.title ? `: ${d.title}` : ''}</td>
+                          <td style={td}>{d.milestone}</td>
+                          <td style={{ ...td, textAlign: 'right', fontWeight: 600 }}>${fmt(d.amount)}</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
+                </div>
+              )}
+
+              {/* Stated on the document because it's a term of the deal: the
+                  client (or their lender) is the one who asked for the format,
+                  and this is where they confirm they'll get it. */}
+              {requiresPayApps && (
+                <div style={{ marginBottom: 24 }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: '#0f172a', marginBottom: 6 }}>Pay applications</div>
+                  <div style={{ fontSize: 13, color: '#334155', lineHeight: 1.6 }}>
+                    Invoices for this project are submitted as certified pay applications in AIA G702/G703 format,
+                    billed on percent of work completed.
+                  </div>
+                </div>
+              )}
+
+              {/* Fixed price states the terms on their own, since the
+                  schedule table above says what is owed but not by when. Open
+                  book already carries it inside the Invoicing paragraph. */}
+              {!isOpenBook && termsSentence && (
+                <div style={{ marginBottom: 24 }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: '#0f172a', marginBottom: 6 }}>Payment terms</div>
+                  <div style={{ fontSize: 13, color: '#334155', lineHeight: 1.6 }}>
+                    {terms === 'Due on receipt'
+                      ? 'Payments are due upon receipt of each invoice.'
+                      : <>Each invoice is due within <strong style={{ color: '#0f172a' }}>{netDays} days</strong> of its invoice date.</>}
+                  </div>
                 </div>
               )}
 
@@ -551,14 +796,46 @@ export default function ProposalPage({ onBack, clientName = 'Amy', jobCode = 'BW
                 </>
               )}
             </div>
+            <div style={{ maxWidth: 700, margin: '12px auto 0', fontSize: 12, color: '#94a3b8', lineHeight: 1.5 }}>
+              Clients access this proposal through the emailed link or the client site while it's released, and can sign it digitally.
+            </div>
           </div>
-        )}
+        </div>
       </div>
+
+      {showScheduleModal && (
+        <PaymentScheduleModal
+          existingDraws={scheduleDraws.length > 0 ? scheduleDraws : undefined}
+          defaultTotal={Math.round(proposalSubtotal)}
+          /* A new schedule opens at a single Draw #1, and if a deposit was
+             requested that draw is already spoken for. */
+          initialRows={[{
+            percent: depositOwnsFirstDraw ? Math.round(depositPercentOfTotal) : 100,
+            title: depositOwnsFirstDraw ? 'Deposit' : '',
+            scheduleItem: 'Project Start',
+          }]}
+          lockFirstRow={depositOwnsFirstDraw}
+          description="Split the contract price into draws. The schedule is appended to the proposal, and Buildertrend uses it to create one draft invoice per draw once the job is running."
+          onSave={next => { setDraws(next); setShowScheduleModal(false); }}
+          onDelete={() => { setDraws([]); setShowScheduleModal(false); }}
+          onClose={() => setShowScheduleModal(false)}
+        />
+      )}
     </div>
   );
 }
 
 const lbl: React.CSSProperties = { display: 'block', fontSize: 12, fontWeight: 500, color: '#334155', marginBottom: 4 };
+/* Label over value, so the three parts of the deposit calculation line up on a
+   single baseline whether they're an input or a read-only figure. */
+const fieldLbl: React.CSSProperties = { fontSize: 12, fontWeight: 600, color: '#0f172a', marginBottom: 6, whiteSpace: 'nowrap' };
+const fieldVal: React.CSSProperties = { fontSize: 14, color: '#0f172a', padding: '7px 0', whiteSpace: 'nowrap' };
+const FIELD_BORDER = '1px solid #e2e8f0';
+const affix: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', padding: '0 10px', fontSize: 13, color: '#64748b', background: '#f8fafc', border: FIELD_BORDER, borderRadius: '6px 0 0 6px' };
+/* `inp` without any border or radius, for fields whose sides are set
+   individually. Spelled out rather than spread from `inp` so there's no
+   shorthand left to conflict with the longhands. */
+const inpNoBorder: React.CSSProperties = { padding: '7px 10px', fontSize: 13, boxSizing: 'border-box', outline: 'none', color: '#0f172a', fontFamily: 'inherit' };
 const inp: React.CSSProperties = { padding: '7px 10px', fontSize: 13, border: '1px solid #e2e8f0', borderRadius: 6, width: '100%', boxSizing: 'border-box', outline: 'none', color: '#0f172a', fontFamily: 'inherit' };
 const textarea: React.CSSProperties = { width: '100%', boxSizing: 'border-box', padding: '12px 14px', fontSize: 13, border: '1px solid #e2e8f0', borderRadius: 6, resize: 'vertical', minHeight: 80, outline: 'none', color: '#0f172a', fontFamily: 'inherit' };
 const th: React.CSSProperties = { padding: '10px 12px', fontSize: 12, fontWeight: 500, color: '#64748b', textAlign: 'left', whiteSpace: 'nowrap' };

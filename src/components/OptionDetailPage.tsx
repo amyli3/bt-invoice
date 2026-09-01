@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { INVOICE_SELECTION_SCENARIOS } from '../selectionsData';
+import { JOB_SCHEDULE_ITEMS } from '../mockData';
 
 interface SelectionData {
   name: string;
@@ -33,14 +34,7 @@ function inferLocation(name: string): string {
 }
 
 // Mock schedule items for the prototype. Real data comes from the project's schedule.
-const SCHEDULE_ITEMS = [
-  { id: 'sch-0', name: 'Cabinet shop drawings', start: '2026-05-15', end: '2026-05-20' },
-  { id: 'sch-1', name: 'Plumbing rough-in',     start: '2026-06-20', end: '2026-06-25' },
-  { id: 'sch-2', name: 'Tile install',          start: '2026-07-25', end: '2026-08-05' },
-  { id: 'sch-3', name: 'Flooring install',      start: '2026-08-15', end: '2026-08-22' },
-  { id: 'sch-4', name: 'Cabinet install',       start: '2026-08-25', end: '2026-09-01' },
-  { id: 'sch-5', name: 'Final paint',           start: '2026-09-15', end: '2026-09-22' },
-];
+const SCHEDULE_ITEMS = JOB_SCHEDULE_ITEMS;
 
 function computeAutoDueDate(
   itemId: string,

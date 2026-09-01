@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import '../bds-tokens.css';
 import { BdsButton, BdsBadge } from '../bds';
-import { Job } from '../types';
+import { Job, InvoicingMode } from '../types';
 import { recommendInvoicingMode } from '../mockData';
+import InvoicePreviewPanel from './InvoicePreviewPanel';
 
 export type InvoiceTypeChoice = 'standard' | 'payment-schedule' | 'progress';
 
@@ -16,11 +17,16 @@ export type InvoiceTypeChoice = 'standard' | 'payment-schedule' | 'progress';
    It preselects rather than decides: the reason is stated in full and any
    card can be picked over it. */
 
-const OPTIONS: { key: InvoiceTypeChoice; label: string; blurb: string }[] = [
+export const INVOICE_TYPE_OPTIONS: { key: InvoiceTypeChoice; label: string; blurb: string }[] = [
   {
     key: 'standard',
     label: 'Standard invoice',
-    blurb: "Bill the amounts you're charging, line by line or as one flat fee. Use it for costs as they're logged, or a one-off charge.",
+    /* The use-case sentence that used to follow ("for costs as they're logged,
+       or a one-off charge") is gone. It described a cost-plus habit, and on a
+       fixed-price job it pointed at the wrong model: the client owes contract
+       value, not what the job spent. The other cards state mechanics in one
+       line, so this one now does too. */
+    blurb: "Invoice the amount you're charging, line by line or as one flat fee.",
   },
   {
     key: 'payment-schedule',
@@ -30,9 +36,22 @@ const OPTIONS: { key: InvoiceTypeChoice; label: string; blurb: string }[] = [
   {
     key: 'progress',
     label: 'Progress invoice',
-    blurb: 'Bill a percent of each contract line against a schedule of values. Pay application (G702/G703) format.',
+    /* Names where the lines come from. "A schedule of values" told a builder
+       what the document is called without telling them what would be in it,
+       which is the thing they can't picture before opening it. The G702/G703
+       reference stays: it's what upmarket builders scan for. */
+    blurb: 'Invoice percent complete against a scope of work pulled from your estimate line items. Pay application (G702/G703) format.',
   },
 ];
+
+/* The preview panel is keyed by billing mode, and these cards are documents.
+   Same three answers seen from the other side, so a builder who previews here
+   sees exactly what the Invoices page picker would have shown them. */
+export const INVOICE_TYPE_PREVIEW_MODE: Record<InvoiceTypeChoice, InvoicingMode> = {
+  standard: 'time-interval',
+  'payment-schedule': 'milestone-draws',
+  progress: 'aia-percent-complete',
+};
 
 // The recommender speaks in billing modes; these are documents. Same three
 // answers, mapped once here.
@@ -65,21 +84,26 @@ interface Props {
      elsewhere (or doesn't have one) passes the documents it can actually
      create, so the modal never shows an answer that leads nowhere. */
   choices?: InvoiceTypeChoice[];
+  /* Set when something upstream already answered how this job bills, so this
+     modal opens as a consequence of that answer rather than as a fresh
+     question. Additive and optional: callers that don't pass it are unchanged. */
+  answeredContext?: { answer: string };
 }
 
-export default function InvoiceTypeModal({ job, onClose, onChoose, onImportTemplate, variant = 'new', initialChoice, choices }: Props) {
-  const options = choices ? OPTIONS.filter(o => choices.includes(o.key)) : OPTIONS;
+export default function InvoiceTypeModal({ job, onClose, onChoose, onImportTemplate, variant = 'new', initialChoice, choices, answeredContext }: Props) {
+  const options = choices ? INVOICE_TYPE_OPTIONS.filter(o => choices.includes(o.key)) : INVOICE_TYPE_OPTIONS;
   const recommendation = recommendedChoice(job);
   /* The recommender answers across all three documents, so it can land on one
      this caller doesn't offer. Rather than redirect it to a second-best answer
      and state a reason that no longer matches, the recommendation comes off
      entirely and the first option is simply what's selected. */
-  const showRecommendation = variant === 'new' && options.some(o => o.key === recommendation.key);
+  const showRecommendation = !answeredContext && variant === 'new' && options.some(o => o.key === recommendation.key);
   const [selected, setSelected] = useState<InvoiceTypeChoice>(
     initialChoice ?? (showRecommendation ? recommendation.key : options[0].key)
   );
   const [makeDefault, setMakeDefault] = useState(false);
-  const recommendedLabel = OPTIONS.find(o => o.key === recommendation.key)!.label;
+  const [previewChoice, setPreviewChoice] = useState<InvoiceTypeChoice | null>(null);
+  const recommendedLabel = INVOICE_TYPE_OPTIONS.find(o => o.key === recommendation.key)!.label;
 
   return (
     <div className="modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
@@ -92,6 +116,19 @@ export default function InvoiceTypeModal({ job, onClose, onChoose, onImportTempl
         <div className="est-modal-body">
           {/* Above the options: it's the reason one of them is already
               selected, which is unreadable as a footnote after the fact. */}
+          {/* Carries the previous answer forward, so the second dialog reads as
+              the result of the first rather than the same question again. */}
+          {answeredContext && (
+            <div style={{
+              padding: 14, marginTop: 4, marginBottom: 20,
+              background: 'var(--bds-color-info-background, #EEF5FF)', borderRadius: 'var(--bds-radius-md)',
+              fontSize: 13, color: 'var(--bds-color-gray-80)', lineHeight: 1.5,
+            }}>
+              <strong>This job is invoiced on {answeredContext.answer}. </strong>
+              These are the invoice types that fit, so the list below is shorter than usual.
+            </div>
+          )}
+
           {showRecommendation && (
             <div style={{
               padding: 14, marginTop: 4, marginBottom: 20,
@@ -134,6 +171,19 @@ export default function InvoiceTypeModal({ job, onClose, onChoose, onImportTempl
                   <span style={{ minWidth: 0 }}>
                     <span style={{ display: 'block', fontWeight: 600, fontSize: 15, color: 'var(--bds-color-gray-90)' }}>{opt.label}</span>
                     <span style={{ display: 'block', fontSize: 13, color: 'var(--bds-color-gray-60)', lineHeight: 1.45, marginTop: 4 }}>{opt.blurb}</span>
+                    {/* A blurb describes the document; this shows it. Picking
+                        between three formats you've never seen is the actual
+                        difficulty here, and it's the same example the Invoices
+                        page picker offers. preventDefault as well as
+                        stopPropagation: the card is a label, so the click would
+                        otherwise fall through and select the radio it wraps. */}
+                    <button
+                      type="button"
+                      onClick={e => { e.preventDefault(); e.stopPropagation(); setPreviewChoice(opt.key); }}
+                      style={{ background: 'none', border: 'none', padding: 0, marginTop: 10, cursor: 'pointer', color: 'var(--bds-color-blue-70)', fontSize: 13, fontWeight: 500, fontFamily: 'inherit', textAlign: 'left' }}
+                    >
+                      Preview example →
+                    </button>
                   </span>
                 </label>
               );
@@ -155,6 +205,10 @@ export default function InvoiceTypeModal({ job, onClose, onChoose, onImportTempl
             </label>
           )}
         </div>
+
+        {previewChoice && (
+          <InvoicePreviewPanel mode={INVOICE_TYPE_PREVIEW_MODE[previewChoice]} job={job} onClose={() => setPreviewChoice(null)} />
+        )}
 
         <div className="est-modal-footer" style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'flex-end' }}>
           {onImportTemplate && variant === 'new' && (

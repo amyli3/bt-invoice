@@ -9,6 +9,7 @@ import InvoiceTypeModal, { type InvoiceTypeChoice as NewInvoiceChoice } from './
 import PaymentScheduleTracker from './PaymentScheduleTracker';
 import ImportTemplateModal from './ImportTemplateModal';
 import InvoicesSettingsModal from './InvoicesSettingsModal';
+import { CadenceWizardModal, CadenceEmptyState, CadenceAnsweredEmptyState, CadenceInlineQuestionnaire, CadenceSkippedLine, cadenceOption, type Cadence } from './CadenceQuestion';
 import InvoiceScheduleModal, { cadenceSentence, type InvoiceCadence } from './InvoiceScheduleModal';
 
 type TabKey = 'invoices' | 'payments' | 'credit-memos' | 'deposits';
@@ -37,7 +38,13 @@ const GearGlyph = () => (
   </svg>
 );
 
-export default function OwnerInvoicesPage({
+/* ── Exploration copy of the fixed-price invoices page ──────────────────────
+   A byte-for-byte fork of OwnerInvoicesPage at the time it was copied, so
+   explorations can hack the real surface without any risk to the routes a
+   stakeholder walks through. It will drift from the original, and that's the
+   point: nothing here has to keep the live loops working. Promote a change by
+   porting it back to OwnerInvoicesPage, not by pointing a route at this file. */
+export default function ExplorationInvoicesPage({
   job,
   invoicingMode,
   showModePicker,
@@ -61,6 +68,9 @@ export default function OwnerInvoicesPage({
   defaultInvoiceKind,
   onDefaultInvoiceKindChange,
   hidePaymentSchedule = false,
+  cadencePlacement = 'plus-invoice',
+  cadenceAnswer = null,
+  onCadenceAnswer,
   invoiceCadence,
   onSaveInvoiceCadence,
   onDeleteInvoiceCadence,
@@ -111,6 +121,13 @@ export default function OwnerInvoicesPage({
      place the same slot holds the invoice schedule, which is open book's
      generator: a cadence rather than a list of amounts. */
   hidePaymentSchedule?: boolean;
+  /* Exploration only. Where the "how often do you invoice this job" question
+     gets asked: a modal on "+ Invoice", the grid's empty state, or an inline
+     bar above the grid. Same question in all three, so the comparison is about
+     placement rather than copy. */
+  cadencePlacement?: 'plus-invoice' | 'empty-state' | 'inline';
+  cadenceAnswer?: Cadence | null;
+  onCadenceAnswer?: (c: Cadence | null) => void;
   invoiceCadence?: InvoiceCadence | null;
   onSaveInvoiceCadence?: (cadence: InvoiceCadence) => void;
   onDeleteInvoiceCadence?: () => void;
@@ -129,6 +146,16 @@ export default function OwnerInvoicesPage({
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showCadenceModal, setShowCadenceModal] = useState(false);
   const [showNothingToSchedule, setShowNothingToSchedule] = useState(false);
+  const [showCadenceQuestion, setShowCadenceQuestion] = useState(false);
+  /* Placement B answers the question in the empty state, so the toolbar button
+     has nothing left to ask: it goes straight to an invoice, with the other
+     type behind the caret. */
+  const splitButtonAlways = cadencePlacement === 'empty-state';
+  // Inline placement only: dismissing hides the bar without answering.
+  const [cadenceDismissed, setCadenceDismissed] = useState(false);
+  /* Empty-state placement: skipping shows the ordinary empty state rather than
+     answering "one-off" on the builder's behalf. */
+  const [cadenceSkipped, setCadenceSkipped] = useState(false);
   const templateMenuRef = useRef<HTMLDivElement>(null);
   // The split button's own local "which type did I last pick" — independent
   // of the job's persisted billing mode, so switching this doesn't change
@@ -298,10 +325,18 @@ export default function OwnerInvoicesPage({
               set it becomes that answer, with the other type and templates
               behind the caret. Same two clicks either way, but the common case
               is one. */}
-          {onAddInvoiceDirect && !jobDefaultInvoiceKind && (
-            <BdsButton text="+ Invoice" displayType="primary" onClick={() => setShowTypeModal(true)} />
+          {onAddInvoiceDirect && !jobDefaultInvoiceKind && !splitButtonAlways && (
+            <BdsButton
+              text="+ Invoice" displayType="primary"
+              onClick={() => {
+                /* Placement A: the question comes first, once. Answered
+                   already, and "+ Invoice" behaves exactly as it does today. */
+                if (cadencePlacement === 'plus-invoice' && !cadenceAnswer) setShowCadenceQuestion(true);
+                else setShowTypeModal(true);
+              }}
+            />
           )}
-          {onAddInvoiceDirect && jobDefaultInvoiceKind && (
+          {onAddInvoiceDirect && (jobDefaultInvoiceKind || splitButtonAlways) && (
             <div ref={templateMenuRef} style={{ position: 'relative', display: 'inline-flex' }}>
               <button
                 type="button"
@@ -530,6 +565,19 @@ export default function OwnerInvoicesPage({
 
       {/* Created from a payment schedule: one invoice per draw, all Unreleased
           until each is reviewed and sent. */}
+      {cadencePlacement === 'inline' && onCadenceAnswer && (
+        cadenceDismissed && !cadenceAnswer
+          ? <CadenceSkippedLine onReopen={() => setCadenceDismissed(false)} />
+          : (
+            <CadenceInlineQuestionnaire
+              answered={cadenceAnswer}
+              onAnswer={c => onCadenceAnswer(c)}
+              onDismiss={() => setCadenceDismissed(true)}
+              onReopen={() => { setCadenceDismissed(false); onCadenceAnswer(null); }}
+            />
+          )
+      )}
+
       {tab === 'invoices' && emptyState && (createdInvoices?.length ?? 0) > 0 && (
         <>
           <div style={{ border: '1px solid var(--bds-color-gray-15)', borderRadius: 'var(--bds-radius-lg)', background: '#fff', overflow: 'hidden' }}>
@@ -588,6 +636,28 @@ export default function OwnerInvoicesPage({
           of the page rather than under the illustration. */}
       {tab === 'invoices' && emptyState && (createdInvoices?.length ?? 0) === 0 && (
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+          {/* Placement B: the empty state already says "nothing here", so a
+              setup question interrupts nothing. It also can't reach a builder
+              mid-task, because once the job has invoices this state is gone. */}
+          {cadencePlacement === 'empty-state' && onCadenceAnswer && !cadenceSkipped ? (
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '48px 0' }}>
+              {cadenceAnswer ? (
+                /* Answered but nothing invoiced yet. The illustration would say
+                   less than the answer does. */
+                <CadenceAnsweredEmptyState answered={cadenceAnswer} onChange={() => onCadenceAnswer(null)} />
+              ) : (
+                <CadenceEmptyState
+                  /* One document means the answer is the whole flow, same as the
+                     wizard: the invoice opens instead of a second question. */
+                  onChoose={c => {
+                    onCadenceAnswer(c);
+                    if (cadenceOption(c).documents.length === 1) onAddInvoiceDirect?.(cadenceOption(c).documents[0], false);
+                  }}
+                  onSkip={() => setCadenceSkipped(true)}
+                />
+              )}
+            </div>
+          ) : (
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: '64px 0' }}>
             <svg width="56" height="56" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ marginBottom: 16 }}>
               <path fillRule="evenodd" clipRule="evenodd" d="M27 30H5L4.82356 29.9923L4.63318 29.9662L4.51117 29.9394C3.6939 29.7344 3.07641 29.0264 3.00659 28.1635L3 28V15C3 14.6881 3.13495 14.4266 3.33852 14.2491L3.44525 14.168L7 11.797V5L7.00549 4.85074L7.01261 4.77413L7.03384 4.63169C7.04944 4.54779 7.07034 4.46559 7.09616 4.38553L7.15616 4.22391L7.20769 4.11153L7.29134 3.95998L7.399 3.80114L7.51784 3.65715L7.65374 3.52093L7.77371 3.41994L7.92093 3.31578L8.06315 3.23254L8.12988 3.19869L8.26677 3.13868L8.46998 3.07099L8.59611 3.0408L8.63505 3.03322C8.70557 3.02021 8.77761 3.01088 8.85074 3.00549L9 3H19C19.221 3 19.4345 3.07316 19.608 3.20608L19.7071 3.29289L24.7071 8.29289C24.8634 8.44917 24.9626 8.65185 24.9913 8.86856L25 9V11.797L28.5704 14.1787C28.7921 14.3311 28.9547 14.5727 28.9919 14.8695L29 15V28L28.9942 28.1539L28.9711 28.3396L28.9394 28.4888C28.7344 29.3061 28.0264 29.9236 27.1635 29.9934L27 30ZM27 27.999V16.979L19.3578 22.6101C19.0632 22.8272 18.7156 22.9586 18.3535 22.9917L18.1714 23H13.8286C13.4627 23 13.105 22.8996 12.7937 22.7114L12.6422 22.6101L5 16.979V28L27 27.999ZM9 5H18.585L23 9.415V17.44L18.1714 21H13.8286L9 17.441V5ZM19 15C19.5523 15 20 15.4477 20 16C20 16.5128 19.614 16.9355 19.1166 16.9933L19 17H13C12.4477 17 12 16.5523 12 16C12 15.4872 12.386 15.0645 12.8834 15.0067L13 15H19ZM5.741 15.04L7 14.201V15.968L5.741 15.04ZM25 14.202V15.967L26.258 15.04L25 14.202ZM20 12C20 11.4477 19.5523 11 19 11H13L12.8834 11.0067C12.386 11.0645 12 11.4872 12 12C12 12.5523 12.4477 13 13 13H19L19.1166 12.9933C19.614 12.9355 20 12.5128 20 12Z" fill="#202227" />
@@ -612,6 +682,7 @@ export default function OwnerInvoicesPage({
                 already the way to start one, so a second primary would compete. */}
             <BdsButton text="Learn how" displayType="secondary" icon={<BdsIcon name="link" size={14} />} />
           </div>
+          )}
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, borderTop: '1px solid var(--bds-color-gray-15)', paddingTop: 12, marginTop: 12, fontSize: 13, color: 'var(--bds-color-gray-60)' }}>
             <span>My Saved View ▾</span>
             <span aria-hidden="true">•••</span>
@@ -786,7 +857,11 @@ export default function OwnerInvoicesPage({
       {showTypeModal && onAddInvoiceDirect && (
         <InvoiceTypeModal
           job={job}
-          choices={invoiceTypeChoices}
+          /* Narrowed by the first dialog rather than decided by it: a cadence
+             rules some types out, it doesn't pick one. */
+          choices={cadenceAnswer ? cadenceOption(cadenceAnswer).documents : invoiceTypeChoices}
+          initialChoice={cadenceAnswer === 'phase' ? 'payment-schedule' : cadenceAnswer ? 'standard' : undefined}
+          answeredContext={cadenceAnswer ? { answer: cadenceOption(cadenceAnswer).question } : undefined}
           onClose={() => setShowTypeModal(false)}
           onImportTemplate={onImportTemplate ? () => { setShowTypeModal(false); setShowTemplateModal(true); } : undefined}
           onChoose={(choice, makeDefault) => {
@@ -844,6 +919,22 @@ export default function OwnerInvoicesPage({
           onClose={() => setShowCadenceModal(false)}
           onSave={cadence => { onSaveInvoiceCadence(cadence); setShowCadenceModal(false); }}
           onDelete={onDeleteInvoiceCadence && (() => { onDeleteInvoiceCadence(); setShowCadenceModal(false); })}
+        />
+      )}
+
+      {showCadenceQuestion && onCadenceAnswer && (
+        <CadenceWizardModal
+          job={job}
+          onClose={() => setShowCadenceQuestion(false)}
+          /* Both answers arrive together, so there's nothing to chain: the
+             invoice type is picked on step 2 of the same modal. */
+          onComplete={(c, type) => {
+            onCadenceAnswer(c);
+            setShowCadenceQuestion(false);
+            // Payment schedule is set up here, not in the invoice.
+            if (type === 'payment-schedule') setShowScheduleModal(true);
+            else onAddInvoiceDirect?.(type, false);
+          }}
         />
       )}
 

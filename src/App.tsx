@@ -38,6 +38,7 @@ import ChangeOrderPage, { type COInvoiceTarget } from './components/ChangeOrderP
 import ChangeOrderListPage from './components/ChangeOrderListPage';
 import EstimatePage from './components/EstimatePage';
 import ProposalPage from './components/ProposalPage';
+import InvoiceTypePreviewPage from './components/InvoiceTypePreviewPage';
 import ClientSelections from './components/ClientSelections';
 import ClientSelections2 from './components/ClientSelections2';
 import ClientSelections3 from './components/ClientSelections3';
@@ -49,14 +50,19 @@ import OpenbookFlow from './components/OpenbookFlow';
 import OwnerInvoicesPage from './components/OwnerInvoicesPage';
 import JobDetailsPage from './components/JobDetailsPage';
 import CompanySettingsPage from './components/CompanySettingsPage';
+import InvoiceExplorationPage, { type CadencePlacement } from './components/InvoiceExplorationPage';
+import { type Cadence } from './components/CadenceQuestion';
+import ExplorationInvoicesPage from './components/ExplorationInvoicesPage';
+import BillsGridPage from './components/BillsGridPage';
+import { type InvoiceCadence } from './components/InvoiceScheduleModal';
 import { JOBS, INVOICE_TEMPLATES } from './mockData';
 import { getNextId } from './mockData';
 import { TIME_INTERVAL_DEMO_INVOICES, JULY_TIME_INTERVAL_ITEMS, type DemoInvoiceRow } from './mockData';
 import type { InvoicingMode, DrawScheduleLine, Job } from './types';
 
-type PageType = 'invoice' | 'invoice-2' | 'invoice-3' | 'invoice-3-modal' | 'invoice-full-page' | 'invoice-full-page-reimagined' | 'client-preview-invoice' | 'job-price-summary' | 'selections' | 'option-detail' | 'progress-invoice' | 'change-order' | 'change-order-list' | 'client-portal' | 'client-jps' | 'estimate' | 'estimate-ob' | 'job-proposal' | 'job-proposal-ob' | 'client-selections' | 'client-selections-2' | 'client-selections-3' | 'job-costing-budget' | 'underage-flows' | 'job-details-clients' | 'owner-invoices' | 'openbook' | 'job-details' | 'company-settings';
+type PageType = 'invoice' | 'invoice-2' | 'invoice-3' | 'invoice-3-modal' | 'invoice-full-page' | 'invoice-full-page-reimagined' | 'client-preview-invoice' | 'job-price-summary' | 'selections' | 'option-detail' | 'progress-invoice' | 'change-order' | 'change-order-list' | 'client-portal' | 'client-jps' | 'estimate' | 'estimate-ob' | 'job-proposal' | 'job-proposal-ob' | 'client-selections' | 'client-selections-2' | 'client-selections-3' | 'job-costing-budget' | 'underage-flows' | 'job-details-clients' | 'owner-invoices' | 'openbook' | 'job-details' | 'company-settings' | 'bills' | 'invoice-exploration' | 'invoice-type-preview';
 
-const validPages: PageType[] = ['invoice', 'invoice-2', 'invoice-3', 'invoice-3-modal', 'invoice-full-page', 'invoice-full-page-reimagined', 'client-preview-invoice', 'job-price-summary', 'selections', 'option-detail', 'progress-invoice', 'change-order', 'change-order-list', 'client-portal', 'client-jps', 'estimate', 'estimate-ob', 'job-proposal', 'job-proposal-ob', 'client-selections', 'client-selections-2', 'client-selections-3', 'job-costing-budget', 'underage-flows', 'job-details-clients', 'owner-invoices', 'openbook', 'job-details', 'company-settings'];
+const validPages: PageType[] = ['invoice', 'invoice-2', 'invoice-3', 'invoice-3-modal', 'invoice-full-page', 'invoice-full-page-reimagined', 'client-preview-invoice', 'job-price-summary', 'selections', 'option-detail', 'progress-invoice', 'change-order', 'change-order-list', 'client-portal', 'client-jps', 'estimate', 'estimate-ob', 'job-proposal', 'job-proposal-ob', 'client-selections', 'client-selections-2', 'client-selections-3', 'job-costing-budget', 'underage-flows', 'job-details-clients', 'owner-invoices', 'openbook', 'job-details', 'company-settings', 'bills', 'invoice-exploration', 'invoice-type-preview'];
 
 function getInitialPage(): PageType {
   // Support ?page=X query param (used when hash is occupied by Figma capture)
@@ -262,7 +268,8 @@ export default function App() {
      Invoice page itself, so this only decides which grid it loads with.
      Payment schedule never reaches here: the invoices page keeps that answer
      and opens its schedule editor. */
-  const startBaseInvoiceOfType = (choice: InvoiceTypeChoice, makeDefault = false) => {
+  const startBaseInvoiceOfType = (choice: InvoiceTypeChoice, makeDefault = false, returnTo: PageType = 'owner-invoices') => {
+    setInvoiceReturnPage(returnTo);
     const kind: InvoiceKind = choice === 'progress' ? 'progress' : 'regular';
     if (makeDefault) setJobInvoiceKindDefault(selectedJob, kind);
     setInvoice({ ...defaultInvoice, type: choice === 'progress' ? 'progress' : 'invoice' });
@@ -384,6 +391,11 @@ export default function App() {
     () => (getInitialPage() === 'invoice-3-modal' ? 'modal' : null),
   );
   const invoicesEmptyState = invoicesLoop !== null;
+  /* Open book's equivalent of the draw schedule, per job. Seeded for the demo
+     job as if the signed proposal set it, since that's the ordinary case: the
+     client agreed to a billing rhythm at sale, and the grid is where it's
+     looked at and moved afterwards. */
+  const [invoiceCadenceByJob, setInvoiceCadenceByJob] = useState<Record<string, InvoiceCadence | null>>({});
   // Financial > Invoice - Fixed and Invoice - OB run the same loop, so
   // everything wired to it asks this rather than either variant by name.
   const isBaseLoop = invoicesLoop === 'base' || invoicesLoop === 'base-ob';
@@ -402,6 +414,21 @@ export default function App() {
      job's default invoice type becomes Standard. The schedule has answered the
      cadence question, so the next "+ Invoice" shouldn't ask it again — it opens
      a standard invoice, switchable from the invoice itself. */
+  /* The exploration page's own state. Kept out of the by-job maps on purpose:
+     poking at a sandbox shouldn't leave a schedule or a draft behind on the
+     job the other routes are demoed with. */
+  const [explorationDraws, setExplorationDraws] = useState<DrawScheduleLine[]>([]);
+  const [explorationInvoices, setExplorationInvoices] = useState<DemoInvoiceRow[]>([]);
+  const [explorationDefaultKind, setExplorationDefaultKind] = useState<'regular' | 'progress'>('regular');
+  const [explorationJobKind, setExplorationJobKind] = useState<'regular' | 'progress' | null>(null);
+  // Which placement of the cadence question is being tried, and its answer.
+  const [cadencePlacement, setCadencePlacement] = useState<CadencePlacement>('empty-state');
+  /* Which page the open invoice should return to. The exploration page opens
+     invoices the same way the Financial > Invoice loop does, so without this
+     Cancel would drop a builder onto the grid they didn't come from. */
+  const [invoiceReturnPage, setInvoiceReturnPage] = useState<PageType>('owner-invoices');
+  const [explorationCadence, setExplorationCadence] = useState<Cadence | null>(null);
+
   const createInvoicesFromSchedule = (draws: DrawScheduleLine[]) => {
     const jobId = currentJobWithOverrides.id;
     setDrawScheduleOverrides(prev => ({ ...prev, [jobId]: draws }));
@@ -1039,6 +1066,9 @@ export default function App() {
                  schedule and drops that button too. */
               invoiceTypeChoices={['standard', 'progress']}
               hidePaymentSchedule={invoicesLoop === 'base-ob'}
+              invoiceCadence={invoiceCadenceByJob[job.id] ?? null}
+              onSaveInvoiceCadence={invoicesLoop === 'base-ob' ? (cadence => setInvoiceCadenceByJob(prev => ({ ...prev, [job.id]: cadence }))) : undefined}
+              onDeleteInvoiceCadence={() => setInvoiceCadenceByJob(prev => ({ ...prev, [job.id]: null }))}
             />
           </div>
         </div>
@@ -1079,6 +1109,102 @@ export default function App() {
         <TopNav onNavigate={(page) => setActivePage(page as PageType)} />
         <div style={{flex: 1, overflowY: 'auto'}}>
           <OpenbookFlow />
+        </div>
+      </div>
+    );
+  }
+
+  /* Bills — the cost document, not the owner invoice. Lands on the grid, which
+     is the inbox the workflow starts from; the record opens over it. */
+  if (activePage === 'bills') {
+    return (
+      <div style={{display: 'flex', flexDirection: 'column', height: '100vh'}}>
+        <TopNav onNavigate={(page) => setActivePage(page as PageType)} />
+        <div style={{flex: 1, minHeight: 0, overflowY: 'auto'}}>
+          <BillsGridPage />
+        </div>
+      </div>
+    );
+  }
+
+  /* Concept: the invoice type is picked on the invoice, and the document is a
+     tab away rather than a pane beside it. Its own page so the type-first
+     dialog on the other routes stays as it is while this is compared to it. */
+  if (activePage === 'invoice-type-preview') {
+    return (
+      <div style={{display: 'flex', flexDirection: 'column', height: '100vh'}}>
+        <TopNav onNavigate={(page) => setActivePage(page as PageType)} />
+        <div style={{flex: 1, minHeight: 0, overflow: 'hidden'}}>
+          <InvoiceTypePreviewPage
+            job={currentJobWithOverrides}
+            onExit={() => setActivePage('owner-invoices')}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  if (activePage === 'invoice-exploration') {
+    /* The exploration banner sits above a working copy of the fixed-price
+       invoices page, so an idea gets tried on the real surface instead of a
+       stand-in header. The copy is its own file (ExplorationInvoicesPage), free
+       to diverge without touching the routes stakeholders walk through. */
+    const explorationJob = { ...currentJobWithOverrides, drawSchedule: explorationDraws };
+    const addExplorationInvoice = (title: string) => setExplorationInvoices(prev => [
+      ...prev,
+      { id: String(prev.length + 1).padStart(4, '0'), title, status: 'Unreleased' as const, amount: 0 },
+    ]);
+    return (
+      <div style={{display: 'flex', flexDirection: 'column', height: '100vh'}}>
+        <TopNav onNavigate={(page) => setActivePage(page as PageType)} />
+        <div style={{flex: 1, overflowY: 'auto'}}>
+          <InvoiceExplorationPage
+            placement={cadencePlacement}
+            onPlacementChange={setCadencePlacement}
+            answer={explorationCadence}
+            onReset={() => { setExplorationCadence(null); setExplorationInvoices([]); setExplorationDraws([]); setExplorationJobKind(null); }}
+          />
+          <ExplorationInvoicesPage
+            job={explorationJob}
+            showModePicker={false}
+            onSetInvoicingMode={() => {}}
+            onRequestChangeMode={() => {}}
+            onAddInvoice={() => {}}
+            onAddInvoiceSmart={() => {}}
+            onSavePaymentSchedule={setExplorationDraws}
+            onDeletePaymentSchedule={() => setExplorationDraws([])}
+            /* Fixed price, no invoices yet: the same configuration Financial >
+               Invoice > Fixed opens on. */
+            emptyState
+            invoiceTypeChoices={['standard', 'progress']}
+            createdInvoices={explorationInvoices}
+            onCreateInvoicesFromSchedule={(draws) => {
+              setExplorationDraws(draws);
+              setExplorationInvoices(draws.map(d => ({
+                id: String(d.drawNumber).padStart(4, '0'),
+                title: d.title,
+                status: 'Unreleased' as const,
+                amount: d.amount,
+              })));
+              setExplorationJobKind('regular');
+            }}
+            /* Create opens the actual invoice, standard or progress, using the
+               same handler the Financial > Invoice loop uses. A row appearing in
+               the grid was enough to see the modal flow, but it stopped short of
+               the thing the flow exists to reach. */
+            onAddInvoiceDirect={(choice, makeDefault) => {
+              addExplorationInvoice(choice === 'progress' ? 'Progress invoice' : 'Standard invoice');
+              if (makeDefault) setExplorationJobKind(choice === 'progress' ? 'progress' : 'regular');
+              startBaseInvoiceOfType(choice, false, 'invoice-exploration');
+            }}
+            onImportTemplate={(templateId) => addExplorationInvoice(`From template ${templateId}`)}
+            cadencePlacement={cadencePlacement}
+            cadenceAnswer={explorationCadence}
+            onCadenceAnswer={setExplorationCadence}
+            jobDefaultInvoiceKind={explorationJobKind}
+            defaultInvoiceKind={explorationDefaultKind}
+            onDefaultInvoiceKindChange={setExplorationDefaultKind}
+          />
         </div>
       </div>
     );
@@ -1131,6 +1257,9 @@ export default function App() {
                 setDrawScheduleOverrides(prev => ({ ...prev, [1]: draws }));
                 setInvoicingModeByJob(prev => ({ ...prev, [1]: 'milestone-draws' }));
               }}
+              /* Matches the other delete-schedule call sites: clear the draws
+                 and leave the invoicing mode alone. */
+              onScheduleDeleted={() => setDrawScheduleOverrides(prev => ({ ...prev, [1]: [] }))}
               onSendToBudget={(total) => {
                 setContractPriceByJob(prev => ({ ...prev, [1]: total }));
                 setEstimateLockedByJob(prev => ({ ...prev, [1]: true }));
@@ -1153,10 +1282,24 @@ export default function App() {
     return (
       <div style={{display: 'flex', flexDirection: 'column', height: '100vh'}}>
         <TopNav onNavigate={(page) => setActivePage(page as PageType)} />
-        <div style={{flex: 1, overflowY: 'auto'}}>
+        {/* The proposal is a split screen that scrolls each pane on its own, so
+            the page owns the height instead of scrolling as one document. */}
+        <div style={{flex: 1, minHeight: 0, overflow: 'hidden'}}>
           <ProposalPage
             billingModel={activePage === 'job-proposal-ob' ? 'open-book' : 'fixed'}
+            /* Contract type is the same field Job Details records, so choosing
+               it on the proposal writes the job's answer and swaps the proposal
+               to the matching setup. The estimate still decides which one you
+               land on; this is where it can be corrected. */
+            onBillingModelChange={(model) => {
+              updateJobFinancials(currentJobWithOverrides.id, { contractType: model === 'open-book' ? 'open-book' : 'fixed-price' });
+              setActivePage(model === 'open-book' ? 'job-proposal-ob' : 'job-proposal');
+            }}
             onBack={() => setActivePage(activePage === 'job-proposal-ob' ? 'estimate-ob' : 'estimate')}
+            /* Same override Job Details reads and writes, so answering on the
+               proposal is answering the question once, not twice. */
+            fundedByLoan={fundedByLoanOverrides[currentJobWithOverrides.id] ?? currentJobWithOverrides.fundedByConstructionLoan}
+            onFundedByLoanChange={(funded) => updateJobFinancials(currentJobWithOverrides.id, { fundedByLoan: funded })}
           />
         </div>
       </div>
@@ -1342,6 +1485,11 @@ export default function App() {
   // just rendered inline in the content area instead of inside the modal
   // backdrop — see showInvoiceAsModal-only usages below for what stays modal-specific.
   const useTabsLayout = showInvoiceAsModal || isFullPageInvoice;
+  /* Invoice (modal - OB) only: the combined views open as their own centered
+     dialog rather than docking beside the invoice. The invoice is already a
+     modal on this route, so a panel splits one overlay into two competing
+     halves; every other tabs-layout route keeps the docked panel. */
+  const combinedViewAsModal = showInvoiceAsModal;
   /* A pay application's header is its own thing (certifications, portal
      sharing), so the progress path swaps the whole top section and drops Client
      price with it: the taxes control belongs to a line-item invoice, and the
@@ -1441,7 +1589,7 @@ export default function App() {
         : isBaseInvoicePage ? (invoicesLoop === 'base-ob' ? 'base-ob' : 'base')
         : null,
     );
-    setActivePage('owner-invoices');
+    setActivePage(invoiceReturnPage);
   };
 
   // The Details tab's form sections. Rendered either on their own (modal) or as
@@ -1656,7 +1804,7 @@ export default function App() {
                 {renderDetailsForm()}
               </div>
 
-              {(estModalOpen || selV5ModalOpen || selV2on3ModalOpen || addAllModalOpen || addAllV2ModalOpen || costsModalOpen) && (
+              {(estModalOpen || selV5ModalOpen || selV2on3ModalOpen || (!combinedViewAsModal && (addAllModalOpen || addAllV2ModalOpen)) || costsModalOpen) && (
                 <div style={{
                   // Default sizing is responsive; dragging the divider pins a px width.
                   // minWidth keeps the panel readable when the window gets narrow, and
@@ -1708,7 +1856,7 @@ export default function App() {
                       data={selection3Data}
                     />
                   )}
-                  {addAllModalOpen && (
+                  {addAllModalOpen && !combinedViewAsModal && (
                     <AddFromAllModal
                       variant="panel"
                       open={addAllModalOpen}
@@ -1718,7 +1866,7 @@ export default function App() {
                       addedChildIds={invoice.lineItems.flatMap(li => li.relatedItem?.childIds ?? [])}
                     />
                   )}
-                  {addAllV2ModalOpen && (
+                  {addAllV2ModalOpen && !combinedViewAsModal && (
                     <AddFromAllModal
                       variant="panel"
                       includeCosts
@@ -1945,7 +2093,7 @@ export default function App() {
 
       {!isFullPageInvoice && (
         <div className="bbar" style={useTabsLayout ? { background: 'var(--g50)', boxShadow: '0 -1px 0 var(--g200)' } : undefined}>
-          <button className="btn btn-s" onClick={() => { setInvoice(defaultInvoice); setAutoFilledDraw(null); setReimaginedKind(null); if (showInvoiceAsModal) setModalInvoiceOpen(false); else if (useTabsLayout) setActivePage('owner-invoices'); }}>Cancel</button>
+          <button className="btn btn-s" onClick={() => { setInvoice(defaultInvoice); setAutoFilledDraw(null); setReimaginedKind(null); if (showInvoiceAsModal) setModalInvoiceOpen(false); else if (useTabsLayout) setActivePage(invoiceReturnPage); }}>Cancel</button>
           {isInvoiceV2Like && !isNarrow && !useTabsLayout && (
             <button
               type="button"
@@ -2097,7 +2245,7 @@ export default function App() {
         data={selection3Data}
       />
       <AddFromAllModal
-        open={addAllModalOpen && isInvoice3Family && !useTabsLayout}
+        open={addAllModalOpen && isInvoice3Family && (!useTabsLayout || combinedViewAsModal)}
         onClose={() => setAddAllModalOpen(false)}
         onAdd={(items) => setInvoice(inv => ({ ...inv, lineItems: [...inv.lineItems, ...items] }))}
         onAddSelections={handleAddFromSelections}
@@ -2107,7 +2255,7 @@ export default function App() {
       />
       <AddFromAllModal
         includeCosts
-        open={addAllV2ModalOpen && isInvoice3Family && !useTabsLayout}
+        open={addAllV2ModalOpen && isInvoice3Family && (!useTabsLayout || combinedViewAsModal)}
         onClose={() => setAddAllV2ModalOpen(false)}
         onAdd={(items) => setInvoice(inv => ({ ...inv, lineItems: [...inv.lineItems, ...items] }))}
         onAddSelections={handleAddFromSelections}
