@@ -53,8 +53,11 @@ export const CADENCE_OPTIONS: {
     question: 'Interval based',
     short: 'Interval based',
     detail: 'Invoice on a regular schedule, covering the costs since the last one.',
-    documents: ['standard', 'progress'],
-    thenChoose: 'Then choose a standard invoice or a progress invoice.',
+    /* Invoice schedule first, mirroring how milestone leads with the payment
+       schedule: the setup step is the answer this cadence usually wants, and
+       the two invoice types stay available for a one-off in between. */
+    documents: ['invoice-schedule', 'standard', 'progress'],
+    thenChoose: 'Then set your invoice schedule, or choose a standard or progress invoice.',
     setup: 'Next: pick the invoice type.',
   },
   {
@@ -109,6 +112,81 @@ function OptionList({ selected, onSelect, compact, omit = [] }: {
         );
       })}
     </div>
+  );
+}
+
+/* Step 2's list, shared by the modal and the empty state for the same reason
+   OptionList is: the two placements are being compared on where the question
+   gets asked, so the answers have to be identical in both. */
+function TypeOptionList({ cadence, selected, onSelect, onPreview, radioName }: {
+  cadence: Cadence;
+  selected: NewInvoiceChoice;
+  onSelect: (t: NewInvoiceChoice) => void;
+  onPreview: (mode: InvoicingMode) => void;
+  radioName: string;
+}) {
+  const opt = cadenceOption(cadence);
+  const options = INVOICE_TYPE_OPTIONS.filter(o => opt.documents.includes(o.key));
+  return (
+    <>
+      {/* What they picked, carried forward as a plain line. Without it the
+          narrowed list is unexplained: a builder seeing two types instead of
+          three has no way to know why. */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, fontSize: 13, color: 'var(--bds-color-gray-70)' }}>
+        <span style={{ color: 'var(--bds-color-green-70, #15803d)', display: 'inline-flex' }}><BdsIcon name="check" size={14} /></span>
+        <span>Invoiced on <strong style={{ color: 'var(--bds-color-gray-90)' }}>{opt.question}</strong></span>
+      </div>
+
+      {/* One column per type rather than a stack. Three documents read as
+          three things to compare, and side by side the comparison is the
+          layout: the labels sit on one line, the blurbs are the same shape,
+          and the preview links land at the same height. Stacked, the same
+          three cards were a list to scroll, which is a worse way to ask
+          "which of these".
+
+          Column count follows the options, so a cadence that offers two
+          doesn't leave a gap where the third would be. */}
+      <div style={{ display: 'grid', gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))`, gap: 12, alignItems: 'stretch' }}>
+        {options.map(o => {
+          const isSelected = o.key === selected;
+          return (
+            <label
+              key={o.key}
+              style={{
+                display: 'flex', flexDirection: 'column', cursor: 'pointer', textAlign: 'left', minWidth: 0,
+                border: isSelected ? '2px solid var(--bds-color-blue-70)' : '1px solid var(--bds-color-gray-25)',
+                background: isSelected ? 'var(--bds-color-blue-5)' : '#fff',
+                /* A pixel off the padding for the extra border pixel, so
+                   selecting a card doesn't nudge the row. */
+                borderRadius: 'var(--bds-radius-lg)', padding: isSelected ? '15px 15px' : '16px 16px',
+              }}
+            >
+              <span style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                <input
+                  type="radio" name={radioName} checked={isSelected}
+                  onChange={() => onSelect(o.key)}
+                  style={{ width: 16, height: 16, accentColor: 'var(--bds-color-blue-70)', marginTop: 2, flexShrink: 0 }}
+                />
+                <span style={{ fontWeight: 600, fontSize: 15, color: 'var(--bds-color-gray-90)', lineHeight: 1.3 }}>{o.label}</span>
+              </span>
+              {/* Takes the leftover height so the preview links line up across
+                  the columns instead of floating at three heights. */}
+              <span style={{ display: 'block', flex: 1, fontSize: 13, color: 'var(--bds-color-gray-60)', marginTop: 8, lineHeight: 1.45 }}>{o.blurb}</span>
+              {/* Preview belongs here, where a document is being chosen,
+                  rather than on step 1 where the cadence hasn't settled
+                  which document it is. */}
+              <button
+                type="button"
+                onClick={e => { e.preventDefault(); e.stopPropagation(); onPreview(INVOICE_TYPE_PREVIEW_MODE[o.key]); }}
+                style={{ background: 'none', border: 'none', padding: 0, marginTop: 12, cursor: 'pointer', color: 'var(--bds-color-blue-70)', fontSize: 13, fontWeight: 500, fontFamily: 'inherit', alignSelf: 'flex-start', textAlign: 'left' }}
+              >
+                Preview example →
+              </button>
+            </label>
+          );
+        })}
+      </div>
+    </>
   );
 }
 
@@ -179,8 +257,6 @@ export function CadenceWizardModal({ job, onClose, onComplete }: {
   const step1Ref = useRef<HTMLDivElement>(null);
   const step2Ref = useRef<HTMLDivElement>(null);
   const [trackHeight, setTrackHeight] = useState<number>();
-  const opt = cadence ? cadenceOption(cadence) : null;
-  const typeOptions = opt ? INVOICE_TYPE_OPTIONS.filter(o => opt.documents.includes(o.key)) : [];
 
   useEffect(() => {
     const measure = () => {
@@ -203,11 +279,18 @@ export function CadenceWizardModal({ job, onClose, onComplete }: {
     // cadence is in here because it changes how many types step 2 lists.
   }, [step, cadence]);
 
+  /* The types this cadence can produce. Read in two places: what step 2
+     would ask, and whether step 1 has anything left to ask at all. */
+  const docsFor = (c: Cadence) => cadenceOption(c).documents;
+  /* One document means step 1 is the last step, so the button has to say
+     "Create": "Continue" promises a question that never comes, and a one-off
+     invoice opens the moment it's pressed. */
+  const step1IsLastStep = !!cadence && docsFor(cadence).length === 1;
+
   const continueFromStep1 = () => {
     if (!cadence) return;
-    const docs = cadenceOption(cadence).documents;
-    /* One document means step 2 has nothing to ask, so Continue is the whole
-       flow: the invoice opens straight away. */
+    const docs = docsFor(cadence);
+    // Nothing left to ask: the invoice opens straight away.
     if (docs.length === 1) { onComplete(cadence, docs[0]); return; }
     // Land on the type this cadence most often produces, still changeable.
     setType(docs[0]);
@@ -219,11 +302,20 @@ export function CadenceWizardModal({ job, onClose, onComplete }: {
       style={{ position: 'fixed', inset: 0, background: 'rgba(20, 24, 33, 0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div className="bds-scope" style={{ background: '#fff', borderRadius: 'var(--bds-radius-lg)', width: 720, maxWidth: '94vw', maxHeight: '90vh', overflowY: 'auto', padding: 28, boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }}>
+      {/* Wider on step 2, where three columns need the room, and back to a
+          question's width on step 1, where three full-width cadence cards
+          would just be sparse. The width snaps rather than animating: a
+          growing frame re-flows the columns the whole way across, so the
+          cards visibly rewrap and the measured height overshoots. Only the
+          height animates, which is what carries the slide. */}
+      <div className="bds-scope" style={{ background: '#fff', borderRadius: 'var(--bds-radius-lg)', width: step === 2 ? 880 : 720, maxWidth: '94vw', maxHeight: '90vh', overflowY: 'auto', padding: 28, boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, marginBottom: 4 }}>
           <div>
+            {/* "of 2" only while there are two. A one-off invoice has nothing
+                to ask on step 2, so counting to it is the same wrong promise
+                the button used to make. */}
             <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 0.4, textTransform: 'uppercase', color: 'var(--bds-color-gray-50)', marginBottom: 4 }}>
-              Step {step} of 2
+              Step {step} of {step1IsLastStep ? 1 : 2}
             </div>
             <h2 style={{ fontSize: 22, fontWeight: 800, margin: 0, color: 'var(--bds-color-gray-90)' }}>
               {step === 1 ? 'How should this job be invoiced?' : 'What invoices do you want to create for this job?'}
@@ -250,48 +342,15 @@ export function CadenceWizardModal({ job, onClose, onComplete }: {
             </div>
 
             <div ref={step2Ref} style={{ width: '50%', flexShrink: 0, paddingLeft: 2, paddingBottom: 2 }} aria-hidden={step !== 2}>
-              {/* What they picked, carried forward as a plain line. */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, fontSize: 13, color: 'var(--bds-color-gray-70)' }}>
-                <span style={{ color: 'var(--bds-color-green-70, #15803d)', display: 'inline-flex' }}><BdsIcon name="check" size={14} /></span>
-                <span>Invoiced on <strong style={{ color: 'var(--bds-color-gray-90)' }}>{opt?.question}</strong></span>
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {typeOptions.map(o => {
-                  const isSelected = o.key === type;
-                  return (
-                    <label
-                      key={o.key}
-                      style={{
-                        display: 'flex', gap: 12, alignItems: 'flex-start', cursor: 'pointer', textAlign: 'left',
-                        border: isSelected ? '2px solid var(--bds-color-blue-70)' : '1px solid var(--bds-color-gray-25)',
-                        background: isSelected ? 'var(--bds-color-blue-5)' : '#fff',
-                        borderRadius: 'var(--bds-radius-lg)', padding: isSelected ? '15px 17px' : '16px 18px',
-                      }}
-                    >
-                      <input
-                        type="radio" name="wizard-invoice-type" checked={isSelected}
-                        onChange={() => setType(o.key)}
-                        style={{ width: 16, height: 16, accentColor: 'var(--bds-color-blue-70)', marginTop: 3, flexShrink: 0 }}
-                      />
-                      <span style={{ minWidth: 0 }}>
-                        <span style={{ display: 'block', fontWeight: 600, fontSize: 15, color: 'var(--bds-color-gray-90)' }}>{o.label}</span>
-                        <span style={{ display: 'block', fontSize: 13, color: 'var(--bds-color-gray-60)', marginTop: 3, lineHeight: 1.45 }}>{o.blurb}</span>
-                        {/* Preview belongs here, where a document is being
-                            chosen, rather than on step 1 where the cadence
-                            hasn't settled which document it is. */}
-                        <button
-                          type="button"
-                          onClick={e => { e.preventDefault(); e.stopPropagation(); setPreviewMode(INVOICE_TYPE_PREVIEW_MODE[o.key]); }}
-                          style={{ background: 'none', border: 'none', padding: 0, marginTop: 8, cursor: 'pointer', color: 'var(--bds-color-blue-70)', fontSize: 13, fontWeight: 500, fontFamily: 'inherit', display: 'block', textAlign: 'left' }}
-                        >
-                          Preview example →
-                        </button>
-                      </span>
-                    </label>
-                  );
-                })}
-              </div>
+              {cadence && (
+                <TypeOptionList
+                  cadence={cadence}
+                  selected={type}
+                  onSelect={setType}
+                  onPreview={setPreviewMode}
+                  radioName="wizard-invoice-type"
+                />
+              )}
             </div>
           </div>
         </div>
@@ -306,14 +365,14 @@ export function CadenceWizardModal({ job, onClose, onComplete }: {
             </button>
           )}
           {step === 1 && (
-            <BdsButton text="Continue" displayType="primary" disabled={!cadence} onClick={continueFromStep1} />
+            <BdsButton text={step1IsLastStep ? 'Create' : 'Continue'} displayType="primary" disabled={!cadence} onClick={continueFromStep1} />
           )}
           {step === 2 && (
             /* "Create" only when this really is the last step. A payment
                schedule opens the draw setup next, so nothing is created yet
                and the button says so. */
             <BdsButton
-              text={type === 'payment-schedule' ? 'Continue' : 'Create'}
+              text={type === 'payment-schedule' || type === 'invoice-schedule' ? 'Continue' : 'Create'}
               displayType="primary"
               onClick={() => onComplete(cadence!, type)}
             />
@@ -519,32 +578,103 @@ export function CadenceInlineQuestionnaire({ answered, onAnswer, onDismiss, onRe
    It also self-limits: once the job has invoices this state is gone, so the
    question can't reach a builder who's mid-task. The tradeoff is reach. A
    builder who lands on the invoice builder another way never sees it. */
-export function CadenceEmptyState({ onChoose, onSkip }: { onChoose: (c: Cadence) => void; onSkip: () => void }) {
-  const [selected, setSelected] = useState<Cadence | null>(null);
-  const choose = (c: Cadence) => { setSelected(c); onChoose(c); };
+export function CadenceEmptyState({ job, onComplete, onSkip }: {
+  job: Job;
+  /* Both answers arrive together, same as the wizard modal: the cadence alone
+     doesn't say which document to open, so the caller shouldn't have to guess. */
+  onComplete: (c: Cadence, type: NewInvoiceChoice) => void;
+  onSkip: () => void;
+}) {
+  const [step, setStep] = useState<1 | 2>(1);
+  const [cadence, setCadence] = useState<Cadence | null>(null);
+  const [type, setType] = useState<NewInvoiceChoice>('standard');
+  const [previewMode, setPreviewMode] = useState<InvoicingMode | null>(null);
+
+  /* Selecting a cadence used to be the whole answer here, which meant the
+     empty state committed to a document the builder never picked. It now asks
+     the same second question the "+ Invoice" modal asks, so the two placements
+     differ only in where they appear. */
+  const choose = (c: Cadence) => {
+    setCadence(c);
+    const docs = cadenceOption(c).documents;
+    // One document means there's nothing to ask: the answer is the whole flow.
+    if (docs.length === 1) { onComplete(c, docs[0]); return; }
+    // Land on the type this cadence most often produces, still changeable.
+    setType(docs[0]);
+    setStep(2);
+  };
+
   return (
-    <div style={{ maxWidth: 620, margin: '0 auto', textAlign: 'left' }}>
-      <div style={{ textAlign: 'center', marginBottom: 20 }}>
-        <BdsText as="div" size="distinct-lg" style={{ color: 'var(--bds-color-gray-90)', marginBottom: 6 }}>
-          How should this job be invoiced?
-        </BdsText>
-        <BdsText as="div" size="normal-md" style={{ color: 'var(--bds-color-gray-60)' }}>
-          Set once for this job. It decides which invoices Buildertrend creates for you. For a one-off, use
-          <strong style={{ color: 'var(--bds-color-gray-80)' }}> + Invoice</strong> instead.
-        </BdsText>
-      </div>
+    <div style={{ maxWidth: step === 2 ? 880 : 620, margin: '0 auto', textAlign: 'left' }}>
+      {step === 1 ? (
+        <>
+          <div style={{ textAlign: 'center', marginBottom: 20 }}>
+            <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 0.4, textTransform: 'uppercase', color: 'var(--bds-color-gray-50)', marginBottom: 6 }}>
+              Step 1 of 2
+            </div>
+            <BdsText as="div" size="distinct-lg" style={{ color: 'var(--bds-color-gray-90)', marginBottom: 6 }}>
+              How should this job be invoiced?
+            </BdsText>
+            <BdsText as="div" size="normal-md" style={{ color: 'var(--bds-color-gray-60)' }}>
+              Set once for this job. It decides which invoices Buildertrend creates for you. For a one-off, use
+              <strong style={{ color: 'var(--bds-color-gray-80)' }}> + Invoice</strong> instead.
+            </BdsText>
+          </div>
 
-      <OptionList selected={selected} onSelect={choose} compact omit={['adhoc']} />
+          <OptionList selected={cadence} onSelect={choose} compact omit={['adhoc']} />
 
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, marginTop: 20 }}>
-        <button
-          type="button" onClick={onSkip}
-          style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 13, fontWeight: 500, color: 'var(--bds-color-blue-70)', fontFamily: 'inherit' }}
-        >
-          Skip, I'll decide per invoice
-        </button>
-      </div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, marginTop: 20 }}>
+            <button
+              type="button" onClick={onSkip}
+              style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 13, fontWeight: 500, color: 'var(--bds-color-blue-70)', fontFamily: 'inherit' }}
+            >
+              Skip, I'll decide per invoice
+            </button>
+          </div>
+        </>
+      ) : (
+        <>
+          <div style={{ textAlign: 'center', marginBottom: 20 }}>
+            <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 0.4, textTransform: 'uppercase', color: 'var(--bds-color-gray-50)', marginBottom: 6 }}>
+              Step 2 of 2
+            </div>
+            <BdsText as="div" size="distinct-lg" style={{ color: 'var(--bds-color-gray-90)' }}>
+              What invoices do you want to create for this job?
+            </BdsText>
+          </div>
 
+          <TypeOptionList
+            cadence={cadence!}
+            selected={type}
+            onSelect={setType}
+            onPreview={setPreviewMode}
+            radioName="empty-state-invoice-type"
+          />
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 20 }}>
+            <button
+              type="button" onClick={() => setStep(1)}
+              style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 13, fontWeight: 500, color: 'var(--bds-color-blue-70)', fontFamily: 'inherit' }}
+            >
+              ← Back
+            </button>
+            {/* "Create" only when this really is the last step. A payment
+                schedule opens the draw setup next, so nothing is created yet
+                and the button says so. */}
+            <div style={{ marginLeft: 'auto' }}>
+              <BdsButton
+                text={type === 'payment-schedule' || type === 'invoice-schedule' ? 'Continue' : 'Create'}
+                displayType="primary"
+                onClick={() => onComplete(cadence!, type)}
+              />
+            </div>
+          </div>
+        </>
+      )}
+
+      {previewMode && (
+        <InvoicePreviewPanel mode={previewMode} job={job} onClose={() => setPreviewMode(null)} />
+      )}
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
-import { Invoice, ColumnVisibility, ClientColumnVisibility } from './types';
-import { defaultInvoice, EXISTING_INVOICES, DEMO_INVOICE } from './mockData';
+import { Invoice, ColumnVisibility, ClientColumnVisibility, ClientDetailVisibility } from './types';
+import { defaultInvoice, EXISTING_INVOICES, DEMO_INVOICE, CLIENT_DETAIL_OPTIONS } from './mockData';
 import { BdsButton } from './bds';
 import TopNav from './components/TopNav';
 import JobSidebar from './components/JobSidebar';
@@ -19,6 +19,7 @@ import Notes from './components/Notes';
 import ClientPreview from './components/ClientPreview';
 import EmailPreview from './components/EmailPreview';
 import ClientColumnToggle from './components/ClientColumnToggle';
+import ClientDetailToggle from './components/ClientDetailToggle';
 import ClientColumnChips from './components/ClientColumnChips';
 import EstimateModal from './components/EstimateModal';
 import SelectionsModal from './components/SelectionsModal';
@@ -44,6 +45,7 @@ import ClientSelections2 from './components/ClientSelections2';
 import ClientSelections3 from './components/ClientSelections3';
 import ClientPortal, { ClientTopNav } from './components/ClientPortal';
 import ClientPreviewInvoice from './components/ClientPreviewInvoice';
+import ClientPreviewInvoiceOld from './components/ClientPreviewInvoiceOld';
 import JobCostingBudget from './components/JobCostingBudget';
 import UnderageFlows from './components/UnderageFlows';
 import OpenbookFlow from './components/OpenbookFlow';
@@ -60,9 +62,9 @@ import { getNextId } from './mockData';
 import { TIME_INTERVAL_DEMO_INVOICES, JULY_TIME_INTERVAL_ITEMS, type DemoInvoiceRow } from './mockData';
 import type { InvoicingMode, DrawScheduleLine, Job } from './types';
 
-type PageType = 'invoice' | 'invoice-2' | 'invoice-3' | 'invoice-3-modal' | 'invoice-full-page' | 'invoice-full-page-reimagined' | 'client-preview-invoice' | 'job-price-summary' | 'selections' | 'option-detail' | 'progress-invoice' | 'change-order' | 'change-order-list' | 'client-portal' | 'client-jps' | 'estimate' | 'estimate-ob' | 'job-proposal' | 'job-proposal-ob' | 'client-selections' | 'client-selections-2' | 'client-selections-3' | 'job-costing-budget' | 'underage-flows' | 'job-details-clients' | 'owner-invoices' | 'openbook' | 'job-details' | 'company-settings' | 'bills' | 'invoice-exploration' | 'invoice-type-preview';
+type PageType = 'invoice' | 'invoice-2' | 'invoice-3' | 'invoice-3-modal' | 'invoice-full-page' | 'invoice-full-page-reimagined' | 'client-preview-invoice' | 'client-preview-invoice-old' | 'job-price-summary' | 'selections' | 'option-detail' | 'progress-invoice' | 'change-order' | 'change-order-list' | 'client-portal' | 'client-jps' | 'estimate' | 'estimate-ob' | 'job-proposal' | 'job-proposal-ob' | 'client-selections' | 'client-selections-2' | 'client-selections-3' | 'job-costing-budget' | 'underage-flows' | 'job-details-clients' | 'owner-invoices' | 'openbook' | 'job-details' | 'company-settings' | 'bills' | 'invoice-exploration' | 'invoice-type-preview';
 
-const validPages: PageType[] = ['invoice', 'invoice-2', 'invoice-3', 'invoice-3-modal', 'invoice-full-page', 'invoice-full-page-reimagined', 'client-preview-invoice', 'job-price-summary', 'selections', 'option-detail', 'progress-invoice', 'change-order', 'change-order-list', 'client-portal', 'client-jps', 'estimate', 'estimate-ob', 'job-proposal', 'job-proposal-ob', 'client-selections', 'client-selections-2', 'client-selections-3', 'job-costing-budget', 'underage-flows', 'job-details-clients', 'owner-invoices', 'openbook', 'job-details', 'company-settings', 'bills', 'invoice-exploration', 'invoice-type-preview'];
+const validPages: PageType[] = ['invoice', 'invoice-2', 'invoice-3', 'invoice-3-modal', 'invoice-full-page', 'invoice-full-page-reimagined', 'client-preview-invoice', 'client-preview-invoice-old', 'job-price-summary', 'selections', 'option-detail', 'progress-invoice', 'change-order', 'change-order-list', 'client-portal', 'client-jps', 'estimate', 'estimate-ob', 'job-proposal', 'job-proposal-ob', 'client-selections', 'client-selections-2', 'client-selections-3', 'job-costing-budget', 'underage-flows', 'job-details-clients', 'owner-invoices', 'openbook', 'job-details', 'company-settings', 'bills', 'invoice-exploration', 'invoice-type-preview'];
 
 function getInitialPage(): PageType {
   // Support ?page=X query param (used when hash is occupied by Figma capture)
@@ -129,6 +131,10 @@ export default function App() {
     // Job details' Back returns wherever you came from, including the Jobs >
     // Summary entry in the top nav, which doesn't set this itself.
     if (page === 'job-details' && activePage !== 'job-details') setJobDetailsReturnPage(activePage);
+    // A freshly opened invoice-3 always starts on Details, same as the modal
+    // presentation — otherwise it could inherit whatever tab an earlier
+    // invoice (modal or full-page) was left on.
+    if (page === 'invoice-3') setModalDetailsTab('details');
     _setActivePage(page as PageType);
     window.location.hash = page;
   };
@@ -356,6 +362,9 @@ export default function App() {
     costType: false, quantity: true, unit: false, unitPrice: true,
   });
   const [clientGroupBy, setClientGroupBy] = useState<'estimate' | 'costcode' | 'all'>('estimate');
+  // Which backup detail (vendor / bill # / date / receipts / crew) the client
+  // sees under a line. All off by default — see ClientDetailToggle.
+  const [clientDetail, setClientDetail] = useState<ClientDetailVisibility>({});
   // "Invoice (modal)" Customize view panel — the built-in factory defaults,
   // used by both the initial state above and the panel's "Reset" button.
   const DEFAULT_CLIENT_VIS: ClientColumnVisibility = { costType: false, quantity: true, unit: false, unitPrice: true };
@@ -428,6 +437,10 @@ export default function App() {
      Cancel would drop a builder onto the grid they didn't come from. */
   const [invoiceReturnPage, setInvoiceReturnPage] = useState<PageType>('owner-invoices');
   const [explorationCadence, setExplorationCadence] = useState<Cadence | null>(null);
+  /* Interval's step 2 sets an invoice schedule, so this route needs somewhere
+     to keep the dates. Local for the same reason as the draws: poking at the
+     sandbox shouldn't leave a cadence on the demo job. */
+  const [explorationInvoiceCadence, setExplorationInvoiceCadence] = useState<InvoiceCadence | null>(null);
 
   const createInvoicesFromSchedule = (draws: DrawScheduleLine[]) => {
     const jobId = currentJobWithOverrides.id;
@@ -1025,6 +1038,19 @@ export default function App() {
     );
   }
 
+  /* The pre-redesign presentation, on its own route so the two can be opened
+     side by side. Frozen for comparison - see ClientPreviewInvoiceOld.tsx. */
+  if (activePage === 'client-preview-invoice-old') {
+    return (
+      <div style={{display: 'flex', flexDirection: 'column', height: '100vh'}}>
+        <TopNav onNavigate={(page) => setActivePage(page as PageType)} />
+        <div style={{flex: 1, minHeight: 0}}>
+          <ClientPreviewInvoiceOld />
+        </div>
+      </div>
+    );
+  }
+
   if (activePage === 'owner-invoices') {
     const job = currentJobWithOverrides;
     return (
@@ -1162,7 +1188,7 @@ export default function App() {
             placement={cadencePlacement}
             onPlacementChange={setCadencePlacement}
             answer={explorationCadence}
-            onReset={() => { setExplorationCadence(null); setExplorationInvoices([]); setExplorationDraws([]); setExplorationJobKind(null); }}
+            onReset={() => { setExplorationCadence(null); setExplorationInvoices([]); setExplorationDraws([]); setExplorationJobKind(null); setExplorationInvoiceCadence(null); }}
           />
           <ExplorationInvoicesPage
             job={explorationJob}
@@ -1173,6 +1199,9 @@ export default function App() {
             onAddInvoiceSmart={() => {}}
             onSavePaymentSchedule={setExplorationDraws}
             onDeletePaymentSchedule={() => setExplorationDraws([])}
+            invoiceCadence={explorationInvoiceCadence}
+            onSaveInvoiceCadence={setExplorationInvoiceCadence}
+            onDeleteInvoiceCadence={() => setExplorationInvoiceCadence(null)}
             /* Fixed price, no invoices yet: the same configuration Financial >
                Invoice > Fixed opens on. */
             emptyState
@@ -1472,6 +1501,10 @@ export default function App() {
       Switch billing type
     </button>
   );
+  // Open book means the client is entitled to cost provenance; fixed price means
+  // they are buying a result. Drives the Backup detail hint copy only — every
+  // option stays reachable either way.
+  const isOpenBookJob = currentJobWithOverrides.contractType === 'cost-plus' || currentJobWithOverrides.contractType === 'time-and-materials';
   const isInvoiceV2Like = activePage === 'invoice-2' || activePage === 'invoice-3' || activePage === 'invoice-3-modal' || isFullPageInvoice;
   // 'invoice-3', 'invoice-3-modal' and the full-page routes are the same
   // reimagine builder content — the latter are just presented with the
@@ -1481,10 +1514,15 @@ export default function App() {
   // banners) needs all of them.
   const isInvoice3Family = activePage === 'invoice-3' || activePage === 'invoice-3-modal' || isFullPageInvoice;
   const showInvoiceAsModal = activePage === 'invoice-3-modal';
-  // The full-page routes reuse the modal's Details/Client-preview tab layout,
-  // just rendered inline in the content area instead of inside the modal
-  // backdrop — see showInvoiceAsModal-only usages below for what stays modal-specific.
-  const useTabsLayout = showInvoiceAsModal || isFullPageInvoice;
+  // The full-page routes, and now the plain Invoice page, reuse the modal's
+  // Details/Client-preview tab layout, just rendered inline in the content
+  // area instead of inside the modal backdrop — see showInvoiceAsModal-only
+  // usages below for what stays modal-specific. Financial > Invoice used to
+  // show Client preview as a side-by-side split with a bottom-bar toggle to
+  // hide it; it now gets the same top-level tab as every other invoice-3
+  // presentation, carrying over the same client-preview data and Customize
+  // panel that split view already used.
+  const useTabsLayout = showInvoiceAsModal || isFullPageInvoice || isBaseInvoicePage;
   /* Invoice (modal - OB) only: the combined views open as their own centered
      dialog rather than docking beside the invoice. The invoice is already a
      modal on this route, so a panel splits one overlay into two competing
@@ -1516,16 +1554,19 @@ export default function App() {
     setModalDetailsTab('client-preview');
   };
 
-  // Details / Client preview switcher — the shared BDS segmented control
-  // (same `.tabs` component as "Invoice date | Link to schedule item"), matching
-  // the Change Order page's tab treatment.
+  // Details / Client preview switcher — plain underlined text tabs (the same
+  // treatment as the Client preview / Email preview tabs above the old
+  // split-view preview pane), not the segmented BDS control used for
+  // "Invoice date | Link to schedule item" and similar mode switches. Those
+  // are exclusive-choice settings; this is a page-level view switch, so it
+  // reads better as a lightweight tab row.
   const renderDetailsTabs = () => (
-    <div className="tabs" role="tablist" aria-label="Invoice view">
+    <div className="dv-tabs" role="tablist" aria-label="Invoice view">
       <button
         type="button"
         role="tab"
         aria-selected={modalDetailsTab === 'details'}
-        className={"tab" + (modalDetailsTab === 'details' ? ' on' : '')}
+        className={"dv-tab" + (modalDetailsTab === 'details' ? ' on' : '')}
         onClick={() => setModalDetailsTab('details')}
       >
         Details
@@ -1534,7 +1575,7 @@ export default function App() {
         type="button"
         role="tab"
         aria-selected={modalDetailsTab === 'client-preview'}
-        className={"tab" + (modalDetailsTab === 'client-preview' ? ' on' : '')}
+        className={"dv-tab" + (modalDetailsTab === 'client-preview' ? ' on' : '')}
         onClick={openClientPreviewTab}
       >
         Client preview
@@ -1787,13 +1828,13 @@ export default function App() {
           </div>
         </div>
       ) : (
-        <PageHeader invoice={invoice} jobOpen={jobOpen} onToggleJob={() => setJobOpen(true)} onClose={leaveInvoice} flush={showInvoiceAsModal} />
+        <PageHeader invoice={invoice} jobOpen={jobOpen} onToggleJob={() => setJobOpen(true)} onClose={leaveInvoice} flush={showInvoiceAsModal || isBaseInvoicePage} />
       )}
 
       {useTabsLayout ? (
         <>
-          {showInvoiceAsModal && (
-            <div style={{ padding: '16px 24px', borderBottom: '1px solid var(--g200)', flexShrink: 0 }}>
+          {(showInvoiceAsModal || isBaseInvoicePage) && (
+            <div style={{ padding: '16px 24px', borderBottom: '1px solid var(--g200)', flexShrink: 0, background: 'white' }}>
               {renderDetailsTabs()}
             </div>
           )}
@@ -1909,6 +1950,7 @@ export default function App() {
                   <ClientPreview
                     invoice={invoice}
                     clientVis={clientVis}
+                    clientDetail={clientDetail}
                     groupBy={clientGroupBy}
                     hideLineItems={clientHideLineItems}
                     showQrCode={clientShowQrCode}
@@ -1957,6 +1999,44 @@ export default function App() {
                       <div style={{ fontSize: 11, color: 'var(--g400)', marginTop: 6 }}>Description and Amount always show.</div>
                     </div>
 
+                    {/* Backup detail sits between Columns and General information
+                        because it is neither: columns are a layout question, general
+                        information is boilerplate, and this is a disclosure question
+                        about where the money went. Only reachable when line items
+                        show at all — there is nothing to nest backup under otherwise. */}
+                    {!clientHideLineItems && (
+                      <div style={{ marginBottom: 20 }}>
+                        <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--g500)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.3 }}>Backup detail</div>
+                        <div style={{ fontSize: 11, color: 'var(--g400)', marginBottom: 10, lineHeight: 1.45 }}>
+                          {isOpenBookJob
+                            ? 'This job is open book, so the client is entitled to see where their money went.'
+                            : 'This job is fixed price. The client is buying a result, not your costs.'}
+                        </div>
+                        {CLIENT_DETAIL_OPTIONS.map(o => (
+                          <label key={o.key} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13, color: 'var(--g700)', cursor: 'pointer', marginBottom: 10 }}>
+                            <input
+                              type="checkbox"
+                              checked={!!clientDetail[o.key]}
+                              onChange={e => { setClientDetail({ ...clientDetail, [o.key]: e.target.checked }); setCustomizeSavedAsDefault(false); }}
+                              style={{ marginTop: 2 }}
+                            />
+                            <span>
+                              {o.label}
+                              <span style={{ display: 'block', fontSize: 11, color: 'var(--g400)', marginTop: 1 }}>{o.hint}</span>
+                            </span>
+                          </label>
+                        ))}
+                        {clientDetail.laborDetail && !isOpenBookJob && (
+                          <div style={{ fontSize: 11, color: 'var(--g600)', lineHeight: 1.45, background: 'var(--amber-bg, #fff8e6)', border: '1px solid var(--g200)', borderRadius: 4, padding: '6px 8px' }}>
+                            This shows each person's hourly rate to the client.
+                          </div>
+                        )}
+                        <div style={{ fontSize: 11, color: 'var(--g400)', marginTop: 2, lineHeight: 1.45 }}>
+                          Lines from the estimate, change orders or selections have no backup to show.
+                        </div>
+                      </div>
+                    )}
+
                     <div>
                       <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--g500)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: 0.3 }}>General information</div>
                       <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--g700)', cursor: 'pointer', marginBottom: 10 }}>
@@ -2004,6 +2084,7 @@ export default function App() {
                           setClientShowDescription(true);
                           setClientShowIntroText(true);
                           setClientShowClosingText(false);
+                          setClientDetail({});
                           setCustomizeSavedAsDefault(false);
                         }}
                       />
@@ -2078,12 +2159,13 @@ export default function App() {
                         </div>
                       )}
                       <ClientColumnToggle columns={clientVis} onChange={setClientVis} />
+                      <ClientDetailToggle detail={clientDetail} onChange={setClientDetail} contractType={currentJobWithOverrides.contractType} />
                     </>
                   )}
                 </div>
               </div>
               <div style={{flex: 1, overflowY: 'auto', padding: 24, background: 'var(--g50)'}}>
-                {previewTab === 'client' && <ClientPreview invoice={invoice} clientVis={clientVis} groupBy={isInvoiceV2Like ? clientGroupBy : 'estimate'} />}
+                {previewTab === 'client' && <ClientPreview invoice={invoice} clientVis={clientVis} clientDetail={clientDetail} groupBy={isInvoiceV2Like ? clientGroupBy : 'estimate'} />}
                 {previewTab === 'email' && <EmailPreview invoice={invoice} />}
               </div>
             </div>

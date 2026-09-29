@@ -187,7 +187,11 @@ export default function ExplorationInvoicesPage({
      or "+ Payment schedule" is already spent before the builder arrives and the
      modal opens on six draws they never entered. So in that loop the schedule
      counts as existing only once it was created here. */
-  const scheduleReady = onCreateInvoicesFromSchedule ? (createdInvoices?.length ?? 0) > 0 : hasSchedule;
+  /* Keyed off the draws, not the invoice count. It used to read
+     `createdInvoices.length > 0`, which meant creating any single standard
+     invoice flipped "+ Payment schedule" into view mode: the only way to build
+     a schedule disappeared and the button opened an empty tracker instead. */
+  const scheduleReady = hasSchedule;
   const readyDraw = invoicingMode === 'milestone-draws'
     ? (job.drawSchedule ?? []).find(d => d.phaseComplete && !d.invoiced)
     : undefined;
@@ -647,11 +651,17 @@ export default function ExplorationInvoicesPage({
                 <CadenceAnsweredEmptyState answered={cadenceAnswer} onChange={() => onCadenceAnswer(null)} />
               ) : (
                 <CadenceEmptyState
-                  /* One document means the answer is the whole flow, same as the
-                     wizard: the invoice opens instead of a second question. */
-                  onChoose={c => {
+                  job={job}
+                  /* Same two answers the "+ Invoice" modal collects, so the
+                     cadence never picks a document on the builder's behalf.
+                     A cadence with one document skips step 2 on its own. */
+                  onComplete={(c, type) => {
                     onCadenceAnswer(c);
-                    if (cadenceOption(c).documents.length === 1) onAddInvoiceDirect?.(cadenceOption(c).documents[0], false);
+                    // Payment schedule is set up here, not in the invoice.
+                    if (type === 'payment-schedule') setShowScheduleModal(true);
+                    // Interval's setup step, same shape: the schedule opens next.
+                    else if (type === 'invoice-schedule') setShowCadenceModal(true);
+                    else onAddInvoiceDirect?.(type, false);
                   }}
                   onSkip={() => setCadenceSkipped(true)}
                 />
@@ -860,7 +870,7 @@ export default function ExplorationInvoicesPage({
           /* Narrowed by the first dialog rather than decided by it: a cadence
              rules some types out, it doesn't pick one. */
           choices={cadenceAnswer ? cadenceOption(cadenceAnswer).documents : invoiceTypeChoices}
-          initialChoice={cadenceAnswer === 'phase' ? 'payment-schedule' : cadenceAnswer ? 'standard' : undefined}
+          initialChoice={cadenceAnswer === 'phase' ? 'payment-schedule' : cadenceAnswer === 'interval' ? 'invoice-schedule' : cadenceAnswer ? 'standard' : undefined}
           answeredContext={cadenceAnswer ? { answer: cadenceOption(cadenceAnswer).question } : undefined}
           onClose={() => setShowTypeModal(false)}
           onImportTemplate={onImportTemplate ? () => { setShowTypeModal(false); setShowTemplateModal(true); } : undefined}
@@ -868,6 +878,7 @@ export default function ExplorationInvoicesPage({
             setShowTypeModal(false);
             // Payment schedule is set up here, not in the invoice.
             if (choice === 'payment-schedule') { setShowScheduleModal(true); return; }
+            if (choice === 'invoice-schedule') { setShowCadenceModal(true); return; }
             onAddInvoiceDirect(choice, makeDefault);
           }}
         />
@@ -916,6 +927,11 @@ export default function ExplorationInvoicesPage({
         <InvoiceScheduleModal
           cadence={invoiceCadence ?? null}
           fromProposal={cadenceFromProposal && !!invoiceCadence}
+          /* hidePaymentSchedule is this page's open book signal: that job has no
+             contract price to split, which is the same reason its drafts cover
+             costs rather than completed work. A fixed-price job reaches this
+             modal now, so the sentence can no longer assume one model. */
+          billsActualCosts={hidePaymentSchedule}
           onClose={() => setShowCadenceModal(false)}
           onSave={cadence => { onSaveInvoiceCadence(cadence); setShowCadenceModal(false); }}
           onDelete={onDeleteInvoiceCadence && (() => { onDeleteInvoiceCadence(); setShowCadenceModal(false); })}
@@ -933,6 +949,7 @@ export default function ExplorationInvoicesPage({
             setShowCadenceQuestion(false);
             // Payment schedule is set up here, not in the invoice.
             if (type === 'payment-schedule') setShowScheduleModal(true);
+            else if (type === 'invoice-schedule') setShowCadenceModal(true);
             else onAddInvoiceDirect?.(type, false);
           }}
         />

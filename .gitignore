@@ -5,3 +5,7 @@ dist-*
 .claude
 .vercel
 .env*
+
+# Local research/analysis outputs — contain real builder names and emails,
+# and this repo is public. Never commit.
+outputs/

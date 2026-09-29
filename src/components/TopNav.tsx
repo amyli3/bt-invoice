@@ -215,6 +215,10 @@ export default function TopNav({ onNavigate }: TopNavProps) {
                 )}
               </div>
               <button className="topnav-dropdown-item" onClick={() => { setFinancialOpen(false); onNavigate?.('client-preview-invoice'); }}>Client preview invoice</button>
+              {/* The pre-redesign presentation, kept alongside the current one
+                  so the two can be compared in a review. Sits directly under
+                  it because it is the same screen, not a separate surface. */}
+              <button className="topnav-dropdown-item" onClick={() => { setFinancialOpen(false); onNavigate?.('client-preview-invoice-old'); }}>Client preview invoice (old)</button>
               <button className="topnav-dropdown-item" onClick={() => { setFinancialOpen(false); onNavigate?.('progress-invoice'); }}>Progress Invoice</button>
               {/* Two estimates, split by how the job bills. Fixed price locks a
                   contract price that draws can be built from; open book bills

@@ -5,7 +5,7 @@ import { Job, InvoicingMode } from '../types';
 import { recommendInvoicingMode } from '../mockData';
 import InvoicePreviewPanel from './InvoicePreviewPanel';
 
-export type InvoiceTypeChoice = 'standard' | 'payment-schedule' | 'progress';
+export type InvoiceTypeChoice = 'standard' | 'payment-schedule' | 'invoice-schedule' | 'progress';
 
 /* "+ Invoice" from the invoices grid. The three options are three different
    documents, not three settings, so the question is asked once here rather
@@ -34,6 +34,15 @@ export const INVOICE_TYPE_OPTIONS: { key: InvoiceTypeChoice; label: string; blur
     blurb: 'Split the contract price into draws by percentage. Buildertrend creates an invoice for each draw, ready to send as each phase completes.',
   },
   {
+    key: 'invoice-schedule',
+    label: 'Invoice schedule',
+    /* Interval billing's equivalent of the payment schedule, and named for what
+       it sets rather than what it pays: dates, no amounts. Without this the
+       interval answer was the only cadence that produced no setup artifact, so
+       answering it narrowed a list and did nothing else. */
+    blurb: 'Set how often you invoice. Buildertrend drafts an invoice on each billing date covering the work since the last one.',
+  },
+  {
     key: 'progress',
     label: 'Progress invoice',
     /* Names where the lines come from. "A schedule of values" told a builder
@@ -50,6 +59,7 @@ export const INVOICE_TYPE_OPTIONS: { key: InvoiceTypeChoice; label: string; blur
 export const INVOICE_TYPE_PREVIEW_MODE: Record<InvoiceTypeChoice, InvoicingMode> = {
   standard: 'time-interval',
   'payment-schedule': 'milestone-draws',
+  'invoice-schedule': 'time-interval',
   progress: 'aia-percent-complete',
 };
 
@@ -193,7 +203,7 @@ export default function InvoiceTypeModal({ job, onClose, onChoose, onImportTempl
           {/* Payment schedule is a setup step, not a document type, so there's
               nothing for it to default to and nothing to say in its place:
               the schedule modal it opens explains itself. */}
-          {selected !== 'payment-schedule' && (
+          {selected !== 'payment-schedule' && selected !== 'invoice-schedule' && (
             <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, marginTop: 14, fontSize: 13, color: 'var(--bds-color-gray-80)', cursor: 'pointer', userSelect: 'none' }}>
               <input
                 type="checkbox"
@@ -221,7 +231,7 @@ export default function InvoiceTypeModal({ job, onClose, onChoose, onImportTempl
             </button>
           )}
           <BdsButton text="Cancel" displayType="secondary" onClick={onClose} />
-          <BdsButton text="Continue" displayType="primary" onClick={() => onChoose(selected, makeDefault && selected !== 'payment-schedule')} />
+          <BdsButton text="Continue" displayType="primary" onClick={() => onChoose(selected, makeDefault && selected !== 'payment-schedule' && selected !== 'invoice-schedule')} />
         </div>
       </div>
     </div>

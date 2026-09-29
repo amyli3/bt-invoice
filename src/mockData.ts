@@ -15,6 +15,23 @@ export const ALL_COLUMNS: ColumnDef[] = [
   { key: 'bill', label: 'Bill' },
 ];
 
+/* Backup detail the client can be shown beneath a line, as distinct from the
+   COLUMNS above. These are disclosure decisions rather than layout ones: each
+   reveals something about where the money went (who was paid, on what document,
+   by which crew), so they read as their own group in the customize panel and
+   are all off by default. Sourced from the Jun-Sep 2026 feedback corpus —
+   Renee's "cost code / vendor / bill # / $" shape for lender packages, Michelle
+   Smith on labor collapsing to a lump sum per day, Paul G on attachments
+   defaulting to hidden on fixed price, and Daniel's objection to per-employee
+   wages being visible, which is why every one of these is opt-in. */
+export const CLIENT_DETAIL_OPTIONS = [
+  { key: 'vendor', label: 'Vendor name', hint: 'Who was paid' },
+  { key: 'billNumber', label: 'Vendor invoice #', hint: 'Their document number, for cross-reference' },
+  { key: 'billDate', label: 'Bill date', hint: 'When the cost was incurred' },
+  { key: 'attachments', label: 'Attached receipts', hint: 'Listed under the line' },
+  { key: 'laborDetail', label: 'Labor by employee', hint: 'Names, hours and rate' },
+];
+
 export const CLIENT_COLUMNS = [
   { key: 'costType', label: 'Cost type' },
   { key: 'markedAs', label: 'Marked as' },

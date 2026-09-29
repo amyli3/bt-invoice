@@ -56,6 +56,12 @@ interface CostLine {
   costCode: string;
   costType: string;
   amount: number;
+  /** Time clock only — the crew member behind this line, and what they cost.
+      Rendered in the picker today and dropped at the add step. */
+  employee?: string;
+  hours?: number;
+  rate?: number;
+  payType?: string;
   /** Bills: line description. Time clock: shift note. Shown when the
       matching "descriptions & notes" / "internal notes" option is on. */
   note?: string;
@@ -65,6 +71,17 @@ export interface CostRecord {
   id: string;
   kind: RecordKind;
   title: string;
+  /** Vendor of record. The picker already shows this; until now it stopped here. */
+  vendor?: string;
+  /** The VENDOR's invoice number, not BT's. This is the number a client or a
+      lender cross-references against the attached PDF. */
+  billNumber?: string;
+  /** ISO bill/post date, for the client-facing "billed on" line. dateLabel is
+      the picker's own prose version and stays as-is. */
+  billDate?: string;
+  /** Filenames of receipts / sub invoices on the source bill. `attachments`
+      below is the count the picker badges; this is what they actually are. */
+  attachmentNames?: string[];
   /** Cost code (bills) or pay type (time clock) — the row's subtitle. */
   subtitle: string;
   /** "Bill date: …" for bills, "Shift date(s): …" for time clock. */
@@ -91,6 +108,8 @@ export interface CostRecord {
 const COST_RECORDS: CostRecord[] = [
   {
     id: 'bill-0004', kind: 'Bill', title: '0004 - Site Preparation', subtitle: 'Buildertrend Misc.',
+    vendor: 'Redline Excavating', billNumber: 'RE-4471', billDate: '2024-10-29',
+    attachmentNames: ['redline-invoice-4471.pdf'],
     dateLabel: 'Bill date: Oct 29, 2024', approved: true, total: 344, ownerPrice: 400, attachments: 1,
     recommendation: 'recommended', reason: "You've billed Sitework on all 9 invoices for this job",
     lines: [
@@ -100,6 +119,7 @@ const COST_RECORDS: CostRecord[] = [
   },
   {
     id: 'bill-0009', kind: 'Bill', title: '0009 - Tile', subtitle: 'Buildertrend Misc.',
+    vendor: 'Cornerstone Tile Supply', billNumber: '88213', billDate: '2024-10-29',
     dateLabel: 'Bill date: Oct 29, 2024', approved: true, total: 122, ownerPrice: 122,
     recommendation: 'recommended', reason: 'Tile has been billed on 5 of the last 5 invoices for this job',
     lines: [
@@ -108,6 +128,8 @@ const COST_RECORDS: CostRecord[] = [
   },
   {
     id: 'bill-0011', kind: 'Bill', title: '0011 - Paint', subtitle: 'Buildertrend Misc.',
+    vendor: 'Gallagher Painting LLC', billNumber: 'GP-2025-118', billDate: '2025-11-21',
+    attachmentNames: ['gallagher-inv-118.pdf', 'gallagher-lien-waiver.pdf'],
     dateLabel: 'Bill date: Nov 21, 2025', approved: false, total: 25000, ownerPrice: 23800, attachments: 2,
     recommendation: 'no-history', reason: 'No billing history for Painting on this job yet',
     lines: [
@@ -117,6 +139,7 @@ const COST_RECORDS: CostRecord[] = [
   },
   {
     id: 'bill-misc', kind: 'Bill', title: 'bill', subtitle: 'Buildertrend Misc.',
+    vendor: 'Heartland Cabinet & Appliance', billNumber: '2025-3390', billDate: '2025-11-21',
     dateLabel: 'Bill date: Nov 21, 2025', approved: false, total: 46798,
     recommendation: 'never-invoiced', reason: 'Cabinets and Appliances have never been billed on this job',
     lines: [
@@ -129,17 +152,23 @@ const COST_RECORDS: CostRecord[] = [
     dateLabel: 'Shift date: Dec 3, 2025', approved: true, total: 650,
     recommendation: 'recommended', reason: 'Electrical labor is billed on almost every invoice for this job',
     lines: [
-      { id: 'tc-electrical-a', name: 'M. Reyes — 8.0 hrs @ $52.00', costCode: 'Electrical', costType: 'Labor', amount: 416, note: 'Rough-in, second floor' },
-      { id: 'tc-electrical-b', name: 'J. Alvarez — 4.5 hrs @ $52.00', costCode: 'Electrical', costType: 'Labor', amount: 234 },
+      { id: 'tc-electrical-a', name: 'M. Reyes — 8.0 hrs @ $52.00', costCode: 'Electrical', costType: 'Labor', amount: 416, note: 'Rough-in, second floor', employee: 'M. Reyes', hours: 8, rate: 52, payType: 'Electrical' },
+      { id: 'tc-electrical-b', name: 'J. Alvarez — 4.5 hrs @ $52.00', costCode: 'Electrical', costType: 'Labor', amount: 234, employee: 'J. Alvarez', hours: 4.5, rate: 52, payType: 'Electrical' },
     ],
   },
   {
     id: 'tc-flatrate', kind: 'Time Clock', title: 'Labor', subtitle: 'Buildertrend Flat Rate',
-    dateLabel: 'Shift dates: Nov 13, 2025 - Nov 26, 2025', approved: true, total: 12029,
+    dateLabel: 'Shift dates: Nov 13, 2025 - Nov 26, 2025', approved: true, total: 12623,
     recommendation: 'recommended', reason: "You've billed Rough Carpentry labor on 11 of 12 past invoices",
     lines: [
-      { id: 'tc-flatrate-a', name: 'Crew — week of Nov 13', costCode: '06.10 - Rough Carpentry', costType: 'Labor', amount: 6180 },
-      { id: 'tc-flatrate-b', name: 'Crew — week of Nov 20', costCode: '06.10 - Rough Carpentry', costType: 'Labor', amount: 5849, note: 'Short week — holiday' },
+      { id: 'tc-flatrate-a', name: 'D. Okafor — 40.0 hrs @ $48.00', costCode: '06.10 - Rough Carpentry', costType: 'Labor', amount: 1920, employee: 'D. Okafor', hours: 40, rate: 48, payType: 'Carpentry' },
+      { id: 'tc-flatrate-b', name: 'S. Whitfield — 40.0 hrs @ $46.00', costCode: '06.10 - Rough Carpentry', costType: 'Labor', amount: 1840, employee: 'S. Whitfield', hours: 40, rate: 46, payType: 'Carpentry' },
+      { id: 'tc-flatrate-c', name: 'R. Nakamura — 34.0 hrs @ $54.00', costCode: '06.10 - Rough Carpentry', costType: 'Labor', amount: 1836, employee: 'R. Nakamura', hours: 34, rate: 54, payType: 'Lead carpenter' },
+      { id: 'tc-flatrate-d', name: 'T. Boyd — 12.0 hrs @ $48.00', costCode: '06.10 - Rough Carpentry', costType: 'Labor', amount: 576, employee: 'T. Boyd', hours: 12, rate: 48, payType: 'Carpentry' },
+      { id: 'tc-flatrate-e', name: 'D. Okafor — 38.0 hrs @ $48.00', costCode: '06.10 - Rough Carpentry', costType: 'Labor', amount: 1824, note: 'Short week — holiday', employee: 'D. Okafor', hours: 38, rate: 48, payType: 'Carpentry' },
+      { id: 'tc-flatrate-f', name: 'S. Whitfield — 38.0 hrs @ $46.00', costCode: '06.10 - Rough Carpentry', costType: 'Labor', amount: 1748, employee: 'S. Whitfield', hours: 38, rate: 46, payType: 'Carpentry' },
+      { id: 'tc-flatrate-g', name: 'R. Nakamura — 42.0 hrs @ $54.00', costCode: '06.10 - Rough Carpentry', costType: 'Labor', amount: 2268, employee: 'R. Nakamura', hours: 42, rate: 54, payType: 'Lead carpenter' },
+      { id: 'tc-flatrate-h', name: 'T. Boyd — 13.0 hrs @ $47.00', costCode: '06.10 - Rough Carpentry', costType: 'Labor', amount: 611, employee: 'T. Boyd', hours: 13, rate: 47, payType: 'Carpentry' },
     ],
   },
   /* Costs entered in QuickBooks and synced back to the job — the third source
@@ -147,6 +176,7 @@ const COST_RECORDS: CostRecord[] = [
      posted expenses, so there is no approval state and no attachments. */
   {
     id: 'qb-1042', kind: 'QuickBooks', title: 'Expense 1042 - Lumber yard', subtitle: 'QuickBooks Online',
+    vendor: 'Meyer Lumber Co.', billNumber: '1042', billDate: '2025-11-18',
     dateLabel: 'Posted: Nov 18, 2025', approved: true, total: 8460, ownerPrice: 9100,
     recommendation: 'recommended', reason: "You've billed Rough Carpentry material on 10 of 12 past invoices",
     lines: [
@@ -155,6 +185,7 @@ const COST_RECORDS: CostRecord[] = [
   },
   {
     id: 'qb-1067', kind: 'QuickBooks', title: 'Expense 1067 - Dumpster rental', subtitle: 'QuickBooks Online',
+    vendor: 'Metro Waste Services', billNumber: '1067', billDate: '2025-12-01',
     dateLabel: 'Posted: Dec 1, 2025', approved: true, total: 725,
     recommendation: 'no-history', reason: 'No billing history for General Conditions on this job yet',
     lines: [
@@ -198,6 +229,24 @@ export function recordsToLineItems(
         : r.kind === 'QuickBooks'
         ? { type: 'quickBooks' as const, name: r.title, groupId: r.id }
         : { type: 'bill' as const, name: r.title, groupId: r.id },
+      // Carry the source record's identity onto the line instead of dropping it
+      // here. This is the whole fix: the picker above already rendered vendor,
+      // bill number, date and per-employee hours, and the shipped add step
+      // throws all of it away, leaving the client a cost code and a BT
+      // reference number. Whether any of it reaches the CLIENT is a separate
+      // decision, made by the disclosure settings in the preview.
+      provenance: r.kind === 'Time Clock'
+        ? {
+            labor: r.lines
+              .filter(l => l.employee)
+              .map(l => ({ employee: l.employee!, hours: l.hours ?? 0, rate: l.rate ?? 0, payType: l.payType ?? '' })),
+          }
+        : {
+            vendor: r.vendor,
+            billNumber: r.billNumber,
+            billDate: r.billDate,
+            attachments: (r.attachmentNames || []).map(name => ({ name })),
+          },
     };
   });
 }

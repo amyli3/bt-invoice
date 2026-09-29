@@ -1,4 +1,4 @@
-import { Invoice, ClientColumnVisibility, LineItem } from '../types';
+import { Invoice, ClientColumnVisibility, ClientDetailVisibility, LineItem } from '../types';
 import { fmt, fmtDate, parseTaxRate } from '../utils';
 import { ESTIMATE_GROUP_BY_ID } from '../selectionsData';
 
@@ -31,6 +31,11 @@ interface Props {
   // "Invoice (modal)" only — gives the paper more vertical whitespace so it
   // reads like a fuller printed page. Defaults to unset (natural content height).
   minHeight?: number | string;
+  // Backup detail shown BENEATH a line (vendor, bill #, receipts, crew) rather
+  // than as a column. Keyed by CLIENT_DETAIL_OPTIONS. All default off: the
+  // fixed-price majority of the feedback corpus wants none of it, and the
+  // open-book minority that does want it says so explicitly.
+  clientDetail?: ClientDetailVisibility;
 }
 
 // Reallocation lines (the negative source) get re-attributed to the
@@ -114,6 +119,11 @@ function rollUpByGroup(lineItems: LineItem[]): LineItem[] {
         // Under the room parent rows, label each item by its combined title
         // (e.g. "Cabinets Allowance — final balance") rather than a cost code.
         description: item.relatedItem?.name || item.description || item.costCode,
+        // A group that ends up holding exactly one source record keeps that
+        // record's provenance. If a second line merges in below, the merge
+        // branch clears it, since "which vendor" has no answer once two
+        // vendors are summed into one row.
+        provenance: item.provenance,
         unitCost: lineTotal,
         quantity: 1,
         markup: 0,
@@ -124,6 +134,9 @@ function rollUpByGroup(lineItems: LineItem[]): LineItem[] {
       result[keyIndex[key]] = {
         ...existing,
         unitCost: existing.unitCost + lineTotal,
+        // Two or more source records now sit behind this row, so no single
+        // vendor or crew describes it. Showing the first one would be a lie.
+        provenance: undefined,
       };
     }
   }
@@ -192,7 +205,63 @@ function expandAllLineItems(lineItems: LineItem[]): LineItem[] {
   return out;
 }
 
-export default function ClientPreview({ invoice, clientVis, groupBy = 'estimate', hideLineItems = false, showQrCode = false, showCustomFields = false, showDescription = true, showIntroText = true, showClosingText = false, maxWidth, minHeight }: Props) {
+/* One "backup" block under a line: who was paid, on what document, and which
+   crew. Rendered as an indented sub-row spanning the full table width rather
+   than as columns, because these fields are prose-shaped and would wreck the
+   money columns' alignment. Returns null when nothing is enabled or the line
+   has no provenance (estimate and change-order lines never do), so grouped and
+   flat-fee views degrade to exactly today's output. */
+function BackupRow({ item, detail, colSpan }: { item: LineItem; detail: ClientDetailVisibility; colSpan: number }) {
+  const p = item.provenance;
+  if (!p) return null;
+  const bits: string[] = [];
+  if (detail.vendor && p.vendor) bits.push(p.vendor);
+  if (detail.billNumber && p.billNumber) bits.push(`Invoice ${p.billNumber}`);
+  if (detail.billDate && p.billDate) bits.push(`Billed ${fmtDate(p.billDate)}`);
+  const files = detail.attachments ? (p.attachments || []) : [];
+  const crew = detail.laborDetail ? (p.labor || []) : [];
+  if (!bits.length && !files.length && !crew.length) return null;
+
+  return (
+    <tr>
+      <td colSpan={colSpan} style={{ padding: '0 0 8px 24px', borderTop: 'none' }}>
+        {bits.length > 0 && (
+          <div style={{ fontSize: 10, color: 'var(--g500)', lineHeight: 1.5 }}>{bits.join(' · ')}</div>
+        )}
+        {files.length > 0 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 4 }}>
+            {files.map(f => (
+              <span key={f.name} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10, color: 'var(--g600)', background: 'var(--g50)', border: '1px solid var(--g200)', borderRadius: 3, padding: '1px 6px' }}>
+                <svg width="9" height="9" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                  <path d="M3.5 1.75h6.7l2.3 2.3v10.2H3.5z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+                  <path d="M10 1.9V4.3h2.4" stroke="currentColor" strokeWidth="1.4" />
+                </svg>
+                {f.name}
+              </span>
+            ))}
+          </div>
+        )}
+        {crew.length > 0 && (
+          <table style={{ marginTop: 5, borderCollapse: 'collapse', fontSize: 10, color: 'var(--g600)' }}>
+            <tbody>
+              {crew.map((l, i) => (
+                <tr key={`${l.employee}-${i}`}>
+                  <td style={{ padding: '1px 14px 1px 0', border: 'none', whiteSpace: 'nowrap' }}>{l.employee}</td>
+                  <td style={{ padding: '1px 14px 1px 0', border: 'none', color: 'var(--g400)' }}>{l.payType}</td>
+                  <td style={{ padding: '1px 14px 1px 0', border: 'none', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{l.hours} hrs</td>
+                  <td style={{ padding: '1px 14px 1px 0', border: 'none', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>${fmt(l.rate)}/hr</td>
+                  <td style={{ padding: '1px 0', border: 'none', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: 'var(--g700)' }}>${fmt(l.hours * l.rate)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </td>
+    </tr>
+  );
+}
+
+export default function ClientPreview({ invoice, clientVis, groupBy = 'estimate', hideLineItems = false, showQrCode = false, showCustomFields = false, showDescription = true, showIntroText = true, showClosingText = false, maxWidth, minHeight, clientDetail = {} }: Props) {
   const isFlatFee = invoice.mode === 'flatFee';
   const displayLineItems = (() => {
     if (isFlatFee) return invoice.lineItems;
@@ -365,9 +434,15 @@ export default function ClientPreview({ invoice, clientVis, groupBy = 'estimate'
                             </td>
                           ))}
                         </tr>,
-                        ...g.items.map(item => <tr key={item.id}>{cols.map(c => renderCell(item, c, true))}</tr>),
+                        ...g.items.flatMap(item => [
+                          <tr key={item.id}>{cols.map(c => renderCell(item, c, true))}</tr>,
+                          <BackupRow key={`${item.id}-bk`} item={item} detail={clientDetail} colSpan={cols.length} />,
+                        ]),
                       ])
-                    : displayLineItems.map(item => <tr key={item.id}>{cols.map(c => renderCell(item, c))}</tr>)}
+                    : displayLineItems.flatMap(item => [
+                        <tr key={item.id}>{cols.map(c => renderCell(item, c))}</tr>,
+                        <BackupRow key={`${item.id}-bk`} item={item} detail={clientDetail} colSpan={cols.length} />,
+                      ])}
                   {displayLineItems.length === 0 && <tr><td colSpan={cols.length} style={{padding: 24, textAlign: 'center', color: 'var(--g300)', fontStyle: 'italic'}}>No line items</td></tr>}
                 </tbody>
               </table>

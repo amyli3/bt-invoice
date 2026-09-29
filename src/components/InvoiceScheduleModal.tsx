@@ -55,9 +55,12 @@ interface Props {
      agreed to a billing rhythm, so changing it here is a change to what was
      sold, not a blank setup, and the modal says so. */
   fromProposal?: boolean;
+  /* False on a fixed-price job, where the draft covers work completed rather
+     than costs incurred. Defaults true so the open book callers are unchanged. */
+  billsActualCosts?: boolean;
 }
 
-export default function InvoiceScheduleModal({ onClose, onSave, onDelete, cadence, fromProposal }: Props) {
+export default function InvoiceScheduleModal({ onClose, onSave, onDelete, cadence, fromProposal, billsActualCosts = true }: Props) {
   const isEditing = !!cadence;
   const [c, setC] = useState<InvoiceCadence>(cadence ?? DEFAULT_CADENCE);
   const set = (patch: Partial<InvoiceCadence>) => setC(prev => ({ ...prev, ...patch }));
@@ -82,9 +85,12 @@ export default function InvoiceScheduleModal({ onClose, onSave, onDelete, cadenc
         {/* Says what saving does. This job bills actual costs, so the schedule
             decides when a draft appears, never what it's worth. */}
         <p style={{ fontSize: 14, color: 'var(--bds-color-gray-70)', marginBottom: 20 }}>
-          This job bills actual costs, so the schedule sets how often you invoice rather than fixed amounts.
-          Buildertrend creates a draft on each billing date covering the costs since the last invoice. Nothing
-          goes to the client until you send it.
+          {billsActualCosts
+            ? <>This job bills actual costs, so the schedule sets how often you invoice rather than fixed amounts.
+                Buildertrend creates a draft on each billing date covering the costs since the last invoice. Nothing
+                goes to the client until you send it.</>
+            : <>The schedule sets how often you invoice, not how much. Buildertrend creates a draft on each billing
+                date covering the work completed since the last invoice. Nothing goes to the client until you send it.</>}
         </p>
 
         {fromProposal && (
