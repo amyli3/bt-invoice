@@ -35,10 +35,25 @@ import { useReviewSettings } from '../reviewSettings';
  * a right-aligned totals block.
  */
 
+/* Where a billable line came from. This is the axis builders think in when
+   they describe an invoice out loud: "that's the lumber bill, that's our
+   hours, that's the two change orders". Deliberately not called an entity,
+   which is our word for it, not theirs. */
+type LineSource = 'estimate' | 'bill' | 'timeClock' | 'changeOrder' | 'selection';
+
+const SOURCE_LABELS: Record<LineSource, string> = {
+  estimate: 'Estimate',
+  bill: 'Bills',
+  timeClock: 'Time clock',
+  changeOrder: 'Change orders',
+  selection: 'Selections',
+};
+
 interface PreviewLine {
   id: string;
   item: string;
   costCode: string;
+  source: LineSource;
   qty: number;
   unitCost: number | null;
   markup: number | null;
@@ -49,6 +64,21 @@ interface PreviewLine {
      under its title, or collapsed into it entirely. */
   coId?: string;
   coTitle?: string;
+  /* When the work happened, in its own column: a single day for a bill, a
+     stretch of days for a pay period, as MM/DD - MM/DD/YY. One field for
+     both, because the client is asking the same question of either. The year
+     appears once, on the end date, because a pay period almost never spans
+     one. Estimate and selection lines have no date, and say so. The figures beside it mean hours and the hourly rate rather than
+     a count and a unit price, which is why the quantity states its unit. */
+  date?: string;
+  unit?: string;
+  /* A bill line bills a real document from a real supplier, so it carries who
+     was paid, their invoice number and its date. On open book that is the
+     disclosure the contract promises: BT shows all three in the Add-from-costs
+     picker today and then discards them on the line, which is the gap Michelle
+     Smith described. The item stays the material, because what was bought
+     reads before who sold it on a materials line. */
+  vendor?: string;
 }
 
 /* The job's tax agencies. Real invoices stack a state rate and a local one on
@@ -59,21 +89,35 @@ const TAX_AGENCIES: { name: string; rate: number }[] = [
   { name: 'Nebraska, Omaha City', rate: 0.015 },
 ];
 
+/* A second-floor master suite remodel, mid-job. Written as a builder would
+   bill it: real cost codes, quantities in the units the trade uses, labor
+   priced by the hour, and a 15% markup on cost. Two lines are exempt because
+   permits and design fees are not taxable goods, which gives the Tax column
+   something to distinguish.
+
+   Deliberately spread across all four sources so the "By source" grouping has
+   something to show, and two cost codes carry more than one line so "By cost
+   code" visibly absorbs them. */
 const LINES: PreviewLine[] = [
-  { id: 'l1', item: '44', costCode: '1010 - Building permits', qty: 0.01, unitCost: 443, markup: null, price: 4.43, taxable: false },
-  { id: 'l2', item: 'Allowance on estimate?', costCode: '1030 - Warranty fees', qty: 0.01, unitCost: 888, markup: 1.78, price: 10.66, taxable: true },
-  { id: 'l3', item: 'Selection 1', costCode: '1030 - Warranty fees', qty: 0.01, unitCost: 444, markup: null, price: 4.44, taxable: true },
-  { id: 'l4', item: 'Selection on estimate?', costCode: 'Blueprint', qty: 0.01, unitCost: 555, markup: null, price: 5.55, taxable: false },
-  { id: 'l5', item: 'CO line 1', costCode: '3300 - Windows', qty: 0.02, unitCost: 500, markup: 3, price: 13, taxable: true, coId: 'co1', coTitle: 'CO-1: Window & skylight upgrade' },
-  { id: 'l6', item: 'CO line 2', costCode: '3350 - Skylights', qty: 0.02, unitCost: 4000, markup: 32, price: 112, taxable: true, coId: 'co1', coTitle: 'CO-1: Window & skylight upgrade' },
-  { id: 'l7', item: 'CO line 3', costCode: '5540 - Carpet', qty: 0.02, unitCost: 405, markup: 40.5, price: 48.6, taxable: true, coId: 'co2', coTitle: 'CO-2: Carpet upgrade' },
-  /* Flat-rate lines: a cost with a markup on top, rather than pure markup.
-     Priced as cost + markup so the builder-cost and fee rows in the price
-     breakdown split the way a real cost-plus invoice would. */
-  { id: 'l8', item: 'Buildertrend Flat Rate', costCode: '', qty: 1, unitCost: 500, markup: 100, price: 600, taxable: true },
-  { id: 'l9', item: 'Buildertrend Flat Rate', costCode: '', qty: 1, unitCost: 100, markup: 20, price: 120, taxable: true },
-  { id: 'l10', item: 'Buildertrend Flat Rate', costCode: '', qty: 1, unitCost: 500, markup: 100, price: 600, taxable: true },
-  { id: 'l11', item: 'Buildertrend Flat Rate', costCode: '', qty: 1, unitCost: 50, markup: 10, price: 60, taxable: true },
+  { id: 'l1', item: 'Building permit', costCode: '1010 - Permits & fees', source: 'estimate', qty: 1, unitCost: 1450, markup: null, price: 1450, taxable: false },
+  { id: 'l2', item: 'Architectural drawings, revision C', costCode: '1200 - Design', source: 'estimate', qty: 1, unitCost: 2400, markup: null, price: 2400, taxable: false },
+  { id: 'l3', item: 'Dumpster rental, 30 yard', costCode: '1010 - Permits & fees', source: 'estimate', qty: 2, unitCost: 475, markup: 142.5, price: 1092.5, taxable: true },
+
+  { id: 'l4', item: 'Tile, primary bath floor and surround', costCode: '5500 - Tile', source: 'selection', qty: 240, unitCost: 11.5, markup: 414, price: 3174, taxable: true },
+  { id: 'l5', item: 'Plumbing fixtures, primary bath', costCode: '4100 - Plumbing fixtures', source: 'selection', qty: 1, unitCost: 3850, markup: 577.5, price: 4427.5, taxable: true },
+
+  { id: 'l6', item: 'Framing lumber package', costCode: '2100 - Framing', source: 'bill', vendor: '84 Lumber · Bill #4471', date: '09/12/26', qty: 1, unitCost: 8420, markup: 1263, price: 9683, taxable: true },
+  { id: 'l7', item: 'Rough plumbing, second floor', costCode: '2200 - Plumbing', source: 'bill', vendor: 'Delta Mechanical · Bill #2208', date: '09/15/26', qty: 1, unitCost: 3150, markup: 472.5, price: 3622.5, taxable: true },
+  { id: 'l8', item: 'Electrical rough-in materials', costCode: '2300 - Electrical', source: 'bill', vendor: 'City Electric Supply · Bill #88312', date: '09/17/26', qty: 1, unitCost: 1840, markup: 276, price: 2116, taxable: true },
+  { id: 'l9', item: 'Drywall, hang and finish', costCode: '2400 - Drywall', source: 'bill', vendor: 'Valley Drywall Co · Bill #1096', date: '09/24/26', qty: 1, unitCost: 4275, markup: 641.25, price: 4916.25, taxable: true },
+
+  { id: 'l10', item: 'Marcus Webb, Lead carpenter', costCode: '2100 - Framing', source: 'timeClock', date: '09/08 - 09/19/26', unit: 'hrs', qty: 38, unitCost: 62, markup: 353.4, price: 2709.4, taxable: false },
+  { id: 'l11', item: 'Danny Ruiz, Carpenter', costCode: '2100 - Framing', source: 'timeClock', date: '09/08 - 09/19/26', unit: 'hrs', qty: 46, unitCost: 48, markup: 331.2, price: 2539.2, taxable: false },
+  { id: 'l12', item: 'Tomas Oliveira, Apprentice', costCode: '2400 - Drywall', source: 'timeClock', date: '09/22 - 09/26/26', unit: 'hrs', qty: 24, unitCost: 34, markup: 122.4, price: 938.4, taxable: false },
+
+  { id: 'l13', item: 'Window upgrade, front elevation', costCode: '3300 - Windows', source: 'changeOrder', date: '09/04/26', qty: 3, unitCost: 1240, markup: 558, price: 4278, taxable: true, coId: 'co1', coTitle: 'CO-1: Window & skylight upgrade' },
+  { id: 'l14', item: 'Skylight, primary bath', costCode: '3350 - Skylights', source: 'changeOrder', date: '09/04/26', qty: 1, unitCost: 2180, markup: 327, price: 2507, taxable: true, coId: 'co1', coTitle: 'CO-1: Window & skylight upgrade' },
+  { id: 'l15', item: 'Carpet upgrade, bedrooms', costCode: '5540 - Carpet', source: 'changeOrder', date: '09/19/26', qty: 85, unitCost: 34, markup: 433.5, price: 3323.5, taxable: true, coId: 'co2', coTitle: 'CO-2: Carpet upgrade' },
 ];
 
 // Job contacts — an invoice's job can have several people attached, but the
@@ -98,11 +142,12 @@ const CONTACTS: Contact[] = [
 /* The full column set this presentation offered. The last six carry no
    column in the document table below - they were in the picker before the
    table caught up, which is part of what this snapshot records. */
-type ColKey = 'items' | 'tax' | 'unitCost' | 'quantity' | 'clientPrice' | 'markup'
+type ColKey = 'items' | 'date' | 'tax' | 'unitCost' | 'quantity' | 'clientPrice' | 'markup'
   | 'costType' | 'markedAs' | 'description' | 'unitPrice' | 'builderCost' | 'markupPct';
 
 const COL_LABELS: Record<ColKey, string> = {
   items: 'Items',
+  date: 'Date',
   tax: 'Tax',
   unitCost: 'Unit cost',
   quantity: 'Quantity',
@@ -118,14 +163,14 @@ const COL_LABELS: Record<ColKey, string> = {
 
 /* Only Items is locked: a line with no description isn't a line. Everything
    else, Tax included, is a removable chip. */
-const REMOVABLE_COLS: ColKey[] = ['tax', 'unitCost', 'quantity', 'clientPrice', 'markup',
+const REMOVABLE_COLS: ColKey[] = ['date', 'tax', 'unitCost', 'quantity', 'clientPrice', 'markup',
   'costType', 'markedAs', 'description', 'unitPrice', 'builderCost', 'markupPct'];
 
 /* The checklist has its own order, which is not the chip order: chips read
    left to right in the order the columns appear on the document, while the
    list groups the descriptive columns before the money ones. Kept as its own
    array so neither can quietly reorder the other. */
-const PICKER_ORDER: ColKey[] = ['items', 'costType', 'markedAs', 'description', 'unitPrice',
+const PICKER_ORDER: ColKey[] = ['items', 'date', 'costType', 'markedAs', 'description', 'unitPrice',
   'quantity', 'builderCost', 'clientPrice', 'unitCost', 'markup', 'markupPct', 'tax'];
 
 export default function ClientPreviewInvoiceOld() {
@@ -133,7 +178,18 @@ export default function ClientPreviewInvoiceOld() {
      starting collapsed hides the very thing it is here to demonstrate. */
   const [showEdit, setShowEdit] = useState(true);
   const [hideLineItems, setHideLineItems] = useState(false);
-  const [combineByCostCode, setCombineByCostCode] = useState(false);
+  /* How the client-facing line items are organized. A three-way choice
+     rather than a "combine by cost code" checkbox, because the invoice is
+     always grouped *somehow* and the real question is by what:
+
+     'source'   - where each line came from: the estimate, a bill, the time
+                  clock, a selection. Change orders keep their own titles
+                  within it, because the client recognizes a change order by
+                  its name, not by the word "change orders".
+     'costcode' - every line, change-order lines included, filed under its
+                  cost code. The accounting view.
+     'all'      - one flat list, no group rows at all. */
+  const [groupBy, setGroupBy] = useState<'source' | 'costcode' | 'all'>('source');
   /* Hiding the cost code and grouping by it are mutually exclusive: grouping
      by a code the client cannot see produces unlabelled groups. Each one
      disables the other rather than silently overriding it, so the builder can
@@ -144,6 +200,12 @@ export default function ClientPreviewInvoiceOld() {
      nothing about what they agreed to. So the only question is whether to
      list what is inside it, or collapse to the title and its approved total. */
   const [hideCoLines, setHideCoLines] = useState(false);
+  /* Collapsing to a total is a change-order-only move, deliberately. A change
+     order was approved at an agreed price, so its total is a number the
+     client already signed. A bill or a day of time clock is the opposite: on
+     an open book contract those lines ARE the disclosure, and rolling them
+     into "Bills $20,337.75" removes the thing the client is owed. So there is
+     no general "group totals only" control here. */
   /* Two ways to place change orders on the document, kept side by side so the
      difference can be reviewed rather than argued about:
 
@@ -172,13 +234,24 @@ export default function ClientPreviewInvoiceOld() {
      unchanged. The contract switch is here only so both halves of that
      acceptance criterion can be seen on this page. */
 
-  /* Builders do not all call it the same thing: "Builder fee" is Carla's
+  /* Builders do not all call it the same thing: "Builder markup" is the
      builders' word, AJ says "builder's fee", others say management fee or
      overhead and profit. The story makes the label configurable with that
      default; the field to edit it is a builder setting, not a review switch,
      so this prototype shows the default only. */
-  const feeLabel = 'Builder fee';
-  const [cols, setCols] = useState<ColKey[]>(['items', 'tax', 'unitCost', 'quantity', 'clientPrice', 'markup',
+  const feeLabel = 'Builder markup';
+  /* Some open book builders state the arrangement in the contract but do not
+     want the split printed on every invoice. Hiding takes both breakdown rows
+     away, not just the markup: with builder cost still shown, the client could
+     back the markup out of the subtotal by subtraction. */
+  const [hideFee, setHideFee] = useState(false);
+  /* The agency rows name the jurisdictions and their rates. Some builders
+     want the client to see exactly what was levied and by whom; others treat
+     it as noise on a document the client is reading to find what they owe.
+     Hiding the detail leaves the Total tax line, so the charge is still
+     stated, only the make-up of it is not. */
+  const [hideTaxDetail, setHideTaxDetail] = useState(false);
+  const [cols, setCols] = useState<ColKey[]>(['items', 'date', 'tax', 'unitCost', 'quantity', 'clientPrice', 'markup',
     'costType', 'markedAs', 'description', 'unitPrice', 'builderCost', 'markupPct']);
   /* "Check All" reflects the removable columns only, since Items can never be
      unchecked and would otherwise pin the box to checked forever. */
@@ -212,17 +285,33 @@ export default function ClientPreviewInvoiceOld() {
   // Which document columns to render, in table order.
   const showUnitCost = has('unitCost');
   const showQty = has('quantity');
+  const showDate = has('date');
   const showMarkup = has('markup');
   const showPrice = has('clientPrice');
   const showTax = has('tax');
 
   /* Change-order lines group under their own change order; everything else
      stays a flat list, as this presentation always showed it. */
-  const plainLines = LINES.filter(l => !l.coId);
+  /* What the contract actually bills. Open book bills the spend: real bills,
+     real hours, the selections priced into the job and the approved change
+     orders. It does not bill the estimate, which is a forecast, not money
+     anybody paid. Fixed price is the mirror image: it bills the contract and
+     its amendments, and the underlying costs are the builder's own business.
+
+     This is why the two documents cannot be the same invoice with a filter
+     on it, and why switching the contract in the Review pill changes the
+     total rather than just the formatting. */
+  const billableLines = LINES.filter(l =>
+    contractType === 'open-book'
+      ? l.source !== 'estimate'
+      : l.source !== 'bill' && l.source !== 'timeClock'
+  );
+
+  const plainLines = billableLines.filter(l => !l.coId);
   const coGroups = (() => {
     const order: string[] = [];
     const byId: Record<string, { title: string; lines: PreviewLine[] }> = {};
-    for (const l of LINES) {
+    for (const l of billableLines) {
       if (!l.coId) continue;
       if (!byId[l.coId]) { order.push(l.coId); byId[l.coId] = { title: l.coTitle || l.coId, lines: [] }; }
       byId[l.coId].lines.push(l);
@@ -232,17 +321,61 @@ export default function ClientPreviewInvoiceOld() {
 
   /* Tax is charged on the client price of the taxable lines only, so each
      agency's figure is its rate against that base rather than the subtotal. */
-  const taxableBase = LINES.reduce((sum, l) => sum + (l.taxable ? l.price : 0), 0);
+  const taxableBase = billableLines.reduce((sum, l) => sum + (l.taxable ? l.price : 0), 0);
   const agencyTax = TAX_AGENCIES.map(a => ({ ...a, amount: taxableBase * a.rate }));
   const totalTax = agencyTax.reduce((sum, a) => sum + a.amount, 0);
 
+  /* Cost-code grouping files every line, change-order lines included, under
+     its code. Lines with no cost code still have to go somewhere, so they
+     collect under one named group rather than vanishing. */
+  /* Change orders only get lifted into a second grid when they are a
+     grouping in the first place. Under cost code or a flat list they are
+     ordinary lines, so there is nothing to split out. */
+  const coSplitOut = coLayout === 'ownGrid' && groupBy === 'source' && coGroups.length > 0;
+
+  /* Non-change-order lines, filed by where they came from. Change orders are
+     excluded because they render as their own titled blocks underneath: a
+     client recognizes "CO-1: Window & skylight upgrade", not a bucket called
+     "Change orders". */
+  const sourceGroups = (() => {
+    const order: string[] = [];
+    const bySource: Record<string, PreviewLine[]> = {};
+    for (const l of plainLines) {
+      const key = SOURCE_LABELS[l.source];
+      if (!bySource[key]) { order.push(key); bySource[key] = []; }
+      bySource[key].push(l);
+    }
+    return order.map(name => ({
+      title: name,
+      lines: bySource[name],
+      total: bySource[name].reduce((sum, l) => sum + l.price, 0),
+      markup: bySource[name].reduce((sum, l) => sum + (l.markup || 0), 0),
+    }));
+  })();
+
+  const costCodeGroups = (() => {
+    const order: string[] = [];
+    const byCode: Record<string, PreviewLine[]> = {};
+    for (const l of billableLines) {
+      const key = l.costCode || 'No cost code';
+      if (!byCode[key]) { order.push(key); byCode[key] = []; }
+      byCode[key].push(l);
+    }
+    return order.map(name => ({
+      title: name,
+      lines: byCode[name],
+      total: byCode[name].reduce((sum, l) => sum + l.price, 0),
+      markup: byCode[name].reduce((sum, l) => sum + (l.markup || 0), 0),
+    }));
+  })();
+
   const plainSubtotal = plainLines.reduce((sum, l) => sum + l.price, 0);
   const plainMarkup = plainLines.reduce((sum, l) => sum + (l.markup || 0), 0);
-  const coSubtotal = LINES.reduce((sum, l) => sum + (l.coId ? l.price : 0), 0);
-  const coMarkup = LINES.reduce((sum, l) => sum + (l.coId ? (l.markup || 0) : 0), 0);
+  const coSubtotal = billableLines.reduce((sum, l) => sum + (l.coId ? l.price : 0), 0);
+  const coMarkup = billableLines.reduce((sum, l) => sum + (l.coId ? (l.markup || 0) : 0), 0);
 
-  const subtotal = LINES.reduce((s, l) => s + l.price, 0);
-  const markupTotal = LINES.reduce((s, l) => s + (l.markup || 0), 0);
+  const subtotal = billableLines.reduce((s, l) => s + l.price, 0);
+  const markupTotal = billableLines.reduce((s, l) => s + (l.markup || 0), 0);
   /* The fee is the markup already on the lines, and builder cost is what is
      left of the subtotal once it is taken out. Nothing is recalculated, so
      subtotal, tax and total are identical with the rows shown or hidden, and
@@ -250,7 +383,8 @@ export default function ClientPreviewInvoiceOld() {
      at zero rather than printing an empty row. */
   const feeTotal = markupTotal;
   const costOfWork = subtotal - feeTotal;
-  const showFeeRow = contractType === 'open-book' && feeTotal > 0;
+  const feeAvailable = contractType === 'open-book' && feeTotal > 0;
+  const showFeeRow = feeAvailable && !hideFee;
 
   // Construction invoices commonly credit a deposit/retainer collected earlier.
   const totalPrice = subtotal + totalTax;
@@ -267,8 +401,14 @@ export default function ClientPreviewInvoiceOld() {
         <td>
           <div className="cpi-item-name">{l.item}</div>
           {!hideCostCode && l.costCode && <div className="cpi-item-code">{l.costCode}</div>}
+          {l.vendor && <div className="cpi-item-code">{l.vendor}</div>}
         </td>
-        {showQty && <td>{l.qty.toFixed(2)}</td>}
+        {/* Hours read as hours. Without the unit, 38.00 beside a $62.00 rate
+            is ambiguous on a labor line. */}
+        {/* An estimate or selection line has no date to give, so it says so
+            rather than leaving a hole in a column of dates. */}
+        {showDate && <td className="cpi-nowrap">{l.date || <span className="cpi-tax-none">--</span>}</td>}
+        {showQty && <td>{l.unit ? `${l.qty.toFixed(2)} ${l.unit}` : l.qty.toFixed(2)}</td>}
         {showUnitCost && <td className="cpi-r">{l.unitCost != null ? `$${fmt(l.unitCost)}` : ''}</td>}
         {showMarkup && <td className="cpi-r">{l.markup != null ? `$${fmt(l.markup)}` : ''}</td>}
         {showPrice && <td className="cpi-r cpi-strong">${fmt(l.price)}</td>}
@@ -287,12 +427,16 @@ export default function ClientPreviewInvoiceOld() {
 
   /* A change-order title row carrying its rolled-up price: the one-price-per
      change-order view, whether it heads its lines or replaces them. */
-  const renderGroupRow = (title: string, total: number, className: string) => (
-    <tr key={`co-${title}`} className={className}>
+  const renderGroupRow = (title: string, total: number, className: string, markup?: number) => (
+    <tr key={`grp-${title}`} className={className}>
       <td>{title}</td>
+      {showDate && <td></td>}
       {showQty && <td></td>}
       {showUnitCost && <td></td>}
-      {showMarkup && <td></td>}
+      {/* Only an absorbed row carries a markup figure. A heading over its own
+          visible lines leaves the cell empty, because each line states its
+          own markup directly underneath. */}
+      {showMarkup && <td className="cpi-r">{markup != null ? `$${fmt(markup)}` : ''}</td>}
       {showPrice && <td className="cpi-r">${fmt(total)}</td>}
       {showTax && <td></td>}
     </tr>
@@ -355,33 +499,48 @@ export default function ClientPreviewInvoiceOld() {
                 <div className="cpi-edit-col">
                   <div className="cpi-edit-h">Line items</div>
 
-                  <label className={"cpi-check" + (hideCostCode ? ' cpi-check-off' : '')}>
-                    <input
-                      type="checkbox"
-                      checked={combineByCostCode}
-                      disabled={hideCostCode}
-                      onChange={e => setCombineByCostCode(e.target.checked)}
-                    />
-                    <span title={hideCostCode ? 'Unavailable while the cost code is hidden: the groups would have no visible label' : undefined}>
-                      Combine line items by cost code
-                    </span>
-                  </label>
-                  <label className={"cpi-check" + (combineByCostCode ? ' cpi-check-off' : '')}>
+                  {/* The invoice is always grouped somehow, so this is a
+                      choice between three groupings rather than a switch to
+                      turn one on. */}
+                  <div className="cpi-rail-sublabel">Group line items by</div>
+                  <div className="client-group-toggle" role="tablist" aria-label="Group line items for client">
+                    {([
+                      { value: 'source' as const, label: 'By source' },
+                      { value: 'costcode' as const, label: 'By cost code' },
+                      { value: 'all' as const, label: 'All line items' },
+                    ]).map(o => (
+                      <button
+                        key={o.value}
+                        type="button"
+                        className={'client-group-tab' + (groupBy === o.value ? ' on' : '')}
+                        aria-selected={groupBy === o.value}
+                        /* Grouping by a code the client cannot see would
+                           produce unlabelled headings, so choosing it brings
+                           the cost code back rather than silently breaking. */
+                        onClick={() => { setGroupBy(o.value); if (o.value === 'costcode') setHideCostCode(false); }}
+                      >
+                        {o.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  <label className={"cpi-check" + (groupBy === 'costcode' ? ' cpi-check-off' : '')}>
                     <input
                       type="checkbox"
                       checked={hideCostCode}
-                      disabled={combineByCostCode}
+                      disabled={groupBy === 'costcode'}
                       onChange={e => setHideCostCode(e.target.checked)}
                     />
-                    <span title={combineByCostCode ? 'Unavailable while line items are combined by cost code: the code is the group label' : undefined}>
+                    <span title={groupBy === 'costcode' ? 'Unavailable while the lines are grouped by cost code: the code is the group heading' : undefined}>
                       Hide cost code
                     </span>
                   </label>
-                  {/* Also a line-item question: it decides whether a change
-                      order lists its lines or collapses to its title and
-                      approved total. Only offered when the invoice carries
-                      one. The title itself is never optional. */}
-                  {coGroups.length > 0 && (
+                  {/* Only meaningful while change orders are a grouping. Under
+                      cost code or a flat list they are ordinary lines with
+                      nothing to collapse into. The title is never optional. */}
+                  {/* Change orders only: the bills and hours stay itemized,
+                      because on open book those lines are the disclosure. */}
+                  {coGroups.length > 0 && groupBy === 'source' && (
                     <label className="cpi-check">
                       <input type="checkbox" checked={hideCoLines} onChange={e => setHideCoLines(e.target.checked)} />
                       <span>Hide change order line items</span>
@@ -397,6 +556,35 @@ export default function ClientPreviewInvoiceOld() {
                   </label>
 
                 </div>
+
+                {/* The price breakdown gets its own group rather than sitting
+                    at the foot of General information. The three groups are
+                    the three parts of the document: the line-item table, the
+                    totals block under it, and the boilerplate around both.
+                    Hiding the markup is a question about the totals block, not
+                    about QR codes and custom fields. Each control appears only
+                    when it has something to act on, and the group itself goes
+                    away when neither does. */}
+                {(feeAvailable || agencyTax.length > 0) && (
+                  <div className="cpi-edit-col">
+                    <div className="cpi-edit-h">Price breakdown</div>
+                    {/* Markup is open book only; tax applies either way, so
+                        this group can exist on a fixed price invoice with the
+                        tax control alone. */}
+                    {feeAvailable && (
+                      <label className="cpi-check">
+                        <input type="checkbox" checked={hideFee} onChange={e => setHideFee(e.target.checked)} />
+                        <span>Hide builder markup from subtotal</span>
+                      </label>
+                    )}
+                    {agencyTax.length > 0 && (
+                      <label className="cpi-check">
+                        <input type="checkbox" checked={hideTaxDetail} onChange={e => setHideTaxDetail(e.target.checked)} />
+                        <span>Hide tax agency detail</span>
+                      </label>
+                    )}
+                  </div>
+                )}
 
                 <div className="cpi-edit-col cpi-edit-col-right">
                   <div className="cpi-edit-h">General information</div>
@@ -415,14 +603,16 @@ export default function ClientPreviewInvoiceOld() {
                 </div>
               </div>
 
+
               {/* The column picker spans the whole card rather than sitting in
-                  the left column: the chip set is long, and it governs the
-                  document's table, not the Line items checkboxes above it.
+                  the Line items column: the chip set is long enough to wrap to
+                  three rows at column width, which costs more vertical space
+                  than the grouping it would sit under.
 
                   The box is the dropdown. Clicking anywhere in it opens the
                   full checklist, so adding a column is the same gesture as
                   removing one and there is no separate add row. */}
-              {!hideLineItems && (
+{!hideLineItems && (
                 <div className={"cpi-colpick" + (colsOpen ? ' is-open' : '')} ref={colsRef}>
                   <div
                     className="cpi-chips cpi-chips-wide"
@@ -556,6 +746,7 @@ export default function ClientPreviewInvoiceOld() {
                   <thead>
                     <tr>
                       <th>Items</th>
+                      {showDate && <th>Date</th>}
                       {showQty && <th>Qty/Unit</th>}
                       {showUnitCost && <th className="cpi-r">Unit cost</th>}
                       {showMarkup && <th className="cpi-r">Markup amount</th>}
@@ -564,20 +755,40 @@ export default function ClientPreviewInvoiceOld() {
                     </tr>
                   </thead>
                   <tbody>
-                    {plainLines.map(l => renderLine(l))}
+                    {/* By cost code: the lines are absorbed into their code.
+                        The client sees one row per cost code at its total, not
+                        a heading over the lines that make it up, which is the
+                        whole point of asking for this grouping. Change orders
+                        stop being a grouping of their own here, since a line
+                        cannot sit under two headings at once.
 
-                    {/* Each change order renders as a titled block of its own
-                        lines, or, collapsed, as a single row at its approved
-                        total. The title is always there either way. When the
-                        layout lifts them into their own grid they are absent
+                        Unshaded, because the row IS the billed line now rather
+                        than a heading over others. Same treatment as a
+                        collapsed change order. */}
+                    {groupBy === 'costcode' && costCodeGroups.map(g =>
+                      renderGroupRow(g.title, g.total, 'cpi-co-collapsed', g.markup)
+                    )}
+
+                    {/* Flat: every line in order, no group rows. */}
+                    {groupBy === 'all' && billableLines.map(l => renderLine(l))}
+
+                    {/* By source: each origin as a titled block, then the
+                        change orders as their own titled blocks, or, collapsed,
+                        a single row each at the approved total. When the layout
+                        lifts change orders into their own grid they are absent
                         here entirely. */}
-                    {(coLayout === 'ownGrid' ? [] : coGroups).flatMap(g => {
+                    {groupBy === 'source' && sourceGroups.flatMap(g => [
+                      renderGroupRow(g.title, g.total, 'cpi-grp-row'),
+                      ...g.lines.map(l => renderLine(l)),
+                    ])}
+                    {groupBy === 'source' && (coLayout === 'ownGrid' ? [] : coGroups).flatMap(g => {
                       const total = g.lines.reduce((sum, l) => sum + l.price, 0);
                       if (hideCoLines) {
                         /* Collapsed, the change order stops being a heading
                            over its lines and becomes the billed line itself,
                            so it drops the group row's shading. */
-                        return [renderGroupRow(g.title, total, 'cpi-co-collapsed')];
+                        const coMarkupTotal = g.lines.reduce((sum, l) => sum + (l.markup || 0), 0);
+                        return [renderGroupRow(g.title, total, 'cpi-co-collapsed', coMarkupTotal)];
                       }
                       return [
                         renderGroupRow(g.title, total, 'cpi-grp-row'),
@@ -590,10 +801,11 @@ export default function ClientPreviewInvoiceOld() {
                         and the second grid carries its own. */}
                     <tr className="cpi-total-row">
                       <td>Totals:</td>
+                      {showDate && <td></td>}
                       {showQty && <td></td>}
                       {showUnitCost && <td></td>}
-                      {showMarkup && <td className="cpi-r">${fmt(coLayout === 'ownGrid' ? plainMarkup : markupTotal)}</td>}
-                      {showPrice && <td className="cpi-r">${fmt(coLayout === 'ownGrid' ? plainSubtotal : subtotal)}</td>}
+                      {showMarkup && <td className="cpi-r">${fmt(coSplitOut ? plainMarkup : markupTotal)}</td>}
+                      {showPrice && <td className="cpi-r">${fmt(coSplitOut ? plainSubtotal : subtotal)}</td>}
                       {showTax && <td></td>}
                     </tr>
                   </tbody>
@@ -604,7 +816,7 @@ export default function ClientPreviewInvoiceOld() {
                   lines and its own total. The trade-off to look at here is
                   that the client now reconciles two tables to one amount due,
                   which is exactly why the inline layout exists. */}
-              {coLayout === 'ownGrid' && coGroups.length > 0 && (
+              {coSplitOut && (
                 <div className="cpi-tbl-wrap" style={{ marginTop: 20 }}>
                   <div className="cpi-subtbl-title">Change orders</div>
                   <table className="cpi-tbl">
@@ -631,6 +843,7 @@ export default function ClientPreviewInvoiceOld() {
                       })}
                       <tr className="cpi-total-row">
                         <td>Change order total:</td>
+                        {showDate && <td></td>}
                         {showQty && <td></td>}
                         {showUnitCost && <td></td>}
                         {showMarkup && <td className="cpi-r">${fmt(coMarkup)}</td>}
@@ -658,13 +871,13 @@ export default function ClientPreviewInvoiceOld() {
             {showFeeRow && (
               <>
                 <div className="cpi-totals-line cpi-totals-sub"><span>Builder cost</span><span>${fmt(costOfWork)}</span></div>
-                <div className="cpi-totals-line cpi-totals-sub"><span>{feeLabel || 'Builder fee'}</span><span>${fmt(feeTotal)}</span></div>
+                <div className="cpi-totals-line cpi-totals-sub"><span>{feeLabel || 'Builder markup'}</span><span>${fmt(feeTotal)}</span></div>
               </>
             )}
             {/* Total tax owns one indented line per agency, each naming its
                 rate, which is the pattern the whole block follows. */}
             <div className="cpi-totals-line cpi-totals-parent"><span>Total tax</span><span>${fmt(totalTax)}</span></div>
-            {agencyTax.map(a => (
+            {!hideTaxDetail && agencyTax.map(a => (
               <div key={a.name} className="cpi-totals-line cpi-totals-sub">
                 <span>{a.name} ({(a.rate * 100).toFixed(a.rate * 100 % 1 === 0 ? 0 : 3).replace(/0+$/, '').replace(/\.$/, '')}%)</span>
                 <span>${fmt(a.amount)}</span>

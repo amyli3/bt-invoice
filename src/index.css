@@ -7463,7 +7463,10 @@ button.jps-term-label { cursor: pointer; }
    their natural size rather than stretching: two columns of checkboxes spread
    across 1400px would put "General information" far from "Line items". The
    chip row below still uses the whole width. */
-.cpi-edit-grid { display: grid; grid-template-columns: 300px 300px; gap: 24px; justify-content: start; }
+/* Three settings groups, one per part of the document: the line-item table,
+   the price breakdown under it, and the boilerplate around both. They sit at
+   their natural width rather than stretching across the full-width card. */
+.cpi-edit-grid { display: grid; grid-template-columns: repeat(auto-fit, 300px); gap: 24px; justify-content: start; align-items: start; }
 .cpi-edit-col { display: flex; flex-direction: column; gap: 10px; }
 .cpi-edit-col-right { align-items: flex-start; }
 .cpi-edit-h { font-size: 13px; font-weight: 700; color: var(--bt-midnight); display: flex; align-items: center; gap: 6px; }
@@ -7493,7 +7496,7 @@ button.jps-term-label { cursor: pointer; }
 /* First thing in the card, so it carries no divider or top spacing. */
 .cpi-ds-head-first { margin-top: 0; padding-top: 0; border-top: none; }
 /* Full-card-width variants: the column picker governs the whole document
-   table, so it is not confined to the checkbox column that preceded it. */
+   table, and at column width its chips wrap to three rows. */
 .cpi-chips-wide { width: 100%; margin-top: 16px; }
 .cpi-addrow-wide { max-width: 300px; }
 /* The chip box as a multi-select control: the box opens the checklist. */
@@ -7527,3 +7530,5 @@ button.jps-term-label { cursor: pointer; }
 /* A variant's explanation sits directly under its own switch, so it needs
    less air than the panel's closing note. */
 .rf-note-tight { margin-top: 8px; }
+/* A date range must not wrap mid-range into two lines. */
+.cpi-nowrap { white-space: nowrap; }
