@@ -392,6 +392,17 @@ export default function ClientPreviewInvoiceOld() {
   const amountDue = totalPrice - appliedDeposit;
 
 
+  /* What a group's Tax cell says. The column answers "was this taxed", and a
+     group can only answer for its lines as a set: all of them, none of them,
+     or a mix that the client has to open up to see. "Varies" is the honest
+     answer to the mix rather than picking one and being wrong about the
+     rest. */
+  const groupTaxLabel = (lines: PreviewLine[]) => {
+    const taxed = lines.filter(l => l.taxable).length;
+    if (taxed === 0) return null;
+    return taxed === lines.length ? 'Taxed' : 'Varies';
+  };
+
   /* Lines sit at the margin whether or not a change-order title heads them:
      the shaded title row already separates the block, and indenting only
      these lines would misalign them against every other line in the table. */
@@ -427,20 +438,27 @@ export default function ClientPreviewInvoiceOld() {
 
   /* A change-order title row carrying its rolled-up price: the one-price-per
      change-order view, whether it heads its lines or replaces them. */
-  const renderGroupRow = (title: string, total: number, className: string, markup?: number) => (
-    <tr key={`grp-${title}`} className={className}>
-      <td>{title}</td>
-      {showDate && <td></td>}
-      {showQty && <td></td>}
-      {showUnitCost && <td></td>}
-      {/* Only an absorbed row carries a markup figure. A heading over its own
-          visible lines leaves the cell empty, because each line states its
-          own markup directly underneath. */}
-      {showMarkup && <td className="cpi-r">{markup != null ? `$${fmt(markup)}` : ''}</td>}
-      {showPrice && <td className="cpi-r">${fmt(total)}</td>}
-      {showTax && <td></td>}
-    </tr>
-  );
+  const renderGroupRow = (title: string, total: number, className: string, markup?: number, lines?: PreviewLine[]) => {
+    const taxLabel = lines ? groupTaxLabel(lines) : null;
+    return (
+      <tr key={`grp-${title}`} className={className}>
+        <td>{title}</td>
+        {showDate && <td></td>}
+        {showQty && <td></td>}
+        {showUnitCost && <td></td>}
+        {/* Only an absorbed row carries a markup figure. A heading over its own
+            visible lines leaves the cell empty, because each line states its
+            own markup directly underneath. */}
+        {showMarkup && <td className="cpi-r">{markup != null ? `$${fmt(markup)}` : ''}</td>}
+        {showPrice && <td className="cpi-r">${fmt(total)}</td>}
+        {showTax && (
+          <td className="cpi-r">
+            {taxLabel || <span className="cpi-tax-none">--</span>}
+          </td>
+        )}
+      </tr>
+    );
+  };
 
   return (
     <div className="cpi-shell">
@@ -505,8 +523,11 @@ export default function ClientPreviewInvoiceOld() {
                   <div className="cpi-rail-sublabel">Group line items by</div>
                   <div className="client-group-toggle" role="tablist" aria-label="Group line items for client">
                     {([
-                      { value: 'source' as const, label: 'By source' },
-                      { value: 'costcode' as const, label: 'By cost code' },
+                      /* No "By" prefix: the sublabel above already says
+                         "Group line items by", so the tabs just name the
+                         thing. */
+                      { value: 'source' as const, label: 'Cost source' },
+                      { value: 'costcode' as const, label: 'Cost code' },
                       { value: 'all' as const, label: 'All line items' },
                     ]).map(o => (
                       <button
@@ -766,7 +787,7 @@ export default function ClientPreviewInvoiceOld() {
                         than a heading over others. Same treatment as a
                         collapsed change order. */}
                     {groupBy === 'costcode' && costCodeGroups.map(g =>
-                      renderGroupRow(g.title, g.total, 'cpi-co-collapsed', g.markup)
+                      renderGroupRow(g.title, g.total, 'cpi-co-collapsed', g.markup, g.lines)
                     )}
 
                     {/* Flat: every line in order, no group rows. */}
@@ -778,7 +799,7 @@ export default function ClientPreviewInvoiceOld() {
                         lifts change orders into their own grid they are absent
                         here entirely. */}
                     {groupBy === 'source' && sourceGroups.flatMap(g => [
-                      renderGroupRow(g.title, g.total, 'cpi-grp-row'),
+                      renderGroupRow(g.title, g.total, 'cpi-grp-row', undefined, g.lines),
                       ...g.lines.map(l => renderLine(l)),
                     ])}
                     {groupBy === 'source' && (coLayout === 'ownGrid' ? [] : coGroups).flatMap(g => {
@@ -788,10 +809,10 @@ export default function ClientPreviewInvoiceOld() {
                            over its lines and becomes the billed line itself,
                            so it drops the group row's shading. */
                         const coMarkupTotal = g.lines.reduce((sum, l) => sum + (l.markup || 0), 0);
-                        return [renderGroupRow(g.title, total, 'cpi-co-collapsed', coMarkupTotal)];
+                        return [renderGroupRow(g.title, total, 'cpi-co-collapsed', coMarkupTotal, g.lines)];
                       }
                       return [
-                        renderGroupRow(g.title, total, 'cpi-grp-row'),
+                        renderGroupRow(g.title, total, 'cpi-grp-row', undefined, g.lines),
                         ...g.lines.map(l => renderLine(l)),
                       ];
                     })}
@@ -823,6 +844,7 @@ export default function ClientPreviewInvoiceOld() {
                     <thead>
                       <tr>
                         <th>Items</th>
+                        {showDate && <th>Date</th>}
                         {showQty && <th>Qty/Unit</th>}
                         {showUnitCost && <th className="cpi-r">Unit cost</th>}
                         {showMarkup && <th className="cpi-r">Markup amount</th>}
@@ -837,7 +859,7 @@ export default function ClientPreviewInvoiceOld() {
                           return [renderGroupRow(g.title, total, 'cpi-co-collapsed')];
                         }
                         return [
-                          renderGroupRow(g.title, total, 'cpi-grp-row'),
+                          renderGroupRow(g.title, total, 'cpi-grp-row', undefined, g.lines),
                           ...g.lines.map(l => renderLine(l)),
                         ];
                       })}

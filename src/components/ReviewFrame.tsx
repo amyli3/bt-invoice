@@ -45,7 +45,7 @@ const REVIEW_VARIANTS = [
       { value: 'fixed-price' as const, label: 'Fixed price' },
     ],
     note: {
-      'open-book': 'Costs are the contract, so the builder fee is stated in the price breakdown.',
+      'open-book': 'Costs are the contract, so the builder markup is stated in the price breakdown.',
       'fixed-price': 'The client bought a result at a contract price, so no fee row renders.',
     } as Record<string, string>,
   },

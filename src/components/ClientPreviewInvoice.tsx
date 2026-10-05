@@ -79,6 +79,13 @@ interface PreviewLine {
   // are entitled to see where their money went, so the document can name who
   // was paid — the backup detail Michelle Smith asks for.
   vendor?: string;
+  /* When the work happened: a single day for a bill, a stretch of days for a
+     pay period, as MM/DD - MM/DD/YY. One field for both, because the client
+     asks the same question of either. Lines with no date say so. */
+  date?: string;
+  /* Labor bills hours at an hourly rate, so the quantity states its unit:
+     38.00 beside $62.00 is ambiguous, 38.00 hrs is not. */
+  unit?: string;
   // Present only on lines that came from an approved change order — drives
   // the change-order blocks nested inside the line-item grid.
   coId?: string;
@@ -88,8 +95,14 @@ interface PreviewLine {
 /* The job's tax agency and rate. A real invoice reads this off the job; the
    prototype needs a non-zero rate for per-line tax to be worth showing at
    all, so it carries a plausible one. */
-const TAX_AGENCY = 'State Tax';
-const TAX_RATE = 0.09125;
+/* Real invoices stack a state rate and a local one on the same taxable base,
+   and the breakdown lists each separately under Total tax, which is why that
+   block needs two levels and why hiding the detail is worth a control. */
+const TAX_AGENCIES: { name: string; rate: number }[] = [
+  { name: 'Nebraska State', rate: 0.055 },
+  { name: 'Nebraska, Omaha City', rate: 0.015 },
+];
+const TAX_RATE = TAX_AGENCIES.reduce((r, a) => r + a.rate, 0);
 
 const linePrice = (l: PreviewLine) => (l.unitCost ?? 0) * l.qty + (l.markup ?? 0);
 // Only lines with a real unit cost have a base to apply a % markup against —
@@ -99,15 +112,21 @@ const lineBaseCost = (l: PreviewLine) => (l.unitCost ?? 0) * l.qty;
 /* Lines a fixed-price invoice bills: the estimate, the selections priced into
    it, and the change orders that amended it. Never costs — on fixed price the
    client is buying a result, and the spend is the builder's own margin. */
+/* The same second-floor master suite remodel as the open book set, billed the
+   way a fixed price job bills it: the estimate, the selections priced into
+   it, and the approved change orders. No bills and no hours, because on fixed
+   price the spend is the builder's own business. Permits and design are
+   exempt, so the Tax column has something to distinguish. */
 const FIXED_PRICE_LINES: PreviewLine[] = [
-  { id: 'l1', item: 'Building permit', costCode: '1010 - Building permits', group: 'Permits & fees', qty: 1, unitCost: 443, markup: null, taxable: false, source: 'estimate' },
-  { id: 'l2', item: 'Warranty registration', costCode: '1030 - Warranty fees', group: 'Permits & fees', qty: 1, unitCost: 888, markup: 1.78, taxable: true, source: 'estimate' },
-  { id: 'l3', item: 'Tile package — primary bath', costCode: '1030 - Warranty fees', group: 'Permits & fees', qty: 1, unitCost: 444, markup: null, taxable: true, source: 'selection' },
-  { id: 'l4', item: 'Blueprint revision set', costCode: 'Blueprint', group: 'Design', qty: 1, unitCost: 555, markup: null, taxable: false, source: 'estimate' },
-  { id: 'l5', item: 'Window upgrade — front elevation', costCode: '3300 - Windows', group: 'Change orders', qty: 1, unitCost: 500, markup: 3, taxable: true, source: 'changeOrder', coId: 'co1', coTitle: 'CO-1: Window & skylight upgrade' },
-  { id: 'l6', item: 'Skylight install', costCode: '3350 - Skylights', group: 'Change orders', qty: 1, unitCost: 4000, markup: 32, taxable: true, source: 'changeOrder', coId: 'co1', coTitle: 'CO-1: Window & skylight upgrade' },
-  { id: 'l7', item: 'Carpet upgrade — bedrooms', costCode: '5540 - Carpet', group: 'Change orders', qty: 1, unitCost: 405, markup: 40.5, taxable: true, source: 'changeOrder', coId: 'co2', coTitle: 'CO-2: Carpet upgrade' },
-  { id: 'l8', item: 'Lighting package', costCode: '4200 - Fixtures', group: 'Fixtures', qty: 1, unitCost: 1200, markup: 100, taxable: true, source: 'selection' },
+  { id: 'l1', item: 'Building permit', costCode: '1010 - Permits & fees', group: 'Permits & fees', date: '08/28/26', qty: 1, unitCost: 1450, markup: null, taxable: false, source: 'estimate' },
+  { id: 'l2', item: 'Architectural drawings, revision C', costCode: '1200 - Design', group: 'Design', date: '08/30/26', qty: 1, unitCost: 2400, markup: null, taxable: false, source: 'estimate' },
+  { id: 'l3', item: 'Framing and structural', costCode: '2100 - Framing', group: 'Structure', date: '09/05/26', qty: 1, unitCost: 14200, markup: 2130, taxable: true, source: 'estimate' },
+  { id: 'l4', item: 'Mechanical rough-in', costCode: '2200 - Plumbing', group: 'Mechanicals', date: '09/05/26', qty: 1, unitCost: 6850, markup: 1027.5, taxable: true, source: 'estimate' },
+  { id: 'l5', item: 'Tile, primary bath floor and surround', costCode: '5500 - Tile', group: 'Finishes', date: '09/11/26', qty: 240, unitCost: 11.5, markup: 414, taxable: true, source: 'selection' },
+  { id: 'l6', item: 'Plumbing fixtures, primary bath', costCode: '4100 - Plumbing fixtures', group: 'Finishes', date: '09/11/26', qty: 1, unitCost: 3850, markup: 577.5, taxable: true, source: 'selection' },
+  { id: 'l7', item: 'Window upgrade, front elevation', costCode: '3300 - Windows', group: 'Change orders', date: '09/04/26', qty: 3, unitCost: 1240, markup: 558, taxable: true, source: 'changeOrder', coId: 'co1', coTitle: 'CO-1: Window & skylight upgrade' },
+  { id: 'l8', item: 'Skylight, primary bath', costCode: '3350 - Skylights', group: 'Change orders', date: '09/04/26', qty: 1, unitCost: 2180, markup: 327, taxable: true, source: 'changeOrder', coId: 'co1', coTitle: 'CO-1: Window & skylight upgrade' },
+  { id: 'l9', item: 'Carpet upgrade, bedrooms', costCode: '5540 - Carpet', group: 'Change orders', date: '09/19/26', qty: 85, unitCost: 34, markup: 433.5, taxable: true, source: 'changeOrder', coId: 'co2', coTitle: 'CO-2: Carpet upgrade' },
 ];
 
 /* Lines an open-book invoice bills: real costs (bills, time clock) in place of
@@ -115,16 +134,20 @@ const FIXED_PRICE_LINES: PreviewLine[] = [
    where the client is entitled to see where their money went, so cost lines
    carry the vendor/employee behind them. */
 const OPEN_BOOK_LINES: PreviewLine[] = [
-  { id: 'o1', item: 'Framing lumber package', costCode: '2100 - Framing', group: 'Framing', qty: 1, unitCost: 8420, markup: 1263, taxable: true, source: 'bill', vendor: 'Ferguson Supply' },
-  { id: 'o2', item: 'Rough plumbing — second floor', costCode: '2200 - Plumbing', group: 'Mechanicals', qty: 1, unitCost: 3150, markup: 472.5, taxable: true, source: 'bill', vendor: 'Delta Mechanical' },
-  { id: 'o3', item: 'Electrical rough-in materials', costCode: '2300 - Electrical', group: 'Mechanicals', qty: 1, unitCost: 604.3, markup: 90.65, taxable: true, source: 'bill', vendor: 'Home Depot' },
-  { id: 'o4', item: 'Lead carpenter — framing', costCode: '2100 - Framing', group: 'Framing', qty: 38, unitCost: 62, markup: 353.4, taxable: false, source: 'timeClock', vendor: 'Marcus Webb' },
-  { id: 'o5', item: 'Carpenter — framing', costCode: '2100 - Framing', group: 'Framing', qty: 46, unitCost: 48, markup: 331.2, taxable: false, source: 'timeClock', vendor: 'Danny Ruiz' },
-  { id: 'o6', item: 'Tile package — primary bath', costCode: '5500 - Tile', group: 'Finishes', qty: 1, unitCost: 444, markup: 66.6, taxable: true, source: 'selection' },
+  /* Bills name who was paid and on which document; labor names who did the
+     work and in what role. Both are the detail BT shows in the add-from
+     pickers today and then discards on the invoice line, which is the gap
+     Michelle Smith described. */
+  { id: 'o1', item: 'Framing lumber package', costCode: '2100 - Framing', group: 'Framing', date: '09/12/26', qty: 1, unitCost: 8420, markup: 1263, taxable: true, source: 'bill', vendor: '84 Lumber · Bill #4471' },
+  { id: 'o2', item: 'Rough plumbing, second floor', costCode: '2200 - Plumbing', group: 'Mechanicals', date: '09/15/26', qty: 1, unitCost: 3150, markup: 472.5, taxable: true, source: 'bill', vendor: 'Delta Mechanical · Bill #2208' },
+  { id: 'o3', item: 'Electrical rough-in materials', costCode: '2300 - Electrical', group: 'Mechanicals', date: '09/17/26', qty: 1, unitCost: 604.3, markup: 90.65, taxable: true, source: 'bill', vendor: 'City Electric Supply · Bill #88312' },
+  { id: 'o4', item: 'Marcus Webb, Lead carpenter', costCode: '2100 - Framing', group: 'Framing', date: '09/08 - 09/19/26', unit: 'hrs', qty: 38, unitCost: 62, markup: 353.4, taxable: false, source: 'timeClock' },
+  { id: 'o5', item: 'Danny Ruiz, Carpenter', costCode: '2100 - Framing', group: 'Framing', date: '09/08 - 09/19/26', unit: 'hrs', qty: 46, unitCost: 48, markup: 331.2, taxable: false, source: 'timeClock' },
+  { id: 'o6', item: 'Tile, primary bath floor and surround', costCode: '5500 - Tile', group: 'Finishes', qty: 1, unitCost: 444, markup: 66.6, taxable: true, source: 'selection' },
   { id: 'o7', item: 'Lighting package', costCode: '4200 - Fixtures', group: 'Finishes', qty: 1, unitCost: 1200, markup: 180, taxable: true, source: 'selection' },
-  { id: 'o8', item: 'Window upgrade — front elevation', costCode: '3300 - Windows', group: 'Change orders', qty: 1, unitCost: 500, markup: 3, taxable: true, source: 'changeOrder', coId: 'co1', coTitle: 'CO-1: Window & skylight upgrade' },
-  { id: 'o9', item: 'Skylight install', costCode: '3350 - Skylights', group: 'Change orders', qty: 1, unitCost: 4000, markup: 32, taxable: true, source: 'changeOrder', coId: 'co1', coTitle: 'CO-1: Window & skylight upgrade' },
-  { id: 'o10', item: 'Carpet upgrade — bedrooms', costCode: '5540 - Carpet', group: 'Change orders', qty: 1, unitCost: 405, markup: 40.5, taxable: true, source: 'changeOrder', coId: 'co2', coTitle: 'CO-2: Carpet upgrade' },
+  { id: 'o8', item: 'Window upgrade, front elevation', costCode: '3300 - Windows', group: 'Change orders', date: '09/04/26', qty: 1, unitCost: 500, markup: 3, taxable: true, source: 'changeOrder', coId: 'co1', coTitle: 'CO-1: Window & skylight upgrade' },
+  { id: 'o9', item: 'Skylight, primary bath', costCode: '3350 - Skylights', group: 'Change orders', date: '09/04/26', qty: 1, unitCost: 4000, markup: 32, taxable: true, source: 'changeOrder', coId: 'co1', coTitle: 'CO-1: Window & skylight upgrade' },
+  { id: 'o10', item: 'Carpet upgrade, bedrooms', costCode: '5540 - Carpet', group: 'Change orders', date: '09/19/26', qty: 1, unitCost: 405, markup: 40.5, taxable: true, source: 'changeOrder', coId: 'co2', coTitle: 'CO-2: Carpet upgrade' },
 ];
 
 // Job contacts — an invoice's job can have several people attached, but the
@@ -146,10 +169,11 @@ const CONTACTS: Contact[] = [
   { id: 'c4', name: 'Haven Property Mgmt', role: 'Billing company', account: 'PM-908', email: 'billing@havenpm.com', phone: '(202) 555-0200' },
 ];
 
-type ColKey = 'items' | 'tax' | 'unitCost' | 'quantity' | 'clientPrice' | 'markup';
+type ColKey = 'items' | 'date' | 'tax' | 'unitCost' | 'quantity' | 'clientPrice' | 'markup';
 
 const COL_LABELS: Record<ColKey, string> = {
   items: 'Items',
+  date: 'Date',
   tax: 'Tax',
   unitCost: 'Unit cost',
   quantity: 'Quantity',
@@ -161,7 +185,7 @@ const COL_LABELS: Record<ColKey, string> = {
    Tax is removable like any other - the tax still rolls up in the price
    breakdown either way, so hiding the column drops per-line detail without
    ever hiding the charge. */
-const REMOVABLE_COLS: ColKey[] = ['unitCost', 'quantity', 'clientPrice', 'markup', 'tax'];
+const REMOVABLE_COLS: ColKey[] = ['date', 'unitCost', 'quantity', 'clientPrice', 'markup', 'tax'];
 
 // How the client-facing line items are organized: mirrors the estimate's
 // groups, rolls up by cost code, or lists every line flat. Builders keep
@@ -281,7 +305,7 @@ export default function ClientPreviewInvoice() {
   }, [customizeSheetOpen]);
   // Which right-rail section is expanded — id-keyed so multiple can be open at
   // once, matching the reference proposal rail's Content/Layout/Design groups.
-  const [openSections, setOpenSections] = useState<Record<string, boolean>>({ recipient: true, layout: true, display: true, 'change-orders': true, general: true, 'email-content': true });
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>({ recipient: true, layout: true, display: true, breakdown: true, general: true, 'email-content': true });
   const toggleSection = (id: string) => setOpenSections(prev => ({ ...prev, [id]: !prev[id] }));
 
   const [hideLineItems, setHideLineItems] = useState(false);
@@ -291,13 +315,13 @@ export default function ClientPreviewInvoice() {
      the invoice without re-litigating lines that were agreed weeks ago. */
   const [hideChangeOrderLines, setHideChangeOrderLines] = useState(false);
   const [groupBy, setGroupBy] = useState<GroupBy>('estimate');
-  const [cols, setCols] = useState<ColKey[]>(['items', 'tax', 'unitCost', 'quantity', 'clientPrice', 'markup']);
+  const [cols, setCols] = useState<ColKey[]>(['items', 'date', 'tax', 'unitCost', 'quantity', 'clientPrice', 'markup']);
   const [qrCode, setQrCode] = useState(false);
   const [customFields, setCustomFields] = useState(true);
   /* Open book only: name the vendor or employee behind each cost line. The
      disclosure open-book clients are entitled to and fixed-price builders
      specifically don't want, so it's off until asked for. */
-  const [showVendor, setShowVendor] = useState(false);
+  const [showVendor, setShowVendor] = useState(true);
   /* Cost codes are the builder's own accounting structure, not something the
      client asked to see. Builders formatting an invoice to match the
      proposal a client already approved generally want them off. */
@@ -321,11 +345,22 @@ export default function ClientPreviewInvoice() {
      lines, so subtotal, tax and total are identical either way. A fee cost
      code mapped to its own QuickBooks income account is the other half of the
      ask and isn't this control. */
-  const [feeDisplay, setFeeDisplay] = useState<'inLine' | 'oneLine'>('inLine');
-  /* Builders don't call it markup to the client. "Builder fee" is AJ's and
-     Carla's term; others say management fee, contractor fee, or overhead and
-     profit, so the label is theirs to set. */
-  const [feeLabel, setFeeLabel] = useState('Builder fee');
+  /* No "where the markup shows" switch. On open book the breakdown always
+     states cost and markup under the subtotal, and the only question is
+     whether the client is shown it, which is the Price breakdown control. */
+  /* "Builder markup" is the default label; AJ and Carla say builder fee,
+     others say management fee, contractor fee, or overhead and profit, so the
+     label is theirs to set. */
+  const feeLabel = 'Builder markup';
+  /* The agency rows name the jurisdictions and their rates. Hiding them
+     leaves the Total tax line, so the charge is still stated and only its
+     make-up is not. */
+  const [hideTaxDetail, setHideTaxDetail] = useState(false);
+  /* Some open book builders state the arrangement in the contract but do not
+     want the split printed on every invoice. Hiding takes both breakdown rows
+     away, not just the markup: with cost of work still shown, the client could
+     back the markup out of the subtotal by subtraction. */
+  const [hideFee, setHideFee] = useState(false);
   // Two free-text messages the builder can place on the invoice: an intro
   // (invoice context, renders above the line items) and a closing (payment
   // notes, renders below the totals — restoring the pre-update bottom layout).
@@ -343,7 +378,7 @@ export default function ClientPreviewInvoice() {
   const settingsSignature = JSON.stringify({
     hideLineItems, hideChangeOrderLines, groupBy, cols, qrCode, customFields,
     showVendor, showCostCodes, introText, closingText, orientation, contractType,
-    feeDisplay, feeLabel,
+    hideFee, hideTaxDetail,
   });
   const [savedSignature, setSavedSignature] = useState<string | null>(null);
   const savedAsDefault = savedSignature === settingsSignature;
@@ -402,17 +437,14 @@ export default function ClientPreviewInvoice() {
     return order.map(id => byId[id]);
   })();
 
-  /* Only open book has a fee to separate. On fixed price the client bought a
-     result at a contract price, so there is no cost-plus-fee to state. */
-  const feeOnOwnLine = contractType === 'open-book' && feeDisplay === 'oneLine';
-
   // Which document columns to render, in table order.
   const showUnitCost = has('unitCost');
   const showQty = has('quantity');
+  const showDate = has('date');
   /* A per-line Markup column contradicts a stated fee line: it would show the
      fee twice, once spread across the lines and once at the bottom. The chip
      stays in the picker so turning the fee line off restores it. */
-  const showMarkup = has('markup') && !feeOnOwnLine;
+  const showMarkup = has('markup');
   const showPrice = has('clientPrice');
   const showTax = has('tax');
 
@@ -420,16 +452,32 @@ export default function ClientPreviewInvoice() {
      is added once below. Without it, each line's price carries its own
      markup, which is today's document. Either way the two sum to the same
      subtotal, so nothing downstream of it moves. */
-  const displayLinePrice = (l: PreviewLine) => (feeOnOwnLine ? lineBaseCost(l) : linePrice(l));
+  /* The line keeps its marked-up price. Breaking cost from markup is a
+     totals-block move, not a per-line one, so nothing in the grid shifts. */
+  const displayLinePrice = (l: PreviewLine) => linePrice(l);
 
   /* Tax is charged on the client price of the taxable lines, so it follows
      the price whether or not the fee is broken out: moving the fee between
      the lines and the breakdown must not move the tax. */
   const lineTax = (l: PreviewLine) => (l.taxable ? linePrice(l) * TAX_RATE : 0);
 
+  /* What a group's Tax cell says. The column answers "was this taxed", and a
+     group can only answer for its lines as a set: all of them, none of them,
+     or a mix that the client has to open up to see. "Varies" is the honest
+     answer to the mix rather than picking one and being wrong about the
+     rest. */
+  const groupTaxLabel = (lines: PreviewLine[]) => {
+    const taxed = lines.filter(l => l.taxable).length;
+    if (taxed === 0) return null;
+    return taxed === lines.length ? 'Taxed' : 'Varies';
+  };
+
   const subtotal = lines.reduce((s, l) => s + linePrice(l), 0);
   const costOfWork = lines.reduce((s, l) => s + lineBaseCost(l), 0);
   const feeTotal = lines.reduce((s, l) => s + (l.markup || 0), 0);
+  /* Open book with markup on the lines is the only case with a split to
+     state. Fixed price bought a result at a contract price. */
+  const feeAvailable = contractType === 'open-book' && feeTotal > 0;
   const taxableBase = lines.reduce((s, l) => s + (l.taxable ? linePrice(l) : 0), 0);
   const totalTax = lines.reduce((s, l) => s + lineTax(l), 0);
   const totalPrice = subtotal + totalTax;
@@ -440,14 +488,14 @@ export default function ClientPreviewInvoice() {
   /* The Markup column is off the picker entirely while the fee has its own
      line: it would state the same money twice. It comes back, still checked,
      the moment the builder puts the fee back in the lines. */
-  const pickableCols = REMOVABLE_COLS.filter(k => !(k === 'markup' && feeOnOwnLine));
+  const pickableCols = REMOVABLE_COLS;
   const availableToAdd = pickableCols.filter(k => !cols.includes(k));
 
   /* Group the standard (non-CO) client-facing line items. "By cost source" is
      the open-book ask: a client paying actuals wants to see what was a bill,
      what was labor, and what they chose, not a flat list of everything the
      job spent. */
-  const standardGroups: { name: string; items: PreviewLine[]; subtotal: number; tax: number }[] | null = (() => {
+  const standardGroups: { name: string; items: PreviewLine[]; subtotal: number }[] | null = (() => {
     if (groupBy === 'all') return null;
     const key = (l: PreviewLine) =>
       groupBy === 'estimate' ? l.group
@@ -464,7 +512,6 @@ export default function ClientPreviewInvoice() {
       name,
       items: byGroup[name],
       subtotal: byGroup[name].reduce((s, l) => s + displayLinePrice(l), 0),
-      tax: byGroup[name].reduce((s, l) => s + lineTax(l), 0),
     }));
   })();
 
@@ -481,16 +528,20 @@ export default function ClientPreviewInvoice() {
         </td>
         {/* data-label is what each figure is called once the table stacks
             into cards on a phone — see the max-width:600px rules. */}
-        {showQty && <td data-label="Qty/Unit">{l.qty.toFixed(2)}</td>}
+        {/* An estimate or selection line has no date to give, so it says so
+            rather than leaving a hole in a column of dates. */}
+        {showDate && <td className="cpi-nowrap" data-label="Date">{l.date || <span className="cpi-tax-none">--</span>}</td>}
+        {showQty && <td data-label="Qty/Unit">{l.unit ? `${l.qty.toFixed(2)} ${l.unit}` : l.qty.toFixed(2)}</td>}
         {showUnitCost && <td className="cpi-r" data-label="Unit cost">{l.unitCost != null ? `$${fmt(l.unitCost)}` : ''}</td>}
         {showMarkup && <td className="cpi-r" data-label="Markup">{l.markup != null ? `$${fmt(l.markup)}` : ''}</td>}
         {showPrice && <td className="cpi-r cpi-strong" data-label="Price">${fmt(displayLinePrice(l))}</td>}
-        {/* The amount, not the word "Taxable". A client reading a bill wants
-            to know what the tax on this line was, and a non-taxable line
-            says so once rather than leaving an unexplained blank. */}
+        {/* Whether the line was taxed, not how much: the amounts are stated
+            once per agency in the price breakdown, so repeating them per line
+            would just invite the client to re-add them. An untaxed line reads
+            "--" rather than an unexplained blank. */}
         {showTax && (
           <td className="cpi-r" data-label="Tax">
-            {l.taxable ? `$${fmt(lineTax(l))}` : <span className="cpi-tax-none">Non-taxable</span>}
+            {l.taxable ? 'Taxed' : <span className="cpi-tax-none">--</span>}
           </td>
         )}
       </tr>
@@ -499,18 +550,24 @@ export default function ClientPreviewInvoice() {
 
   // A group/change-order header row: a title with its rolled-up price, which
   // is the one-price-per-group view builders keep asking for.
-  const renderGroupRow = (key: string, name: string, groupSubtotal: number, className: string, groupTax?: number) => (
-    <tr key={key} className={className}>
-      <td>{name}</td>
-      {showQty && <td></td>}
-      {showUnitCost && <td></td>}
-      {showMarkup && <td></td>}
-      {showPrice && <td className="cpi-r">${fmt(groupSubtotal)}</td>}
-      {/* A group that hides its lines still owes its tax, so the header
-          carries the group's rolled-up tax rather than an empty cell. */}
-      {showTax && <td className="cpi-r">{groupTax != null ? `$${fmt(groupTax)}` : ''}</td>}
-    </tr>
-  );
+  const renderGroupRow = (key: string, name: string, groupSubtotal: number, className: string, lines?: PreviewLine[]) => {
+    const taxLabel = lines ? groupTaxLabel(lines) : null;
+    return (
+      <tr key={key} className={className}>
+        <td>{name}</td>
+        {showDate && <td></td>}
+        {showQty && <td></td>}
+        {showUnitCost && <td></td>}
+        {showMarkup && <td></td>}
+        {showPrice && <td className="cpi-r">${fmt(groupSubtotal)}</td>}
+        {showTax && (
+          <td className="cpi-r">
+            {taxLabel || <span className="cpi-tax-none">--</span>}
+          </td>
+        )}
+      </tr>
+    );
+  };
 
   const renderDetailsTab = () => (
     <div className="cpi-details">
@@ -571,7 +628,9 @@ export default function ClientPreviewInvoice() {
           <label className="fl">Taxes</label>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
             <select className="fi" style={{ width: 220, flexShrink: 0 }} defaultValue="state">
-              <option value="state">{TAX_AGENCY} ----- {(TAX_RATE * 100).toFixed(3)}%</option>
+              {TAX_AGENCIES.map(a => (
+                <option key={a.name} value={a.name}>{a.name} ----- {(a.rate * 100).toFixed(3).replace(/0+$/, '').replace(/\.$/, '')}%</option>
+              ))}
             </select>
             <button className="btn-g">Manage</button>
           </div>
@@ -762,6 +821,7 @@ export default function ClientPreviewInvoice() {
                 <thead>
                   <tr>
                     <th>Items</th>
+                    {showDate && <th>Date</th>}
                     {showQty && <th>Qty/Unit</th>}
                     {showUnitCost && <th className="cpi-r">Unit cost</th>}
                     {showMarkup && <th className="cpi-r">Markup amount</th>}
@@ -770,25 +830,33 @@ export default function ClientPreviewInvoice() {
                   </tr>
                 </thead>
                 <tbody>
+                  {/* Grouping by cost code absorbs the lines: the client sees
+                      one row per code at its total, not a heading over the
+                      lines that make it up, which is the point of asking for
+                      that grouping. Unshaded, because the row IS the billed
+                      line now. Every other grouping heads its visible lines. */}
                   {standardGroups
-                    ? standardGroups.flatMap(g => [
-                        renderGroupRow(`grp-${g.name}`, g.name, g.subtotal, 'cpi-grp-row', g.tax),
-                        ...g.items.map(l => renderLineRow(l, 1)),
-                      ])
+                    ? standardGroups.flatMap(g =>
+                        groupBy === 'costcode'
+                          ? [renderGroupRow(`grp-${g.name}`, g.name, g.subtotal, 'cpi-co-collapsed', g.items)]
+                          : [
+                              renderGroupRow(`grp-${g.name}`, g.name, g.subtotal, 'cpi-grp-row', g.items),
+                              ...g.items.map(l => renderLineRow(l, 1)),
+                            ]
+                      )
                     : standardLines.map(l => renderLineRow(l, 0))}
 
                   {changeOrderGroups.flatMap(group => {
                     const groupTotal = group.lines.reduce((s, l) => s + displayLinePrice(l), 0);
-                    const groupTax = group.lines.reduce((s, l) => s + lineTax(l), 0);
                     /* Collapsed, the change order stops being a heading over
                        its lines and becomes the billed line itself, so it
                        drops the group row's shading and reads like any other
                        row in the grid. */
                     if (hideChangeOrderLines) {
-                      return [renderGroupRow(`co-${group.title}`, group.title, groupTotal, 'cpi-co-collapsed', groupTax)];
+                      return [renderGroupRow(`co-${group.title}`, group.title, groupTotal, 'cpi-co-collapsed', group.lines)];
                     }
                     return [
-                      renderGroupRow(`co-${group.title}`, group.title, groupTotal, 'cpi-grp-row', groupTax),
+                      renderGroupRow(`co-${group.title}`, group.title, groupTotal, 'cpi-grp-row', group.lines),
                       /* "All line items" is the flat view, so its lines sit
                          at the margin even under a change-order title —
                          nothing else on the page is indented to align to. */
@@ -799,12 +867,16 @@ export default function ClientPreviewInvoice() {
                   <tr className="cpi-total-row">
                     {/* The grid totals what the grid shows: true cost when the
                         fee is stated below it, the marked-up price otherwise. */}
-                    <td>{feeOnOwnLine ? 'Cost of work:' : 'Totals:'}</td>
+                    <td>Totals:</td>
+                    {showDate && <td></td>}
                     {showQty && <td></td>}
                     {showUnitCost && <td></td>}
                     {showMarkup && <td className="cpi-r">${fmt(feeTotal)}</td>}
-                    {showPrice && <td className="cpi-r">${fmt(feeOnOwnLine ? costOfWork : subtotal)}</td>}
-                    {showTax && <td className="cpi-r">${fmt(totalTax)}</td>}
+                    {showPrice && <td className="cpi-r">${fmt(subtotal)}</td>}
+                    {/* The column says whether a line was taxed, so there is
+                        no amount to total here. Tax rolls up in the price
+                        breakdown below. */}
+                    {showTax && <td></td>}
                   </tr>
                 </tbody>
               </table>
@@ -829,10 +901,10 @@ export default function ClientPreviewInvoice() {
               the layout AJ Epding builds by hand today and the one QBO gives
               cost-plus builders. Suppressed when there is no fee to state, so
               a zero row never appears. */}
-          {feeOnOwnLine && feeTotal > 0 && (
+          {feeAvailable && !hideFee && (
             <>
-              <div className="cpi-totals-line cpi-totals-sub"><span>Cost of work</span><span>${fmt(costOfWork)}</span></div>
-              <div className="cpi-totals-line cpi-totals-sub"><span>{feeLabel || 'Builder fee'}</span><span>${fmt(feeTotal)}</span></div>
+              <div className="cpi-totals-line cpi-totals-sub"><span>Builder cost</span><span>${fmt(costOfWork)}</span></div>
+              <div className="cpi-totals-line cpi-totals-sub"><span>{feeLabel || 'Builder markup'}</span><span>${fmt(feeTotal)}</span></div>
             </>
           )}
           {/* Tax always rolls up here, whatever the line-item table shows.
@@ -841,7 +913,12 @@ export default function ClientPreviewInvoice() {
               charged: the client still has to be told the tax on what they
               owe. So this block never branches on showTax. */}
           <div className="cpi-totals-line cpi-totals-parent"><span>Total tax</span><span>${fmt(totalTax)}</span></div>
-          <div className="cpi-totals-line cpi-totals-sub"><span>{TAX_AGENCY} ({(TAX_RATE * 100).toFixed(3)}%)</span><span>${fmt(totalTax)}</span></div>
+          {!hideTaxDetail && TAX_AGENCIES.map(a => (
+            <div key={a.name} className="cpi-totals-line cpi-totals-sub">
+              <span>{a.name} ({(a.rate * 100).toFixed(3).replace(/0+$/, '').replace(/\.$/, '')}%)</span>
+              <span>${fmt(taxableBase * a.rate)}</span>
+            </div>
+          ))}
           {/* With the column hidden the client can no longer see which lines
               were taxed, so the breakdown says what the rate was applied to.
               Only worth saying when some lines are exempt. */}
@@ -1088,18 +1165,34 @@ export default function ClientPreviewInvoice() {
                           the grouping that matches the proposal the client
                           approved. Open book has no estimate behind its
                           lines, so it offers cost source in that slot. */}
+                      {/* "Cost source" either way. Fixed price groups by the
+                          estimate, change orders and selections behind each
+                          line; open book groups by the bills and hours behind
+                          it. Same question, different records, so one name
+                          rather than two for one control. */}
                       {contractType === 'open-book' ? (
-                        <button type="button" className={"client-group-tab" + (groupBy === 'source' ? ' on' : '')} onClick={() => setGroupBy('source')} aria-selected={groupBy === 'source'}>By cost source</button>
+                        <button type="button" className={"client-group-tab" + (groupBy === 'source' ? ' on' : '')} onClick={() => setGroupBy('source')} aria-selected={groupBy === 'source'}>Cost source</button>
                       ) : (
-                        <button type="button" className={"client-group-tab" + (groupBy === 'estimate' ? ' on' : '')} onClick={() => setGroupBy('estimate')} aria-selected={groupBy === 'estimate'}>By estimate</button>
+                        <button type="button" className={"client-group-tab" + (groupBy === 'estimate' ? ' on' : '')} onClick={() => setGroupBy('estimate')} aria-selected={groupBy === 'estimate'}>Cost source</button>
                       )}
-                      <button type="button" className={"client-group-tab" + (groupBy === 'costcode' ? ' on' : '')} onClick={() => setGroupBy('costcode')} aria-selected={groupBy === 'costcode'}>By cost code</button>
+                      <button type="button" className={"client-group-tab" + (groupBy === 'costcode' ? ' on' : '')} onClick={() => setGroupBy('costcode')} aria-selected={groupBy === 'costcode'}>Cost code</button>
                       <button type="button" className={"client-group-tab" + (groupBy === 'all' ? ' on' : '')} onClick={() => setGroupBy('all')} aria-selected={groupBy === 'all'}>All line items</button>
                     </div>
 
+                    {/* Sits with the grouping rather than in a section of its
+                        own: it decides whether one of these groups lists its
+                        lines or collapses to its title and approved total.
+                        Only offered when the invoice carries a change order. */}
+                    {changeOrderGroups.length > 0 && (
+                      <label className="cpi-check">
+                        <input type="checkbox" checked={hideChangeOrderLines} onChange={e => setHideChangeOrderLines(e.target.checked)} />
+                        <span>Hide change order line items</span>
+                      </label>
+                    )}
+
                     <label className="cpi-check" style={{ marginTop: 4 }}>
                       <input type="checkbox" checked={showCostCodes} onChange={e => setShowCostCodes(e.target.checked)} />
-                      <span>Show cost codes <span className="cpi-info" title="Your accounting codes under each line item. Turn off to show the client only the item description.">i</span></span>
+                      <span>Show cost codes</span>
                     </label>
 
                     {/* Open book only: the client is entitled to see where
@@ -1111,37 +1204,6 @@ export default function ClientPreviewInvoice() {
                         <input type="checkbox" checked={showVendor} onChange={e => setShowVendor(e.target.checked)} />
                         <span>Show vendor and employee names</span>
                       </label>
-                    )}
-
-                    {/* Open book only: cost-plus builders describe their
-                        contract to the client as true cost plus a stated fee,
-                        and today's invoice can only express it as markup baked
-                        into each line's price. This states it the way the
-                        contract does. Fixed price has no fee to separate, so
-                        the control isn't there. */}
-                    {contractType === 'open-book' && (
-                      <>
-                        <div className="cpi-rail-sublabel" style={{ marginTop: 4 }}>Where the fee shows</div>
-                        <div className="client-group-tabs">
-                          <button type="button" className={"client-group-tab" + (feeDisplay === 'inLine' ? ' on' : '')} onClick={() => setFeeDisplay('inLine')} aria-selected={feeDisplay === 'inLine'}>In each line</button>
-                          <button type="button" className={"client-group-tab" + (feeDisplay === 'oneLine' ? ' on' : '')} onClick={() => setFeeDisplay('oneLine')} aria-selected={feeDisplay === 'oneLine'}>Its own line</button>
-                        </div>
-                        <div className="cpi-rail-hint">
-                          {feeDisplay === 'oneLine'
-                            ? 'Lines show what you paid. Your fee is stated once above the subtotal. The total does not change.'
-                            : 'Each line price includes its own markup. Your fee is not stated separately.'}
-                        </div>
-                        {feeDisplay === 'oneLine' && (
-                          <input
-                            className="fi"
-                            style={{ marginTop: 6 }}
-                            value={feeLabel}
-                            onChange={e => setFeeLabel(e.target.value)}
-                            placeholder="Builder fee"
-                            aria-label="Fee label shown to the client"
-                          />
-                        )}
-                      </>
                     )}
 
                     <div className="cpi-rail-sublabel" style={{ marginTop: 4 }}>Columns shown</div>
@@ -1163,17 +1225,27 @@ export default function ClientPreviewInvoice() {
                 )}
               </RailSection>
 
-              {/* Change orders get their own section rather than another
-                  checkbox under Display to client: they're a distinct record
-                  on the invoice, already approved at their own price, so how
-                  much of one to show is its own question. Only shown when
-                  the invoice actually carries one and lines are visible. */}
-              {!hideLineItems && changeOrderGroups.length > 0 && (
-                <RailSection id="change-orders" title="Change orders" open={!!openSections['change-orders']} onToggle={toggleSection}>
-                  <label className="cpi-check">
-                    <input type="checkbox" checked={hideChangeOrderLines} onChange={e => setHideChangeOrderLines(e.target.checked)} />
-                    <span>Hide change order line items <span className="cpi-info" title="Shows each change order as its title and approved total, without listing what's inside it">i</span></span>
-                  </label>
+              {/* The totals block gets its own group. The three sections are
+                  the three parts of the document: the line-item table, the
+                  price breakdown under it, and the boilerplate around both.
+                  Each control appears only when it has something to act on. */}
+              {(feeAvailable || totalTax > 0) && (
+                <RailSection id="breakdown" title="Price breakdown" open={!!openSections.breakdown} onToggle={toggleSection}>
+                  {/* Markup is open book only; tax applies either way, so this
+                      section can exist on fixed price with the tax control
+                      alone. */}
+                  {feeAvailable && (
+                    <label className="cpi-check">
+                      <input type="checkbox" checked={hideFee} onChange={e => setHideFee(e.target.checked)} />
+                      <span>Hide builder markup from subtotal</span>
+                    </label>
+                  )}
+                  {totalTax > 0 && (
+                    <label className="cpi-check">
+                      <input type="checkbox" checked={hideTaxDetail} onChange={e => setHideTaxDetail(e.target.checked)} />
+                      <span>Hide tax agency detail</span>
+                    </label>
+                  )}
                 </RailSection>
               )}
 
@@ -1232,13 +1304,13 @@ export default function ClientPreviewInvoice() {
                   setHideLineItems(false);
                   setHideChangeOrderLines(false);
                   setGroupBy(contractType === 'open-book' ? 'source' : 'estimate');
-                  setCols(['items', 'tax', 'unitCost', 'quantity', 'clientPrice', 'markup']);
+                  setCols(['items', 'date', 'tax', 'unitCost', 'quantity', 'clientPrice', 'markup']);
                   setQrCode(false);
                   setCustomFields(true);
-                  setShowVendor(false);
+                  setShowVendor(true);
                   setShowCostCodes(true);
-                  setFeeDisplay('inLine');
-                  setFeeLabel('Builder fee');
+                  setHideFee(false);
+                  setHideTaxDetail(false);
                   setIntroText(true);
                   setClosingText(true);
                   setOrientation('portrait');
