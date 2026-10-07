@@ -10,10 +10,63 @@ interface SelectionData {
   status: string;
 }
 
+export type OrderStage = 'pending' | 'ordered' | 'delivered' | 'installed';
+export const ORDER_STAGES: { id: OrderStage; label: string }[] = [
+  { id: 'pending', label: 'Pending order' },
+  { id: 'ordered', label: 'Ordered' },
+  { id: 'delivered', label: 'Delivered' },
+  { id: 'installed', label: 'Installed' },
+];
+
+export type Carrier = 'ups' | 'fedex' | 'usps' | 'freight' | 'supplier';
+export const CARRIERS: { id: Carrier; label: string }[] = [
+  { id: 'ups', label: 'UPS' },
+  { id: 'fedex', label: 'FedEx' },
+  { id: 'usps', label: 'USPS' },
+  { id: 'freight', label: 'Freight / LTL' },
+  { id: 'supplier', label: 'Supplier delivery' },
+];
+export type OrderTracking = {
+  carrier?: Carrier;
+  trackingNumber?: string;
+  supplierOrderNumber?: string;
+  expectedDate?: string;
+  // Last carrier sync. Mocked in the prototype; production would call a
+  // tracking aggregator and refresh on a schedule.
+  synced?: { status: string; detail: string; at: string; delivered: boolean };
+};
+
+// Guess the carrier from the tracking number format so builders can paste and go.
+function detectCarrier(n: string): Carrier | undefined {
+  const t = n.replace(/\s/g, '').toUpperCase();
+  if (/^1Z[0-9A-Z]{16}$/.test(t)) return 'ups';
+  if (/^9[0-9]{19,21}$/.test(t)) return 'usps';
+  if (/^[0-9]{12}$|^[0-9]{15}$/.test(t)) return 'fedex';
+  return undefined;
+}
+
+function trackingUrl(carrier: Carrier | undefined, n: string): string | null {
+  const t = encodeURIComponent(n.replace(/\s/g, ''));
+  if (!t) return null;
+  if (carrier === 'ups') return `https://www.ups.com/track?tracknum=${t}`;
+  if (carrier === 'fedex') return `https://www.fedex.com/fedextrack/?trknbr=${t}`;
+  if (carrier === 'usps') return `https://tools.usps.com/go/TrackConfirmAction?tLabels=${t}`;
+  return null;
+}
+
 interface Props {
   onBack: () => void;
   selectionData?: SelectionData | null;
   prefilledAllowance?: string | null;
+  // 'panel' renders as a right-side panel over the page that opened it
+  // (Selections workshop). 'page' is the original full-page route.
+  variant?: 'page' | 'panel';
+  // Builder-only order tracking. Shown when the parent supplies a setter, and
+  // editable only once the option is approved (same rule as the grid column).
+  orderStage?: OrderStage;
+  onOrderStageChange?: (stage: OrderStage) => void;
+  tracking?: OrderTracking;
+  onTrackingChange?: (tracking: OrderTracking) => void;
 }
 
 function inferCategory(name: string): string {
@@ -75,7 +128,9 @@ function getStatusBadge(optionStatus: string, dueDate: string): {
 }
 
 
-export default function OptionDetailPage({ onBack, selectionData, prefilledAllowance }: Props) {
+export default function OptionDetailPage({ onBack, selectionData, prefilledAllowance, variant = 'page', orderStage, onOrderStageChange, tracking = {}, onTrackingChange }: Props) {
+  const [syncing, setSyncing] = useState(false);
+  const isPanel = variant === 'panel';
   const isViewing = !!selectionData;
   const isPending = selectionData?.status === 'pending';
   const [title, setTitle] = useState(selectionData?.name || '');
@@ -192,7 +247,8 @@ export default function OptionDetailPage({ onBack, selectionData, prefilledAllow
     ];
   };
   const [specs, setSpecs] = useState(seedSpecs);
-  const [slice, setSlice] = useState<1 | 2 | 3 | 4>(1);
+  // The panel variant has no slice tabs and always shows Slice 2.
+  const [slice, setSlice] = useState<1 | 2 | 3 | 4>(isPanel ? 2 : 1);
 
   // Image mode: 'single' is the ticket-scoped version (one product-URL image,
   // display + delete, no carousel / no add-more). 'multi' adds the gallery +
@@ -544,6 +600,89 @@ export default function OptionDetailPage({ onBack, selectionData, prefilledAllow
   );
 
   // Details fields (left column), reused across layouts.
+  const setTracking = (patch: Partial<OrderTracking>) => onTrackingChange?.({ ...tracking, ...patch });
+  const trackUrl = trackingUrl(tracking.carrier, tracking.trackingNumber ?? '');
+  const canSync = !!tracking.trackingNumber && !!tracking.carrier && tracking.carrier !== 'freight' && tracking.carrier !== 'supplier';
+  const carrierLabel = CARRIERS.find(c => c.id === tracking.carrier)?.label ?? '';
+  const syncTracking = () => {
+    setSyncing(true);
+    // Mock carrier response. Ordered items come back delivered so the
+    // "mark as delivered" prompt is reviewable; later stages just confirm.
+    window.setTimeout(() => {
+      const now = new Date();
+      const at = now.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+      const delivered = true;
+      const day = new Date(now.getTime() - 86400000).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      setTracking({ synced: { status: 'Delivered', detail: `${day}, left at job site. Signed by R. MARTINEZ`, at, delivered } });
+      setSyncing(false);
+    }, 700);
+  };
+
+  const trackingBlock = (
+    <div className="od-tracking">
+      <div className="od-tracking-hdr">
+        <span className="od-tracking-title">Shipment tracking</span>
+        {canSync && (
+          <button type="button" className="btn-g od-tracking-sync" onClick={syncTracking} disabled={syncing}>
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" className={syncing ? 'od-spin' : undefined}><path d="M13.5 8a5.5 5.5 0 0 1-9.9 3.3M2.5 8a5.5 5.5 0 0 1 9.9-3.3M12.5 2v3h-3M3.5 14v-3h3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            {syncing ? 'Syncing' : tracking.synced ? 'Sync again' : `Sync with ${carrierLabel}`}
+          </button>
+        )}
+      </div>
+      <div className="od-field-row">
+        <div className="od-field" style={{ flex: 1 }}>
+          <label className="fl" htmlFor="od-carrier">Carrier</label>
+          <select id="od-carrier" className="fi" value={tracking.carrier ?? ''} onChange={e => setTracking({ carrier: (e.target.value || undefined) as Carrier | undefined, synced: undefined })}>
+            <option value="">Select carrier</option>
+            {CARRIERS.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+          </select>
+        </div>
+        <div className="od-field" style={{ flex: 1.4 }}>
+          <label className="fl" htmlFor="od-tracking-number">Tracking number</label>
+          <div className="od-field-with-actions">
+            <input
+              id="od-tracking-number"
+              className="fi"
+              placeholder="Paste a tracking number"
+              value={tracking.trackingNumber ?? ''}
+              onChange={e => {
+                const n = e.target.value;
+                setTracking({ trackingNumber: n, carrier: tracking.carrier ?? detectCarrier(n), synced: undefined });
+              }}
+            />
+            {trackUrl && (
+              <a className="od-field-action" href={trackUrl} target="_blank" rel="noreferrer" title={`Track on ${carrierLabel}`} aria-label={`Track on ${carrierLabel}`}>
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M9 3h4v4M13 3L7.5 8.5M11 9.5V13H3V5h3.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              </a>
+            )}
+          </div>
+        </div>
+      </div>
+      <div className="od-field-row">
+        <div className="od-field" style={{ flex: 1 }}>
+          <label className="fl" htmlFor="od-supplier-order">Supplier order #</label>
+          <input id="od-supplier-order" className="fi" value={tracking.supplierOrderNumber ?? ''} onChange={e => setTracking({ supplierOrderNumber: e.target.value })} />
+        </div>
+        <div className="od-field" style={{ flex: 1 }}>
+          <label className="fl" htmlFor="od-expected">Expected delivery</label>
+          <input id="od-expected" type="date" className="fi" value={tracking.expectedDate ?? ''} onChange={e => setTracking({ expectedDate: e.target.value })} />
+        </div>
+      </div>
+      {tracking.synced && (
+        <div className={`od-tracking-status${tracking.synced.delivered ? ' is-delivered' : ''}`}>
+          <div>
+            <div className="od-tracking-status-line"><strong>{carrierLabel}: {tracking.synced.status}</strong></div>
+            <div className="od-tracking-status-detail">{tracking.synced.detail}</div>
+            <div className="od-tracking-status-at">Synced {tracking.synced.at}</div>
+          </div>
+          {tracking.synced.delivered && orderStage === 'ordered' && (
+            <button type="button" className="btn btn-s" onClick={() => onOrderStageChange?.('delivered')}>Mark as delivered</button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+
   const detailsBlock = (
     <>
       <h3 className="od-section-title">Details</h3>
@@ -567,6 +706,24 @@ export default function OptionDetailPage({ onBack, selectionData, prefilledAllow
           </div>
         )}
       </div>
+
+      {onOrderStageChange && (
+        <div className="od-field">
+          <label className="fl" htmlFor="od-order-status">Order status</label>
+          <select
+            id="od-order-status"
+            className="fi"
+            style={{ maxWidth: 240 }}
+            value={optionStatus === 'approved' ? (orderStage ?? 'pending') : ''}
+            disabled={optionStatus !== 'approved'}
+            onChange={e => onOrderStageChange(e.target.value as OrderStage)}
+          >
+            {optionStatus !== 'approved' && <option value="">Available once approved</option>}
+            {ORDER_STAGES.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
+          </select>
+        </div>
+      )}
+      {onOrderStageChange && optionStatus === 'approved' && orderStage && orderStage !== 'pending' && trackingBlock}
 
       <div className="od-field">
         <label className="fl">Description</label>
@@ -663,8 +820,17 @@ export default function OptionDetailPage({ onBack, selectionData, prefilledAllow
     0
   );
 
-  return (
-    <div className="jps-page">
+  const saveSplitButton = (
+    <div className="od-split-btn">
+      <button className="od-split-main">Save</button>
+      <button className="od-split-caret" aria-label="More save options">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 5.5L7 9.5L11 5.5" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+      </button>
+    </div>
+  );
+
+  const content = (
+    <div className={isPanel ? 'ws-detail-panel-inner' : 'jps-page'}>
       {/* Header */}
       <div className="pg-hdr">
         <div className="pg-accent"></div>
@@ -678,29 +844,29 @@ export default function OptionDetailPage({ onBack, selectionData, prefilledAllow
                   {statusBadge.label}
                 </span>
               </div>
-              <button className="od-back-link" onClick={onBack}>&larr; Back</button>
+              {!isPanel && <button className="od-back-link" onClick={onBack}>&larr; Back</button>}
             </div>
           </div>
           <div className="pg-hdr-right" style={{ gap: 8 }}>
-            <div className="tabs" style={{ marginRight: 4 }}>
+            {!isPanel && <div className="tabs" style={{ marginRight: 4 }}>
               <button type="button" className={`tab${slice === 1 ? ' on' : ''}`} onClick={() => setSlice(1)}>Slice 1</button>
               <button type="button" className={`tab${slice === 2 ? ' on' : ''}`} onClick={() => setSlice(2)}>Slice 2</button>
               <button type="button" className={`tab${slice === 3 ? ' on' : ''}`} onClick={() => setSlice(3)}>Slice 3</button>
               <button type="button" className={`tab${slice === 4 ? ' on' : ''}`} onClick={() => setSlice(4)}>Slice 4</button>
-            </div>
-            {isPending && optionStatus === 'pending' && (
+            </div>}
+            {!isPanel && isPending && optionStatus === 'pending' && (
               <>
                 <button className="btn btn-danger" onClick={() => setOptionStatus('declined')}>Decline</button>
                 <button className="btn btn-success" onClick={() => setOptionStatus('approved')}>Approve</button>
               </>
             )}
-            <button className="btn btn-s" onClick={onBack}>{isViewing ? 'Close' : 'Cancel'}</button>
-            <div className="od-split-btn">
-              <button className="od-split-main">Save</button>
-              <button className="od-split-caret">
-                <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 5.5L7 9.5L11 5.5" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            {!isPanel && <button className="btn btn-s" onClick={onBack}>{isViewing ? 'Close' : 'Cancel'}</button>}
+            {!isPanel && saveSplitButton}
+            {isPanel && (
+              <button type="button" className="ws-detail-close" onClick={onBack} aria-label="Close" title="Close">
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M5 5L15 15M15 5L5 15" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
               </button>
-            </div>
+            )}
           </div>
         </div>
       </div>
@@ -848,14 +1014,15 @@ export default function OptionDetailPage({ onBack, selectionData, prefilledAllow
 
           {!isEmailSlice && (<>
 
-          {/* Prototype controls — image mode toggle. ADO 277207. Not shipped UI. */}
-          <div className="od-layout-switch">
+          {/* Prototype controls — image mode toggle. ADO 277207. Not shipped UI.
+              Hidden in the panel variant, which stays on the single image. */}
+          {!isPanel && <div className="od-layout-switch">
             <span className="od-layout-switch-label">Image mode</span>
             <div className="tabs">
               <button type="button" className={`tab${imageMode === 'multi' ? ' on' : ''}`} onClick={() => setImageMode('multi')}>Carousel + add more</button>
               <button type="button" className={`tab${imageMode === 'single' ? ' on' : ''}`} onClick={() => setImageMode('single')}>Single image only</button>
             </div>
-          </div>
+          </div>}
 
           {/* Left: identity fields + Product URL at the bottom. Right: image on
               top, then Attachments + Specs. */}
@@ -994,6 +1161,32 @@ export default function OptionDetailPage({ onBack, selectionData, prefilledAllow
 
           </>)}
 
+        </div>
+      </div>
+    </div>
+  );
+
+  if (!isPanel) return content;
+  return (
+    <div className="ws-detail-overlay" onClick={onBack}>
+      <div
+        className="ws-detail-panel od-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-label={isViewing ? title : 'Add option'}
+        onClick={e => e.stopPropagation()}
+      >
+        {content}
+        <div className="od-panel-footer">
+          {isPending && optionStatus === 'pending' && (
+            <>
+              <button className="btn btn-danger" onClick={() => setOptionStatus('declined')}>Decline</button>
+              <button className="btn btn-success" onClick={() => setOptionStatus('approved')}>Approve</button>
+              <span className="od-panel-footer-divider" aria-hidden="true" />
+            </>
+          )}
+          <button className="btn btn-s" onClick={onBack}>{isViewing ? 'Close' : 'Cancel'}</button>
+          {saveSplitButton}
         </div>
       </div>
     </div>

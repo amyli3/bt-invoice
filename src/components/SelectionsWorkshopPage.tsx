@@ -1,6 +1,10 @@
 import { useMemo, useState } from 'react';
 import { INVOICE_SELECTION_SCENARIOS, INVOICE_STANDALONE_SELECTIONS } from '../selectionsData';
 import { BTRelatedItemTag, RelatedItemType } from '../bds';
+import ShareSelectionsModal from './ShareSelectionsModal';
+import AllowancePanel from './AllowancePanel';
+import OptionDetailPage, { ORDER_STAGES, type OrderStage, type OrderTracking } from './OptionDetailPage';
+import { INVOICE_SELECTION_SCENARIOS as SCENARIOS_FOR_CC } from '../selectionsData';
 
 export type InvoiceWizardTarget =
   | { type: 'new'; invoiceType: 'invoice' | 'progress' }
@@ -55,32 +59,38 @@ function statusFromScenario(s: 'approved' | 'invoiced' | 'declined' | 'pending' 
 // Mock locations per selection / allowance for the prototype.
 // In production this comes from the selection's location field.
 const LOCATION_MAP: Record<string, string> = {
-  // Allowances
-  'ma-5': 'Master Bath',
-  'ma-6': 'Living Room',
-  'ma-8': 'Whole house',
+  // Allowances. An allowance whose selections span rooms takes the level
+  // or "Whole House" so the group header doesn't pretend it's one room.
+  'ma-5': 'Primary Bathroom',
+  'ma-6': 'Kitchen',
+  'ma-6c': 'Kitchen',
+  'ma-8': 'Whole House',
   'ma-1': 'Kitchen',
-  'ma-2': 'Living areas',
-  'ma-7': 'Master Bath',
+  'ma-2': 'Main Level',
+  'ma-7': 'Primary Bathroom',
+  'ma-12': 'Whole House',
   'ma-14': 'Exterior',
   // Allowance children
-  'ms-12': 'Master Bath',
-  'ms-13': 'Master Bath',
-  'ms-14': 'Living Room',
-  'ms-19': 'Whole house',
+  'ms-12': 'Primary Bathroom',   // Bathroom faucet set
+  'ms-13': 'Primary Bathroom',   // Shower valve kit
+  'ms-14': 'Kitchen',            // Pendant light fixtures (over the island)
+  'ms-14c': 'Kitchen',
+  'ms-19': 'Whole House',        // Interior wall paint
   'ms-1': 'Kitchen',
   'ms-2': 'Kitchen',
   'ms-4': 'Kitchen',
-  'ms-5': 'Living Room',
-  'ms-6': 'Entryway',
-  'ms-16': 'Master Bath',
-  'ms-17': 'Master Bath',
-  'ms-18': 'Master Bath',
+  'ms-5': 'Living Room',         // Engineered hardwood
+  'ms-6': 'Entryway',            // Luxury vinyl plank
+  'ms-16': 'Primary Bathroom',
+  'ms-17': 'Primary Bathroom',
+  'ms-18': 'Primary Bathroom',
+  'ms-25': 'Garage',             // Smart panel upgrade
+  'ms-26': 'Kitchen',            // Premium recessed lighting
   'ms-30': 'Exterior',
   'ms-31': 'Exterior',
   // Standalones
-  'ss-1': 'Front entry',
-  'ss-2': 'Exterior',
+  'ss-1': 'Entryway',            // Front door hardware
+  'ss-2': 'Exterior',            // Custom mailbox
 };
 
 // Mock description + internal notes per allowance for the detail panel.
@@ -276,6 +286,23 @@ const deriveBuilderStatus = (status: string): string => {
   return status;
 };
 
+// Order status for approved items. Builders update it inline.
+const OrderCell = ({ approved, stage, onChange }: { approved: boolean; stage?: OrderStage; onChange: (s: OrderStage) => void }) => {
+  if (!approved) return <span style={{ color: 'var(--g400)' }}>—</span>;
+  const s = stage ?? 'pending';
+  return (
+    <select
+      className={`sp-order-select sp-order-${s}`}
+      value={s}
+      onChange={e => onChange(e.target.value as OrderStage)}
+      onClick={e => e.stopPropagation()}
+      aria-label="Order status"
+    >
+      {ORDER_STAGES.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
+    </select>
+  );
+};
+
 const StatusBadge = ({ status }: { status: string }) => {
   const cls = status === 'Approved' || status === 'Completed'
     ? 'sp-badge-success'
@@ -362,8 +389,6 @@ const MoreIcon = () => (
 interface SelectionsPageProps {
   jobOpen?: boolean;
   onToggleJob?: () => void;
-  onOpenOption?: (sel?: { name: string; category: string; price: number; status: string }) => void;
-  onAddToAllowance?: (allowanceName: string) => void;
   completedAllowanceIds?: Set<string>;
   onToggleAllowanceComplete?: (id: string) => void;
   onOpenInvoice?: () => void;
@@ -371,11 +396,9 @@ interface SelectionsPageProps {
   onOpenInvoiceWizard?: (preselectIds?: string[], target?: InvoiceWizardTarget) => void;
 }
 
-export default function SelectionsPage({
+export default function SelectionsWorkshopPage({
   jobOpen,
   onToggleJob,
-  onOpenOption,
-  onAddToAllowance,
   completedAllowanceIds,
   onToggleAllowanceComplete,
   onOpenInvoice,
@@ -385,10 +408,32 @@ export default function SelectionsPage({
   const [moreActionsOpen, setMoreActionsOpen] = useState(false);
   const [optionMenuOpen, setOptionMenuOpen] = useState(false);
   const [addToOpen, setAddToOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
+  // Builder-only order tracking per approved item (seeded for the demo)
+  const [orderStatus, setOrderStatus] = useState<Record<string, OrderStage>>(() => {
+    const seed: Record<string, OrderStage> = {};
+    const stages: OrderStage[] = ['ordered', 'delivered', 'installed', 'pending', 'ordered', 'installed'];
+    let i = 0;
+    mockData.forEach(r => {
+      const opts = isAllowance(r) ? r.options : [r];
+      opts.forEach(o => { if (o.status === 'Approved') { seed[o.id] = stages[i % stages.length]; i++; } });
+    });
+    return seed;
+  });
+  // Carrier / tracking details per item, entered from the option panel.
+  const [orderTracking, setOrderTracking] = useState<Record<string, OrderTracking>>({});
   const closeAddToMenu = () => setAddToOpen(false);
+  // Option details open as a side panel over the grid. Owned here (not in App)
+  // so the panel and the grid's Order column share one order status.
+  type PanelSel = { id: string; name: string; category: string; price: number; status: string };
+  const [optionPanel, setOptionPanel] = useState<{ sel: PanelSel | null; allowance: string | null } | null>(null);
+  const openOptionPanel = (opt?: SelectionOption) => setOptionPanel({
+    sel: opt ? { id: opt.id, name: opt.title, category: '', price: opt.clientPrice, status: opt.status.toLowerCase() } : null,
+    allowance: null,
+  });
   const [viewMode, setViewMode] = useState<ViewMode>('allowance');
   const [viewLayout, setViewLayout] = useState<ViewLayout>('list');
-  const [audience, setAudience] = useState<AudienceView>('builder');
+  const [audience] = useState<AudienceView>('builder');
   const [searchQuery, setSearchQuery] = useState('');
   const [expanded, setExpanded] = useState<Record<string, boolean>>(() => {
     const e: Record<string, boolean> = {};
@@ -400,7 +445,6 @@ export default function SelectionsPage({
   const [openAllowance, setOpenAllowance] = useState<AllowanceGroup | null>(null);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [confirmComplete, setConfirmComplete] = useState<AllowanceGroup | null>(null);
-  const [panelPriceOpen, setPanelPriceOpen] = useState(false);
   const toggleComplete = (id: string) => onToggleAllowanceComplete?.(id);
   const requestComplete = (a: AllowanceGroup) => {
     const spent = a.options.reduce((s, o) => s + (o.approvedPrice || 0), 0);
@@ -540,6 +584,7 @@ export default function SelectionsPage({
             {fmt(groupRemaining)}
           </div>
           <div className="sp-col-status"></div>
+          <div className="sp-col-order"></div>
           <div className="sp-col-category"></div>
           <div className="sp-col-location"></div>
           <div className="sp-col-deadline"></div>
@@ -588,6 +633,7 @@ export default function SelectionsPage({
           <div className="sp-col-status">
             {completedIds.has(row.id) && <StatusBadge status="Completed" />}
           </div>
+          <div className="sp-col-order"></div>
           <div className="sp-col-category">{row.category}</div>
           <div className="sp-col-location">{row.location}</div>
           <div className="sp-col-deadline"><span style={{ color: 'var(--g400)' }}>—</span></div>
@@ -595,7 +641,7 @@ export default function SelectionsPage({
             <InvoicedCell amount={row.invoicedAmount} invoiceRef={row.invoiceRef} onOpen={onOpenInvoice} />
           </div>
           <div className="sp-col-actions">
-            <button className="sp-action-btn" title="Add option" onClick={() => onAddToAllowance ? onAddToAllowance(row.fullName) : onOpenOption?.()}><svg width="24" height="24" viewBox="0 0 36 36" fill="none"><path d="M18.625 11.125C18.625 10.7798 18.3452 10.5 18 10.5C17.6548 10.5 17.375 10.7798 17.375 11.125V17.375H11.125C10.7798 17.375 10.5 17.6548 10.5 18C10.5 18.3452 10.7798 18.625 11.125 18.625H17.375V24.875C17.375 25.2202 17.6548 25.5 18 25.5C18.3452 25.5 18.625 25.2202 18.625 24.875V18.625H24.875C25.2202 18.625 25.5 18.3452 25.5 18C25.5 17.6548 25.2202 17.375 24.875 17.375H18.625V11.125Z" fill="#004FD6"/></svg></button>
+            <button className="sp-action-btn" title="Add option" onClick={() => setOptionPanel({ sel: null, allowance: row.fullName })}><svg width="24" height="24" viewBox="0 0 36 36" fill="none"><path d="M18.625 11.125C18.625 10.7798 18.3452 10.5 18 10.5C17.6548 10.5 17.375 10.7798 17.375 11.125V17.375H11.125C10.7798 17.375 10.5 17.6548 10.5 18C10.5 18.3452 10.7798 18.625 11.125 18.625H17.375V24.875C17.375 25.2202 17.6548 25.5 18 25.5C18.3452 25.5 18.625 25.2202 18.625 24.875V18.625H24.875C25.2202 18.625 25.5 18.3452 25.5 18C25.5 17.6548 25.2202 17.375 24.875 17.375H18.625V11.125Z" fill="#004FD6"/></svg></button>
             <MoreMenu rowId={row.id} />
           </div>
         </div>
@@ -611,12 +657,13 @@ export default function SelectionsPage({
                 </div>
                 <div className="sp-col-title sp-child-indent">
                   <SelectionIcon />
-                  <a href="#" className="sp-link" onClick={(e) => { e.preventDefault(); onOpenOption?.({ name: opt.title, category: '', price: opt.clientPrice, status: opt.status.toLowerCase() }); }}>{opt.title}</a>
+                  <a href="#" className="sp-link" onClick={(e) => { e.preventDefault(); openOptionPanel(opt); }}>{opt.title}</a>
                 </div>
                 <div className="sp-col-price">{fmt(opt.clientPrice)}</div>
                 <div className="sp-col-approved">{opt.approvedPrice !== null ? fmt(opt.approvedPrice) : ''}</div>
                 <div className="sp-col-remaining"></div>
                 <div className="sp-col-status"><StatusBadge status={audience === 'builder' ? deriveBuilderStatus(opt.status) : deriveRowStatus(opt.status, opt.dueDate)} /></div>
+                <div className="sp-col-order"><OrderCell approved={opt.status === 'Approved'} stage={orderStatus[opt.id]} onChange={st => setOrderStatus(prev => ({ ...prev, [opt.id]: st }))} /></div>
                 <div className="sp-col-category">{opt.category}</div>
                 <div className="sp-col-location">{opt.location}</div>
                 <div className="sp-col-deadline">
@@ -684,7 +731,7 @@ export default function SelectionsPage({
     <div
       key={row.id}
       className="sp-card sp-card-standalone"
-      onClick={() => onOpenOption?.({ name: row.title, category: '', price: row.clientPrice, status: row.status.toLowerCase() })}
+      onClick={() => openOptionPanel(row)}
     >
       <div className="sp-card-head">
         <div className="sp-card-title">
@@ -713,12 +760,13 @@ export default function SelectionsPage({
       </div>
       <div className="sp-col-title">
         <SelectionIcon />
-        <a href="#" className="sp-link" onClick={(e) => { e.preventDefault(); onOpenOption?.({ name: row.title, category: '', price: row.clientPrice, status: row.status.toLowerCase() }); }}>{row.title}</a>
+        <a href="#" className="sp-link" onClick={(e) => { e.preventDefault(); openOptionPanel(row); }}>{row.title}</a>
       </div>
       <div className="sp-col-price">{fmt(row.clientPrice)}</div>
       <div className="sp-col-approved">{row.approvedPrice !== null ? fmt(row.approvedPrice) : ''}</div>
       <div className="sp-col-remaining"></div>
       <div className="sp-col-status"><StatusBadge status={audience === 'builder' ? deriveBuilderStatus(row.status) : deriveRowStatus(row.status, row.dueDate)} /></div>
+      <div className="sp-col-order"><OrderCell approved={row.status === 'Approved'} stage={orderStatus[row.id]} onChange={st => setOrderStatus(prev => ({ ...prev, [row.id]: st }))} /></div>
       <div className="sp-col-category">{row.category}</div>
       <div className="sp-col-location">{row.location}</div>
       <div className="sp-col-deadline">
@@ -755,31 +803,16 @@ export default function SelectionsPage({
               </button>
             )}
             <div>
-              <div className="pg-hdr-sub"><a href="#" style={{ color: 'var(--bt-blue)', textDecoration: 'none' }}>Job: Smith Home Residence</a> / Selections</div>
-              <div className="pg-title">Selections</div>
+              <div className="pg-hdr-sub"><a href="#" style={{ color: 'var(--bt-blue)', textDecoration: 'none' }}>Job: Smith Home Residence</a> / Selections (workshop)</div>
+              <div className="pg-title">Selections (workshop)</div>
             </div>
           </div>
           <div className="pg-hdr-right">
-            <div className="sp-audience-tabs" role="tablist" aria-label="View audience">
-              <button
-                type="button"
-                role="tab"
-                className={`sp-audience-tab${audience === 'builder' ? ' on' : ''}`}
-                aria-selected={audience === 'builder'}
-                onClick={() => setAudience('builder')}
-              >
-                Builder view
-              </button>
-              <button
-                type="button"
-                role="tab"
-                className={`sp-audience-tab${audience === 'client' ? ' on' : ''}`}
-                aria-selected={audience === 'client'}
-                onClick={() => setAudience('client')}
-              >
-                Client view
-              </button>
-            </div>
+            <button className="sp-menu-btn" onClick={() => setShareOpen(true)}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" /><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" /></svg>
+              Share with client
+            </button>
+            <ShareSelectionsModal open={shareOpen} onClose={() => setShareOpen(false)} jobName="Smith Home Residence" clientName="Jordan Smith" clientEmail="jordan.smith@example.com" />
             <div style={{ position: 'relative' }}>
               <button className="sp-menu-btn" onClick={() => setAddToOpen(o => !o)} aria-haspopup="menu" aria-expanded={addToOpen}>
                 <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 2V12M2 7H12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
@@ -809,17 +842,21 @@ export default function SelectionsPage({
               )}
             </div>
             <div style={{ position: 'relative' }}>
-              <button className="sp-menu-btn" onClick={() => setOptionMenuOpen(o => !o)} aria-haspopup="menu" aria-expanded={optionMenuOpen}>
-                <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 2V12M2 7H12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
-                Option
-                <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-              </button>
+              <div className="od-split-btn">
+                <button type="button" className="od-split-main sp-split-main" onClick={() => openOptionPanel()}>
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 2V12M2 7H12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                  Option
+                </button>
+                <button type="button" className="od-split-caret" onClick={() => setOptionMenuOpen(o => !o)} aria-haspopup="menu" aria-expanded={optionMenuOpen} aria-label="More option types">
+                  <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                </button>
+              </div>
               {optionMenuOpen && (
                 <>
                   <div className="sp-menu-backdrop" onClick={() => setOptionMenuOpen(false)} />
-                  <div className="sp-mass-action-dropdown" style={{ bottom: 'auto', top: 'calc(100% + 6px)' }}>
-                    <button type="button" className="sp-mass-action-dropdown-item" onClick={() => { setOptionMenuOpen(false); onOpenOption?.(); }}>Single selection</button>
-                    <button type="button" className="sp-mass-action-dropdown-item" onClick={() => { setOptionMenuOpen(false); onOpenOption?.(); }}>Allowance</button>
+                  <div className="sp-mass-action-dropdown" style={{ bottom: 'auto', top: 'calc(100% + 6px)', right: 0, left: 'auto' }}>
+                    <button type="button" className="sp-mass-action-dropdown-item" onClick={() => { setOptionMenuOpen(false); openOptionPanel(); }}>Single selection</button>
+                    <button type="button" className="sp-mass-action-dropdown-item" onClick={() => { setOptionMenuOpen(false); openOptionPanel(); }}>Allowance</button>
                   </div>
                 </>
               )}
@@ -948,6 +985,7 @@ export default function SelectionsPage({
               <div className="sp-col-approved">Spent</div>
               <div className="sp-col-remaining">Remaining</div>
               <div className="sp-col-status"><StatusHeader /></div>
+              <div className="sp-col-order">Order</div>
               <div className="sp-col-category">Category</div>
               <div className="sp-col-location">Location</div>
               <div className="sp-col-deadline">Due date</div>
@@ -984,6 +1022,7 @@ export default function SelectionsPage({
               <div className="sp-col-approved"></div>
               <div className="sp-col-remaining"></div>
               <div className="sp-col-status"></div>
+              <div className="sp-col-order"></div>
               <div className="sp-col-category"></div>
               <div className="sp-col-location"></div>
               <div className="sp-col-deadline"></div>
@@ -1023,179 +1062,36 @@ export default function SelectionsPage({
 
       {openAllowance && (() => {
         const a = openAllowance;
-        const spent = a.options.reduce((s, o) => s + (o.approvedPrice || 0), 0);
-        const remaining = a.clientPrice - spent;
         const isComplete = completedIds.has(a.id);
-        const overBudget = remaining < 0;
-        const pct = a.clientPrice > 0 ? Math.min(100, Math.max(0, (spent / a.clientPrice) * 100)) : 0;
-        // Invoiced vs. remaining-to-invoice — distinct from the budget math
-        // above. A negative "remaining to invoice" means the client was
-        // already billed more than the finalized selections came to.
-        const remainingToInvoice = spent - a.invoicedAmount;
-        const isOverInvoiced = remainingToInvoice < 0;
+        const anyPending = a.options.some(o => o.status === 'Pending');
         return (
-          <div className="sp-panel-backdrop" onClick={(e) => { if (e.target === e.currentTarget) setOpenAllowance(null); }}>
-            {/* BDS: replace with BdsPanel side variant */}
-            <aside className="sp-panel" onClick={(e) => e.stopPropagation()}>
-              <div className="sp-panel-toolbar">
-                <button className="sp-panel-icon-btn" title="History"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M10 3.5a6.5 6.5 0 1 0 4.6 11.1l-.7-.7A5.5 5.5 0 1 1 15.5 10H13l3 3 3-3h-2.5A6.5 6.5 0 0 0 10 3.5Zm-.5 3v4l3 1.8.5-.8-2.5-1.5V6.5h-1Z" fill="currentColor"/></svg></button>
-                <button className="sp-panel-icon-btn" title="Share"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M14 4a2 2 0 1 0-1.9 2.7L7.6 9.2a2 2 0 1 0 0 1.6l4.5 2.5a2 2 0 1 0 .5-.9L8 9.9 12.6 7.3a2 2 0 0 0 1.4.7 2 2 0 0 0 0-4Z" fill="currentColor"/></svg></button>
-                <button className="sp-panel-icon-btn" title="Comments"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M3.5 4h13a1.5 1.5 0 0 1 1.5 1.5v8a1.5 1.5 0 0 1-1.5 1.5H10l-3 3v-3H3.5A1.5 1.5 0 0 1 2 13.5v-8A1.5 1.5 0 0 1 3.5 4Z" stroke="currentColor" strokeWidth="1.2" fill="none"/></svg></button>
-                <button className="sp-panel-icon-btn" title="Edit"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M3 14.5V17h2.5l8.4-8.4-2.5-2.5L3 14.5ZM16.7 6.3a1 1 0 0 0 0-1.4l-1.6-1.6a1 1 0 0 0-1.4 0l-1.3 1.3 2.5 2.5 1.8-1.8Z" fill="currentColor"/></svg></button>
-                <button className="btn btn-s sp-panel-cta" onClick={() => requestComplete(a)}>
-                  {isComplete ? 'Reopen' : 'Complete'}
-                </button>
-                <button className="sp-panel-close" onClick={() => setOpenAllowance(null)}>&times;</button>
-              </div>
-
-              <div className="sp-panel-body">
-                <div className="sp-panel-breadcrumb">
-                  <a href="#">Smith Home</a> <span>/</span> <a href="#">Allowance</a> <span>/</span>
-                </div>
-                <div className="sp-panel-title-row">
-                  {/* BDS: BdsText variant="heading" + BdsBadge */}
-                  <h2 className="sp-panel-title">{a.fullName}</h2>
-                  {isComplete && <StatusBadge status="Completed" />}
-                </div>
-
-                {/* Hero price — budget at a glance */}
-                <div className={`sp-panel-hero${overBudget ? ' sp-panel-hero-over' : ''}`}>
-                  <div className="sp-panel-hero-bar" />
-                  <div className="sp-panel-hero-amount">{fmt(a.clientPrice)}</div>
-                </div>
-
-                {/* Details */}
-                <section className="sp-panel-section">
-                  <div className="sp-panel-section-title">Details</div>
-                  <div className="sp-panel-detail-field">
-                    <div className="sp-panel-detail-label">Parent group / subgroup</div>
-                    {/* BDS: BdsPill */}
-                    <span className="sp-panel-pill">{a.location ?? '—'}</span>
-                  </div>
-                  <div className="sp-panel-detail-field">
-                    <div className="sp-panel-detail-label">Description</div>
-                    {/* BDS: BdsTextArea readOnly */}
-                    <div className="sp-panel-readonly">
-                      {ALLOWANCE_DESCRIPTION[a.id] ?? 'No description.'}
-                    </div>
-                  </div>
-                  <div className="sp-panel-detail-field">
-                    <div className="sp-panel-detail-label">Internal notes</div>
-                    <div className="sp-panel-readonly">
-                      {ALLOWANCE_INTERNAL_NOTES[a.id] ?? 'No internal notes.'}
-                    </div>
-                  </div>
-                </section>
-
-                {/* Invoicing — what's been billed vs. what the finalized selections came to */}
-                <section className="sp-panel-section">
-                  <div className="sp-panel-section-title sp-panel-section-title-row">Invoiced vs. remaining to invoice</div>
-                  <div className="sp-panel-stat-row">
-                    <div className="sp-panel-stat">
-                      <div className="sp-panel-stat-label">Invoiced</div>
-                      <div className="sp-panel-stat-value">{fmt(a.invoicedAmount)}</div>
-                    </div>
-                    <div className="sp-panel-stat sp-panel-stat-right">
-                      <div className="sp-panel-stat-label">{isOverInvoiced ? 'Overinvoiced' : 'Remaining to invoice'}</div>
-                      <div className={`sp-panel-stat-value${isOverInvoiced ? ' sp-panel-row-value-over' : ''}`}>
-                        {fmt(Math.abs(remainingToInvoice))}
-                      </div>
-                    </div>
-                  </div>
-                  {isOverInvoiced && (
-                    <div className="sp-panel-note sp-panel-note-warning">
-                      Client was invoiced {fmt(a.invoicedAmount)} for this allowance, but approved selections only total {fmt(spent)}. A <strong>{fmt(Math.abs(remainingToInvoice))} refund</strong> is owed — marking this allowance complete will prompt you to issue it.
-                    </div>
-                  )}
-                </section>
-
-                {/* Price — collapsible budget breakdown */}
-                <section className="sp-panel-section">
-                  <button
-                    className="sp-panel-section-toggle"
-                    onClick={() => setPanelPriceOpen(o => !o)}
-                    aria-expanded={panelPriceOpen}
-                  >
-                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ transform: panelPriceOpen ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.15s' }}>
-                      <path d="M5 3L9 7L5 11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                    </svg>
-                    <span className="sp-panel-section-title">Price</span>
-                  </button>
-                  {panelPriceOpen && (
-                    <>
-                      <div className="sp-panel-stat-row">
-                        <div className="sp-panel-stat">
-                          <div className="sp-panel-stat-label">Spent</div>
-                          <div className="sp-panel-stat-value">{fmt(spent)}</div>
-                        </div>
-                        <div className="sp-panel-stat sp-panel-stat-right">
-                          <div className="sp-panel-stat-label">Budget</div>
-                          <div className="sp-panel-stat-value">{fmt(a.clientPrice)}</div>
-                        </div>
-                      </div>
-                      {/* BDS: BdsProgressBar */}
-                      <div className="sp-panel-bar">
-                        <div
-                          className={`sp-panel-bar-fill${overBudget ? ' sp-panel-bar-fill-over' : ''}`}
-                          style={{ width: `${pct}%` }}
-                        />
-                      </div>
-                      <div className="sp-panel-row sp-panel-row-last">
-                        <span className="sp-panel-row-label">Allowance remaining</span>
-                        <span className={`sp-panel-row-value${overBudget ? ' sp-panel-row-value-over' : ''}`}>
-                          {fmt(remaining)}
-                        </span>
-                      </div>
-                    </>
-                  )}
-                </section>
-
-                {/* Options — selection variants inside this allowance */}
-                <section className="sp-panel-section">
-                  <div className="sp-panel-section-title sp-panel-section-title-row">Options</div>
-                  <div className="sp-panel-options">
-                    {a.options.map(opt => (
-                      <button
-                        key={opt.id}
-                        className="sp-panel-option-card"
-                        onClick={() => {
-                          setOpenAllowance(null);
-                          onOpenOption?.({ name: opt.title, category: '', price: opt.clientPrice, status: opt.status.toLowerCase() });
-                        }}
-                        type="button"
-                      >
-                        <div className="sp-panel-option-thumb" aria-hidden="true" />
-                        <div className="sp-panel-option-main">
-                          <div className="sp-panel-option-title">{opt.title}</div>
-                          <div className="sp-panel-option-meta">
-                            <StatusBadge status={opt.status} />
-                            <span className="sp-panel-option-price">
-                              {opt.approvedPrice !== null ? fmt(opt.approvedPrice) : '—'}
-                            </span>
-                          </div>
-                        </div>
-                        <svg className="sp-panel-option-caret" width="20" height="20" viewBox="0 0 20 20" fill="none">
-                          <path d="M7.5 4.5L13 10L7.5 15.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
-                        </svg>
-                      </button>
-                    ))}
-                  </div>
-                </section>
-
-                {!isComplete && remaining !== 0 && (
-                  <div className="sp-panel-note">
-                    {remaining > 0
-                      ? <>Marking this allowance complete will hold the unspent <strong>{fmt(remaining)}</strong> for reallocation to other allowance overages, or settle on the last draw.</>
-                      : <>Over budget by <strong>{fmt(Math.abs(remaining))}</strong>. Marking complete will lock the budget at the spent amount.</>
-                    }
-                  </div>
-                )}
-              </div>
-            </aside>
-          </div>
+          <AllowancePanel
+            open
+            audience="builder"
+            onClose={() => setOpenAllowance(null)}
+            name={a.fullName}
+            status={isComplete ? 'Completed' : anyPending ? 'In progress' : 'Approved'}
+            amount={a.clientPrice}
+            description={ALLOWANCE_DESCRIPTION[a.id]}
+            costCode={SCENARIOS_FOR_CC.find(s => s.id === a.id)?.costCode}
+            internalNotes={ALLOWANCE_INTERNAL_NOTES[a.id] ?? ''}
+            isComplete={isComplete}
+            onToggleComplete={() => requestComplete(a)}
+            options={a.options.map(o => ({
+              id: o.id,
+              name: o.title,
+              price: o.approvedPrice ?? o.clientPrice,
+              status: o.status === 'Pending' ? 'Sent' : o.status === 'Declined' ? 'Declined' : o.status === 'Draft' ? 'Draft' : 'Approved',
+            }))}
+            onOpenOption={(id) => {
+              const opt = a.options.find(o => o.id === id);
+              if (!opt) return;
+              setOpenAllowance(null);
+              openOptionPanel(opt);
+            }}
+          />
         );
       })()}
-
       {confirmComplete && (() => {
         const a = confirmComplete;
         const spent = a.options.reduce((s, o) => s + (o.approvedPrice || 0), 0);
@@ -1333,6 +1229,26 @@ export default function SelectionsPage({
         </div>
       )}
     </div>
+      {optionPanel && (
+        <OptionDetailPage
+          // Remount per option so the form state resets between rows.
+          key={optionPanel.sel?.id ?? `new-${optionPanel.allowance ?? ''}`}
+          variant="panel"
+          onBack={() => setOptionPanel(null)}
+          selectionData={optionPanel.sel}
+          prefilledAllowance={optionPanel.allowance}
+          orderStage={optionPanel.sel ? orderStatus[optionPanel.sel.id] : undefined}
+          onOrderStageChange={optionPanel.sel ? (st) => {
+            const id = optionPanel.sel!.id;
+            setOrderStatus(prev => ({ ...prev, [id]: st }));
+          } : undefined}
+          tracking={optionPanel.sel ? orderTracking[optionPanel.sel.id] : undefined}
+          onTrackingChange={optionPanel.sel ? (t) => {
+            const id = optionPanel.sel!.id;
+            setOrderTracking(prev => ({ ...prev, [id]: t }));
+          } : undefined}
+        />
+      )}
     </>
   );
 }

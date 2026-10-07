@@ -32,6 +32,7 @@ import CostsModal from './components/CostsModal';
 import JobPriceSummary from './components/JobPriceSummary';
 import JobDetailsClients from './components/JobDetailsClients';
 import SelectionsPage from './components/SelectionsPage';
+import SelectionsWorkshopPage from './components/SelectionsWorkshopPage';
 import OptionDetailPage from './components/OptionDetailPage';
 import AIAPayApp, { type OverageInfo } from './components/AIAPayApp';
 import { INVOICE_SELECTION_SCENARIOS, INVOICE_STANDALONE_SELECTIONS } from './selectionsData';
@@ -41,6 +42,7 @@ import EstimatePage from './components/EstimatePage';
 import ProposalPage from './components/ProposalPage';
 import InvoiceTypePreviewPage from './components/InvoiceTypePreviewPage';
 import ClientSelections from './components/ClientSelections';
+import ClientSelectionsWorkshop from './components/ClientSelectionsWorkshop';
 import ClientSelections2 from './components/ClientSelections2';
 import ClientSelections3 from './components/ClientSelections3';
 import ClientPortal, { ClientTopNav } from './components/ClientPortal';
@@ -62,9 +64,9 @@ import { getNextId } from './mockData';
 import { TIME_INTERVAL_DEMO_INVOICES, JULY_TIME_INTERVAL_ITEMS, type DemoInvoiceRow } from './mockData';
 import type { InvoicingMode, DrawScheduleLine, Job } from './types';
 
-type PageType = 'invoice' | 'invoice-2' | 'invoice-3' | 'invoice-3-modal' | 'invoice-full-page' | 'invoice-full-page-reimagined' | 'client-preview-invoice' | 'client-preview-invoice-old' | 'job-price-summary' | 'selections' | 'option-detail' | 'progress-invoice' | 'change-order' | 'change-order-list' | 'client-portal' | 'client-jps' | 'estimate' | 'estimate-ob' | 'job-proposal' | 'job-proposal-ob' | 'client-selections' | 'client-selections-2' | 'client-selections-3' | 'job-costing-budget' | 'underage-flows' | 'job-details-clients' | 'owner-invoices' | 'openbook' | 'job-details' | 'company-settings' | 'bills' | 'invoice-exploration' | 'invoice-type-preview';
+type PageType = 'invoice' | 'invoice-2' | 'invoice-3' | 'invoice-3-modal' | 'invoice-full-page' | 'invoice-full-page-reimagined' | 'client-preview-invoice' | 'client-preview-invoice-old' | 'job-price-summary' | 'selections' | 'selections-workshop' | 'option-detail' | 'progress-invoice' | 'change-order' | 'change-order-list' | 'client-portal' | 'client-jps' | 'estimate' | 'estimate-ob' | 'job-proposal' | 'job-proposal-ob' | 'client-selections' | 'client-selections-workshop' | 'client-selections-2' | 'client-selections-3' | 'job-costing-budget' | 'underage-flows' | 'job-details-clients' | 'owner-invoices' | 'openbook' | 'job-details' | 'company-settings' | 'bills' | 'invoice-exploration' | 'invoice-type-preview';
 
-const validPages: PageType[] = ['invoice', 'invoice-2', 'invoice-3', 'invoice-3-modal', 'invoice-full-page', 'invoice-full-page-reimagined', 'client-preview-invoice', 'client-preview-invoice-old', 'job-price-summary', 'selections', 'option-detail', 'progress-invoice', 'change-order', 'change-order-list', 'client-portal', 'client-jps', 'estimate', 'estimate-ob', 'job-proposal', 'job-proposal-ob', 'client-selections', 'client-selections-2', 'client-selections-3', 'job-costing-budget', 'underage-flows', 'job-details-clients', 'owner-invoices', 'openbook', 'job-details', 'company-settings', 'bills', 'invoice-exploration', 'invoice-type-preview'];
+const validPages: PageType[] = ['invoice', 'invoice-2', 'invoice-3', 'invoice-3-modal', 'invoice-full-page', 'invoice-full-page-reimagined', 'client-preview-invoice', 'client-preview-invoice-old', 'job-price-summary', 'selections', 'selections-workshop', 'option-detail', 'progress-invoice', 'change-order', 'change-order-list', 'client-portal', 'client-jps', 'estimate', 'estimate-ob', 'job-proposal', 'job-proposal-ob', 'client-selections', 'client-selections-workshop', 'client-selections-2', 'client-selections-3', 'job-costing-budget', 'underage-flows', 'job-details-clients', 'owner-invoices', 'openbook', 'job-details', 'company-settings', 'bills', 'invoice-exploration', 'invoice-type-preview'];
 
 function getInitialPage(): PageType {
   // Support ?page=X query param (used when hash is occupied by Figma capture)
@@ -944,6 +946,27 @@ export default function App() {
     );
   }
 
+  if (activePage === 'client-selections-workshop') {
+    // ?magic=<token> = opened from a builder's no-login link (no portal nav).
+    // ?compare=<ids> = a comparison a client shared with someone else.
+    const params = new URLSearchParams(window.location.search);
+    const magic = params.has('magic');
+    const sharedCompare = params.get('compare');
+    return (
+      <div style={{display: 'flex', flexDirection: 'column', height: '100vh'}}>
+        {!magic && !sharedCompare && <ClientTopNav onNavigate={(page) => setActivePage(page as PageType)} />}
+        <div style={{flex: 1, overflow: 'auto'}}>
+          <ClientSelectionsWorkshop
+            magicLink={magic ? { viewOnly: params.get('view') === '1', clientName: params.get('to') ?? 'Jordan Smith' } : undefined}
+            sharedCompareIds={sharedCompare ? sharedCompare.split(',').filter(Boolean) : undefined}
+            sharedBy={params.get('from') ?? undefined}
+            groupBy={params.get('by') === 'allowance' ? 'allowance' : 'room'}
+          />
+        </div>
+      </div>
+    );
+  }
+
   if (activePage === 'client-selections-2') {
     return (
       <div style={{display: 'flex', flexDirection: 'column', height: '100vh'}}>
@@ -1395,6 +1418,67 @@ export default function App() {
         />
         <SelectionsModalV5
           open={selV5ModalOpen && activePage === 'selections'}
+          onClose={() => setSelV5ModalOpen(false)}
+          onAdd={(items, opts) => {
+            // Add the selected rows to the invoice, then take the builder to
+            // the invoice builder to see the result. The wizard calls onClose
+            // right after onAdd, so this only fires on "Add", not on Cancel.
+            handleAddFromSelections(items, opts);
+            setActivePage('invoice-3');
+          }}
+          addedChildIds={invoice.lineItems.flatMap(li => li.relatedItem?.childIds ?? [])}
+          targetInvoice={wizardTargetInvoice}
+          newInvoiceType={invoice.type ?? 'invoice'}
+        />
+      </div>
+    );
+  }
+
+  if (activePage === 'selections-workshop') {
+    return (
+      <div style={{display: 'flex', flexDirection: 'column', height: '100vh'}}>
+        <TopNav onNavigate={(page) => setActivePage(page as PageType)} />
+        <div style={{display: 'flex', flex: 1, minHeight: 0}}>
+          <JobSidebar open={jobOpen} onToggle={() => setJobOpen(false)} selectedJob={selectedJob} onSelectJob={(id) => { setSelectedJob(id); if (isNarrow) setJobOpen(false); }} onHomeClick={() => setActivePage('client-portal')} onOpenJobDetails={(id) => { setJobDetailsReturnPage(activePage); setSelectedJob(id); setActivePage('job-details'); }} />
+          <div className="content-area">
+            <SelectionsWorkshopPage
+              jobOpen={jobOpen}
+              onToggleJob={() => setJobOpen(true)}
+              completedAllowanceIds={completedAllowanceIds}
+              onToggleAllowanceComplete={toggleAllowanceComplete}
+              onOpenInvoice={() => setActivePage('invoice')}
+              onOpenReallocation={() => { setActivePage('invoice-2'); setSelModalOpen(true); }}
+              onOpenInvoiceWizard={(ids, target) => {
+                if (target?.type === 'existing') {
+                  const existing = EXISTING_INVOICES.find(inv => inv.invoiceNumber === target.invoiceNumber);
+                  setInvoice(existing ?? defaultInvoice);
+                  setWizardTargetInvoice(existing ? { invoiceNumber: existing.invoiceNumber, title: existing.title, type: existing.type ?? 'invoice' } : null);
+                } else {
+                  setInvoice({ ...defaultInvoice, type: target?.invoiceType ?? 'invoice' });
+                  setWizardTargetInvoice(null);
+                }
+                setWizardPreselectIds(ids ?? []);
+                // Open the wizard as an overlay on the selections grid itself.
+                // Navigation to the invoice builder happens on "Add" (see the
+                // SelectionsModalV5 mount below), not up front.
+                setSelV5ModalOpen(true);
+              }}
+            />
+          </div>
+        </div>
+        <SelectionsModalV2
+          open={selectionsWizardOpen}
+          onClose={() => setSelectionsWizardOpen(false)}
+          onAdd={(items) => {
+            handleAddFromSelections(items);
+            setSelectionsWizardOpen(false);
+            setActivePage('invoice-2');
+          }}
+          data={selectionsModalData}
+          initialCheckedIds={wizardPreselectIds}
+        />
+        <SelectionsModalV5
+          open={selV5ModalOpen && activePage === 'selections-workshop'}
           onClose={() => setSelV5ModalOpen(false)}
           onAdd={(items, opts) => {
             // Add the selected rows to the invoice, then take the builder to
