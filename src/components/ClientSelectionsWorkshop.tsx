@@ -1648,8 +1648,6 @@ export default function ClientSelectionsWorkshop({ magicLink, sharedCompareIds, 
                 const picks = group.options.filter(o => o.selected);
                 const spent = picks.reduce((sum, o) => sum + o.price, 0);
                 const left = group.allowance - spent;
-                const slots = new Set(group.options.map(o => (o as any).group || o.id));
-                const done = Array.from(slots).filter(sl => group.options.some(o => ((o as any).group || o.id) === sl && o.selected)).length;
                 return (
                   <section key={group.id} className="ws-cart-group">
                     <div className="ws-cart-group-head">
@@ -1658,9 +1656,6 @@ export default function ClientSelectionsWorkshop({ magicLink, sharedCompareIds, 
                         {left < 0 ? `$${fmt(Math.abs(left))} over` : `$${fmt(left)} left`}
                       </span>
                     </div>
-                    {done < slots.size && (
-                      <div className="ws-cart-group-todo">{slots.size - done} more to choose before you can submit this allowance</div>
-                    )}
                     <ul className="ws-cart-list">
                       {picks.map(opt => (
                         <li key={opt.id} className="ws-cart-item">
@@ -2518,7 +2513,7 @@ export default function ClientSelectionsWorkshop({ magicLink, sharedCompareIds, 
           <span className="cs-sticky-info" />
           <div className="cs-sticky-actions">
             <BdsButton text="Save" displayType="secondary" className="cs-save-btn" onClick={handleSaveProgress} />
-            {pendingSubmit.length > 0 && (
+            {cartItems.length > 0 && (
               <BdsButton
                 text="Review & submit"
                 displayType="primary"
