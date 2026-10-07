@@ -536,7 +536,8 @@ export default function ClientSelectionsWorkshop({ magicLink, sharedCompareIds, 
   // Floor plan + mood board opens as its own full-width page
   const [planPage, setPlanPage] = useState<false | 'plan' | 'room'>(false);
   const [swipeGroupId, setSwipeGroupId] = useState<string | null>(null);
-  const [previewMode, setPreviewMode] = useState<'desktop' | 'mobile'>('desktop');
+  // Mobile is previewed through the Review pill's Phone frame (real breakpoints), not a page toggle
+  const previewMode = 'desktop' as 'desktop' | 'mobile';
 
   const [lightboxImg, setLightboxImg] = useState<{images: string[]; name: string; index: number; url?: string} | null>(null);
   const [detailItem, setDetailItem] = useState<{ groupId: string; optionId: string } | null>(null);
@@ -874,27 +875,6 @@ export default function ClientSelectionsWorkshop({ magicLink, sharedCompareIds, 
         </div>
       )}
 
-      {/* Desktop / Mobile preview toggle — fixed top-right of the viewport */}
-      <div className="cs-preview-toggle ws-preview-toggle" role="tablist" aria-label="Preview mode">
-        <button
-          type="button"
-          className={`cs-preview-toggle-btn ${previewMode === 'desktop' ? 'cs-preview-toggle-btn-active' : ''}`}
-          aria-pressed={previewMode === 'desktop'}
-          onClick={() => setPreviewMode('desktop')}
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="20" height="13" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
-          Desktop
-        </button>
-        <button
-          type="button"
-          className={`cs-preview-toggle-btn ${previewMode === 'mobile' ? 'cs-preview-toggle-btn-active' : ''}`}
-          aria-pressed={previewMode === 'mobile'}
-          onClick={() => setPreviewMode('mobile')}
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="2" width="12" height="20" rx="2"/><line x1="11" y1="18" x2="13" y2="18"/></svg>
-          Mobile
-        </button>
-      </div>
 
       <div className={`cs-page ${isBds ? 'bds-scope bds-real-scope' : ''} ${previewMode === 'mobile' ? 'cs-page-mobile' : ''}`}>
         {/* Hero */}
@@ -2535,14 +2515,7 @@ export default function ClientSelectionsWorkshop({ magicLink, sharedCompareIds, 
       {(hasInteracted || cartItems.length > 0) && (
       <div className={`cs-sticky-footer ${isBds ? 'bds-scope bds-real-scope' : ''}`}>
         <div className="cs-sticky-inner">
-          <button type="button" className="cs-sticky-info ws-footer-summary" onClick={() => setCartOpen(true)} disabled={cartItems.length === 0}>
-            {cartItems.length > 0 && (
-              <>
-                <strong>{cartItems.length} {cartItems.length === 1 ? 'choice' : 'choices'}</strong>
-                <span>${fmt(cartTotal)}</span>
-              </>
-            )}
-          </button>
+          <span className="cs-sticky-info" />
           <div className="cs-sticky-actions">
             <BdsButton text="Save" displayType="secondary" className="cs-save-btn" onClick={handleSaveProgress} />
             {pendingSubmit.length > 0 && (

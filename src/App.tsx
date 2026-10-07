@@ -955,7 +955,7 @@ export default function App() {
     return (
       <div style={{display: 'flex', flexDirection: 'column', height: '100vh'}}>
         {!magic && !sharedCompare && <ClientTopNav onNavigate={(page) => setActivePage(page as PageType)} />}
-        <div style={{flex: 1, overflow: 'auto'}}>
+        <div style={{flex: 1, overflowY: 'auto', overflowX: 'hidden'}}>
           <ClientSelectionsWorkshop
             magicLink={magic ? { viewOnly: params.get('view') === '1', clientName: params.get('to') ?? 'Jordan Smith' } : undefined}
             sharedCompareIds={sharedCompare ? sharedCompare.split(',').filter(Boolean) : undefined}

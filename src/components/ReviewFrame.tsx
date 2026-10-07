@@ -163,10 +163,23 @@ export default function ReviewFrame({ children }: { children: ReactNode }) {
         </div>
       )}
 
-      <button type="button" className="rf-pill" onClick={() => setOpen(o => !o)} aria-expanded={open}>
-        <SlidersIcon />
-        Review
-      </button>
+      {/* Desktop / Mobile right on the pill, so switching doesn't need the panel */}
+      <div className="rf-pill-bar">
+        <div className="rf-pill-seg" role="radiogroup" aria-label="Preview size">
+          <button type="button" role="radio" aria-checked={viewport === 'desktop'} className={'rf-pill-seg-btn' + (viewport === 'desktop' ? ' on' : '')} onClick={() => setViewport('desktop')}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="2" y="4" width="20" height="13" rx="2" /><line x1="8" y1="21" x2="16" y2="21" /><line x1="12" y1="17" x2="12" y2="21" /></svg>
+            Desktop
+          </button>
+          <button type="button" role="radio" aria-checked={viewport === 'phone'} className={'rf-pill-seg-btn' + (viewport === 'phone' ? ' on' : '')} onClick={() => setViewport('phone')}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="2" /><line x1="11" y1="18" x2="13" y2="18" /></svg>
+            Mobile
+          </button>
+        </div>
+        <button type="button" className="rf-pill" onClick={() => setOpen(o => !o)} aria-expanded={open}>
+          <SlidersIcon />
+          Review
+        </button>
+      </div>
     </>
   );
 }
