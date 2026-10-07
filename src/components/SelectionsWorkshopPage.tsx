@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react';
 import { INVOICE_SELECTION_SCENARIOS, INVOICE_STANDALONE_SELECTIONS } from '../selectionsData';
 import { BTRelatedItemTag, RelatedItemType } from '../bds';
-import ShareSelectionsModal from './ShareSelectionsModal';
 import AllowancePanel from './AllowancePanel';
 import OptionDetailPage, { ORDER_STAGES, type OrderStage, type OrderTracking } from './OptionDetailPage';
 import { INVOICE_SELECTION_SCENARIOS as SCENARIOS_FOR_CC } from '../selectionsData';
@@ -394,6 +393,8 @@ interface SelectionsPageProps {
   onOpenInvoice?: () => void;
   onOpenReallocation?: () => void;
   onOpenInvoiceWizard?: (preselectIds?: string[], target?: InvoiceWizardTarget) => void;
+  // Opens the client's view of this page, with sharing settings in a Customize rail.
+  onOpenClientPreview?: () => void;
 }
 
 export default function SelectionsWorkshopPage({
@@ -404,11 +405,11 @@ export default function SelectionsWorkshopPage({
   onOpenInvoice,
   onOpenReallocation,
   onOpenInvoiceWizard,
+  onOpenClientPreview,
 }: SelectionsPageProps) {
   const [moreActionsOpen, setMoreActionsOpen] = useState(false);
   const [optionMenuOpen, setOptionMenuOpen] = useState(false);
   const [addToOpen, setAddToOpen] = useState(false);
-  const [shareOpen, setShareOpen] = useState(false);
   // Builder-only order tracking per approved item (seeded for the demo)
   const [orderStatus, setOrderStatus] = useState<Record<string, OrderStage>>(() => {
     const seed: Record<string, OrderStage> = {};
@@ -808,11 +809,10 @@ export default function SelectionsWorkshopPage({
             </div>
           </div>
           <div className="pg-hdr-right">
-            <button className="sp-menu-btn" onClick={() => setShareOpen(true)}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" /><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" /></svg>
-              Share with client
+            <button className="sp-menu-btn" onClick={() => onOpenClientPreview?.()}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
+              Client preview
             </button>
-            <ShareSelectionsModal open={shareOpen} onClose={() => setShareOpen(false)} jobName="Smith Home Residence" clientName="Jordan Smith" clientEmail="jordan.smith@example.com" />
             <div style={{ position: 'relative' }}>
               <button className="sp-menu-btn" onClick={() => setAddToOpen(o => !o)} aria-haspopup="menu" aria-expanded={addToOpen}>
                 <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 2V12M2 7H12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>

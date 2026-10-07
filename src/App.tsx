@@ -950,7 +950,9 @@ export default function App() {
     // ?magic=<token> = opened from a builder's no-login link (no portal nav).
     // ?compare=<ids> = a comparison a client shared with someone else.
     const params = new URLSearchParams(window.location.search);
-    const magic = params.has('magic');
+    // ?preview=builder = the builder opened "Client preview" from their side.
+    const builderPreview = params.get('preview') === 'builder';
+    const magic = params.has('magic') || builderPreview;
     const sharedCompare = params.get('compare');
     return (
       <div style={{display: 'flex', flexDirection: 'column', height: '100vh'}}>
@@ -958,9 +960,17 @@ export default function App() {
         <div style={{flex: 1, overflowY: 'auto', overflowX: 'hidden'}}>
           <ClientSelectionsWorkshop
             magicLink={magic ? { viewOnly: params.get('view') === '1', clientName: params.get('to') ?? 'Jordan Smith' } : undefined}
+            builderPreview={builderPreview ? { onBack: () => {
+              const url = new URL(window.location.href);
+              url.searchParams.delete('preview');
+              window.history.replaceState(null, '', url.pathname + url.search + '#selections-workshop');
+              setActivePage('selections-workshop');
+            } } : undefined}
             sharedCompareIds={sharedCompare ? sharedCompare.split(',').filter(Boolean) : undefined}
             sharedBy={params.get('from') ?? undefined}
             groupBy={params.get('by') === 'allowance' ? 'allowance' : 'room'}
+            layout={params.get('layout') === 'list' ? 'compact' : 'grid'}
+            order={params.get('order') ?? undefined}
           />
         </div>
       </div>
@@ -1448,6 +1458,12 @@ export default function App() {
               onToggleAllowanceComplete={toggleAllowanceComplete}
               onOpenInvoice={() => setActivePage('invoice')}
               onOpenReallocation={() => { setActivePage('invoice-2'); setSelModalOpen(true); }}
+              onOpenClientPreview={() => {
+                const url = new URL(window.location.href);
+                url.searchParams.set('preview', 'builder');
+                window.history.replaceState(null, '', url.pathname + url.search + url.hash);
+                setActivePage('client-selections-workshop');
+              }}
               onOpenInvoiceWizard={(ids, target) => {
                 if (target?.type === 'existing') {
                   const existing = EXISTING_INVOICES.find(inv => inv.invoiceNumber === target.invoiceNumber);

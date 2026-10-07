@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, Fragment } from 'react';
+import ClientViewCustomizeRail, { type ClientViewSettings } from './ClientViewCustomizeRail';
 import '../bds-tokens.css';
 import { BdsButton, BdsBadge, BdsInput, BdsTextArea, BdsIcon } from '../bds';
 import SelectionFloorPlan, { roomForGroup, RoomSummary, FLOOR_PLAN_ROOMS, WHOLE_HOUSE_ID, RoomIcon } from './SelectionFloorPlan';
@@ -434,9 +435,25 @@ interface WorkshopProps {
   sharedBy?: string;
   // How the builder chose to organize the client's page
   groupBy?: 'room' | 'allowance';
+  // Builder's default card layout for the client
+  layout?: 'grid' | 'compact';
+  // Builder's ordering: 'last' = most due last, or a comma list of room/allowance ids
+  order?: string;
+  // Opened by the builder from "Client preview". Adds Customize + Back to
+  // builder on the shared-link banner; the client's own link never has it.
+  builderPreview?: { onBack: () => void };
 }
 
-export default function ClientSelectionsWorkshop({ magicLink, sharedCompareIds, sharedBy, groupBy: builderGroupBy = 'room' }: WorkshopProps = {}) {
+export default function ClientSelectionsWorkshop({ magicLink, sharedCompareIds, sharedBy, groupBy: linkGroupBy = 'room', layout: linkLayout = 'grid', order: linkOrder, builderPreview }: WorkshopProps = {}) {
+  const [customizeOpen, setCustomizeOpen] = useState(false);
+  const [viewSettings, setViewSettings] = useState<ClientViewSettings>({ groupBy: linkGroupBy, layout: linkLayout, canChoose: !magicLink?.viewOnly,
+    order: !linkOrder ? 'due-first' : linkOrder === 'last' ? 'due-last' : 'custom',
+    customOrder: linkOrder && linkOrder !== 'last'
+      ? { room: linkGroupBy === 'room' ? linkOrder.split(',') : [], allowance: linkGroupBy === 'allowance' ? linkOrder.split(',') : [] }
+      : { room: [], allowance: [] },
+  });
+  // In builder preview the rail drives grouping live; otherwise the link does.
+  const builderGroupBy = builderPreview ? viewSettings.groupBy : linkGroupBy;
   const [persona] = useState<Persona>('prototype-bds');
   const pc = personaConfig[persona];
   const isPrototype = persona === 'prototype-bds';
@@ -513,7 +530,9 @@ export default function ClientSelectionsWorkshop({ magicLink, sharedCompareIds, 
     showToast('Request sent. Your builder will review it.');
     resetRequest(gid);
   };
-  const [viewMode, setViewMode] = useState<'grid' | 'compact'>('grid');
+  const [viewMode, setViewMode] = useState<'grid' | 'compact'>(linkLayout);
+  // Builder changing the default layout in the Customize rail shows it live.
+  useEffect(() => { if (builderPreview) setViewMode(viewSettings.layout); }, [builderPreview, viewSettings.layout]);
   // Group the list by allowance (how the builder set it up) or by room (how the client walks the house)
   // Set by the builder, not the client
   const groupBy = builderGroupBy;
@@ -809,10 +828,21 @@ export default function ClientSelectionsWorkshop({ magicLink, sharedCompareIds, 
   useEffect(() => { if (filter === 'overdue' && overdueCount === 0) setFilter('all'); }, [filter, overdueCount]);
 
   // Rooms ordered by how much still needs a decision (most first)
-  const roomsByDue = [...FLOOR_PLAN_ROOMS].sort((a, b) => {
+  const roomsMostDue = [...FLOOR_PLAN_ROOMS].sort((a, b) => {
     const sa = roomSummaries[a.id], sb = roomSummaries[b.id];
     return (sb?.overdue ?? 0) - (sa?.overdue ?? 0) || (sb?.open ?? 0) - (sa?.open ?? 0);
   });
+  // Builder's "Show first" setting from the Customize rail. Clients on their
+  // own link get the default (most due first).
+  const applyOrder = <T extends { id: string }>(mostDueFirst: T[], customIds: string[]): T[] => {
+    if (viewSettings.order === 'due-last') return [...mostDueFirst].reverse();
+    if (viewSettings.order === 'custom' && customIds.length) {
+      const rank = (id: string) => { const i = customIds.indexOf(id); return i === -1 ? Number.MAX_SAFE_INTEGER : i; };
+      return [...mostDueFirst].sort((a, b) => rank(a.id) - rank(b.id));
+    }
+    return mostDueFirst;
+  };
+  const roomsByDue = applyOrder(roomsMostDue, viewSettings.customOrder.room);
 
   // A room where every allowance is approved: show its picks right away (no collapse)
   const allDoneHere = visible.length > 0 && visible.every(g => g.status === 'approved');
@@ -882,7 +912,13 @@ export default function ClientSelectionsWorkshop({ magicLink, sharedCompareIds, 
           <h1 className="cs-hero-title">{pc.heroTitle}</h1>
         </div>
 
-        {magicLink && <MagicLinkBanner {...magicLink} />}
+        {magicLink && (
+          <MagicLinkBanner
+            viewOnly={builderPreview ? !viewSettings.canChoose : magicLink.viewOnly}
+            clientName={magicLink.clientName}
+            builderPreview={builderPreview ? { onBack: builderPreview.onBack, onCustomize: () => setCustomizeOpen(o => !o), customizeOpen } : undefined}
+          />
+        )}
 
         {planPage ? (
           <FloorPlanPage
@@ -1007,6 +1043,8 @@ export default function ClientSelectionsWorkshop({ magicLink, sharedCompareIds, 
 
         <div className="cs-cards">
           {(() => {
+            // Allowance view names each card by its allowance ("Tile allowance").
+            const allowanceTitle = (name: string) => /allowance$/i.test(name) ? name : `${name} allowance`;
             const renderCard = (group: typeof selections[0], roomLabel?: string) => {
             // Room view passes a copy filtered to one room. Status, counts and money
             // always describe the whole allowance, so read them from the full one.
@@ -1028,7 +1066,7 @@ export default function ClientSelectionsWorkshop({ magicLink, sharedCompareIds, 
                       <div className="cs-section-title-row">
                         <h3 className="cs-section-name">
                           <button type="button" className="ws-section-link" onClick={() => setOpenAllowanceId(group.id)}>
-                            {group.name}
+                            {groupBy === 'allowance' ? allowanceTitle(group.name) : group.name}
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6" /></svg>
                           </button>
                         </h3>
@@ -1508,6 +1546,37 @@ export default function ClientSelectionsWorkshop({ magicLink, sharedCompareIds, 
                     </>
                   )}
                 </div>
+              );
+            }
+            if (groupBy === 'allowance' && filter === 'all') {
+              // One card per allowance, the way the builder set up the job.
+              // Overdue first, then soonest due; approved ones collapse below.
+              const open = applyOrder(
+                visible
+                  .filter(g => g.status !== 'approved')
+                  .sort((a, b) => (a.status === 'overdue' ? 0 : 1) - (b.status === 'overdue' ? 0 : 1) || a.dueDate.localeCompare(b.dueDate)),
+                viewSettings.customOrder.allowance,
+              );
+              const approved = visible.filter(g => g.status === 'approved');
+              return (
+                <>
+                  <h2 className="cs-group-title">
+                    <span>Allowances</span>
+                    <span className="cs-group-title-count">{open.length}</span>
+                  </h2>
+                  {open.map(g => renderCard(g))}
+                  {approved.length > 0 && (
+                    <>
+                      <h2 className="cs-group-title cs-group-title-clickable cs-group-approved" onClick={() => setApprovedExpanded(e => !e)} aria-expanded={approvedExpanded}>
+                        <svg className="cs-group-title-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12" /></svg>
+                        <span>Approved</span>
+                        <span className="cs-group-title-count">{approved.length}</span>
+                        <svg className="cs-group-title-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: approvedExpanded ? 'rotate(180deg)' : 'none' }}><polyline points="6 9 12 15 18 9" /></svg>
+                      </h2>
+                      {approvedExpanded && approved.map(g => renderCard(g))}
+                    </>
+                  )}
+                </>
               );
             }
             if (filter === 'all') {
@@ -2526,6 +2595,26 @@ export default function ClientSelectionsWorkshop({ magicLink, sharedCompareIds, 
         </div>
       </div>
       )}
+      {builderPreview && magicLink && (
+        <ClientViewCustomizeRail
+          open={customizeOpen}
+          onClose={() => setCustomizeOpen(false)}
+          clientName={magicLink.clientName}
+          clientEmail="jordan.smith@example.com"
+          settings={viewSettings}
+          onChange={setViewSettings}
+          orderItems={{
+            // Only rooms that have something to choose.
+            room: roomsMostDue
+              .filter(r => selections.some(g => g.options.some(o => roomForGroup((o as any).group || o.id) === r.id)))
+              .map(r => ({ id: r.id, label: r.label })),
+            allowance: [...selections]
+              .filter(g => g.status !== 'approved')
+              .sort((a, b) => (a.status === 'overdue' ? 0 : 1) - (b.status === 'overdue' ? 0 : 1) || a.dueDate.localeCompare(b.dueDate))
+              .map(g => ({ id: g.id, label: /allowance$/i.test(g.name) ? g.name : `${g.name} allowance` })),
+          }}
+        />
+      )}
     </>
   );
 }
@@ -2651,7 +2740,7 @@ function SharedCompare({ items, sharedBy }: {
 
 // Banner on a page opened from a builder's no-login link, with a way to
 // grab the same link again.
-function MagicLinkBanner({ viewOnly, clientName }: { viewOnly: boolean; clientName: string }) {
+function MagicLinkBanner({ viewOnly, clientName, builderPreview }: { viewOnly: boolean; clientName: string; builderPreview?: { onBack: () => void; onCustomize: () => void; customizeOpen: boolean } }) {
   const [copied, setCopied] = useState(false);
   const copy = async () => {
     try { await navigator.clipboard.writeText(window.location.href); } catch { /* clipboard blocked */ }
@@ -2664,6 +2753,15 @@ function MagicLinkBanner({ viewOnly, clientName }: { viewOnly: boolean; clientNa
       <span className="ml-banner-text">
         Shared with <strong>{clientName}</strong>. {viewOnly ? 'View only, no login needed.' : 'No login needed.'}
       </span>
+      {builderPreview ? (
+        <>
+          <button type="button" className="ml-copy" onClick={builderPreview.onBack}>Back to builder view</button>
+          <button type="button" className={`ml-customize${builderPreview.customizeOpen ? ' on' : ''}`} onClick={builderPreview.onCustomize} aria-expanded={builderPreview.customizeOpen}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="4" y1="21" x2="4" y2="14" /><line x1="4" y1="10" x2="4" y2="3" /><line x1="12" y1="21" x2="12" y2="12" /><line x1="12" y1="8" x2="12" y2="3" /><line x1="20" y1="21" x2="20" y2="16" /><line x1="20" y1="12" x2="20" y2="3" /><line x1="1" y1="14" x2="7" y2="14" /><line x1="9" y1="8" x2="15" y2="8" /><line x1="17" y1="16" x2="23" y2="16" /></svg>
+            Customize
+          </button>
+        </>
+      ) : (
       <button type="button" className={`ml-copy ${copied ? 'ml-copied' : ''}`} onClick={copy}>
         {copied ? (
           <><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>Copied</>
@@ -2671,6 +2769,7 @@ function MagicLinkBanner({ viewOnly, clientName }: { viewOnly: boolean; clientNa
           <><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>Copy link</>
         )}
       </button>
+      )}
       <span className="sh-live" role="status" aria-live="polite">{copied ? 'Link copied' : ''}</span>
     </div>
   );
