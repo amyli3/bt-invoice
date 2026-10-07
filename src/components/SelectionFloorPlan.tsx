@@ -99,6 +99,18 @@ function readWidth(): number | null {
   try { const v = Number(localStorage.getItem(WIDTH_KEY)); return v >= MIN_WIDTH ? v : null; } catch { return null; }
 }
 
+function StatusMark({ s }: { s: RoomSummary }) {
+  if (s.state === 'empty') return null;
+  if (s.state === 'done') {
+    return (
+      <span className="fp-mark fp-mark-done" aria-hidden="true">
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+      </span>
+    );
+  }
+  return <span className={`fp-mark fp-mark-${s.state}`} aria-hidden="true">{s.state === 'overdue' ? s.overdue : s.open}</span>;
+}
+
 function describe(label: string, s: RoomSummary) {
   if (s.state === 'empty') return `${label}: nothing to choose`;
   if (s.state === 'done') return `${label}: all choices made`;
@@ -165,6 +177,13 @@ export default function SelectionFloorPlan({ summaries, photos, selectedRoom, on
 
   return (
     <section className={`fp-card ${compact ? 'fp-compact' : ''} ${compact && expanded ? 'fp-compact-expanded' : ''} ${fullPage ? 'fp-full' : ''}`} aria-label="Selections by room">
+      {fullPage && (
+        <div className="fp-legend fp-full-legend" aria-label="Legend">
+          <span><i className="fp-dot fp-dot-overdue" />Overdue</span>
+          <span><i className="fp-dot fp-dot-open" />Due soon</span>
+          <span><i className="fp-dot fp-dot-done" />Done</span>
+        </div>
+      )}
       {!fullPage && <div className="fp-head">
         {compact ? (
           <span className="fp-eyebrow">Floor plan</span>
@@ -211,6 +230,7 @@ export default function SelectionFloorPlan({ summaries, photos, selectedRoom, on
             >
               <span className="fp-room-top">
                 <span className="fp-room-label">{room.label}</span>
+                {fullPage && <StatusMark s={s} />}
               </span>
               {shown.length === 0 && ROOM_ICONS[room.id] && (
                 <span className="fp-room-icon" aria-hidden="true">{ROOM_ICONS[room.id]}</span>

@@ -8705,3 +8705,9 @@ span.fp-room { display: flex; }
 .rf-pill-bar .rf-pill { justify-content: center; }
 .rf-pill-seg { justify-content: center; }
 .rf-panel { right: auto; left: 20px; bottom: 132px; }
+
+/* Full floor plan page: status badges + legend */
+.fp-full .fp-room-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.fp-full .fp-mark { min-width: 22px; height: 22px; padding: 0 6px; font-size: 12px; }
+.fp-full-legend { margin-bottom: 10px; display: flex; gap: 14px; font-size: 13px; color: #4E555F; }
+.fp-full-legend span { display: inline-flex; align-items: center; gap: 6px; }
