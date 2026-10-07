@@ -8711,3 +8711,5 @@ span.fp-room { display: flex; }
 .fp-full .fp-mark { min-width: 22px; height: 22px; padding: 0 6px; font-size: 12px; }
 .fp-full-legend { margin-bottom: 10px; display: flex; gap: 14px; font-size: 13px; color: #4E555F; }
 .fp-full-legend span { display: inline-flex; align-items: center; gap: 6px; }
+
+.ws-cart-foot-note-top { margin: 0 0 10px; text-align: left; }

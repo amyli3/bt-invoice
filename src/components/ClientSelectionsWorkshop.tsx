@@ -1698,7 +1698,8 @@ export default function ClientSelectionsWorkshop({ magicLink, sharedCompareIds, 
           </div>
           {pendingSubmit.length > 0 && (
             <div className="ws-cart-foot">
-              <BdsButton text={`Submit ${pendingSubmit.length} completed ${pendingSubmit.length === 1 ? 'allowance' : 'allowances'}`} displayType="primary" className="ws-cart-submit" onClick={() => { setCartOpen(false); setShowReviewModal(true); }} />
+              <p className="ws-cart-foot-note ws-cart-foot-note-top">Once submitted, these choices are locked in and sent to your builder.</p>
+              <BdsButton text="Submit" displayType="primary" className="ws-cart-submit" onClick={() => { setCartOpen(false); handleSubmitAll(); }} />
               {pendingSubmit.length < cartGroups.length && (
                 <p className="ws-cart-foot-note">Allowances still in progress stay saved here until every choice is made.</p>
               )}
