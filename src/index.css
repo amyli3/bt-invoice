@@ -8699,3 +8699,9 @@ span.fp-room { display: flex; }
   .cs-sticky-actions { width: auto !important; margin-left: auto; justify-content: flex-end; }
   .cs-sticky-actions .bds-button { flex: 0 0 auto; }
 }
+
+/* Review bar: bottom-left, Desktop/Mobile stacked above Review */
+.rf-pill-bar { right: auto; left: 20px; bottom: 20px; flex-direction: column; align-items: stretch; gap: 8px; }
+.rf-pill-bar .rf-pill { justify-content: center; }
+.rf-pill-seg { justify-content: center; }
+.rf-panel { right: auto; left: 20px; bottom: 132px; }
