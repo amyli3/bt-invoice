@@ -224,7 +224,7 @@ function ProposedClientPreviewCard({ contract, setContract, useJobAddress, setUs
             <div>
               <SubHead>Price breakdown</SubHead>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                <Checkbox checked={!d.hideMarkup} onChange={v => set('hideMarkup', !v)} label="Builder markup" />
+                <Checkbox checked={!d.hideMarkup} onChange={v => set('hideMarkup', !v)} label="Markup amount" />
                 <Checkbox checked={!d.hideTaxDetail} onChange={v => set('hideTaxDetail', !v)} label="Tax breakdown" />
               </div>
             </div>

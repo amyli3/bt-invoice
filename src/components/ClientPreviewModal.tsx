@@ -354,10 +354,11 @@ export default function ClientPreviewModal({ onClose }: { onClose?: () => void }
   /* No "where the markup shows" switch. On open book the breakdown always
      states cost and markup under the subtotal, and the only question is
      whether the client is shown it, which is the Price breakdown control. */
-  /* "Builder markup" is the default label; AJ and Carla say builder fee,
-     others say management fee, contractor fee, or overhead and profit, so the
-     label is theirs to set. */
-  const feeLabel = 'Builder markup';
+  /* The fee row reads "Markup amount", matching the line-item column. When
+     every line carries the same markup rate the rate is stated with it
+     ("Markup amount (15%)"); when rates are mixed it's the amount alone,
+     since no single percentage is true. */
+  const feeLabel = 'Markup amount';
   /* The agency rows name the jurisdictions and their rates. Hiding them
      leaves the Total tax line, so the charge is still stated and only its
      make-up is not. */
@@ -509,9 +510,20 @@ export default function ClientPreviewModal({ onClose }: { onClose?: () => void }
   const subtotal = lines.reduce((s, l) => s + linePrice(l), 0);
   const costOfWork = lines.reduce((s, l) => s + lineBaseCost(l), 0);
   const feeTotal = lines.reduce((s, l) => s + (l.markup || 0), 0);
+  const markupRates = lines
+    .filter(l => lineBaseCost(l) > 0)
+    .map(l => Math.round(((l.markup || 0) / lineBaseCost(l)) * 10000) / 100);
+  const uniformMarkupRate = markupRates.length > 0 && markupRates.every(r => r === markupRates[0]) && markupRates[0] > 0
+    ? markupRates[0]
+    : null;
+  const feeRowLabel = uniformMarkupRate !== null ? `${feeLabel} (${uniformMarkupRate}%)` : feeLabel;
   /* Open book with markup on the lines is the only case with a split to
      state. Fixed price bought a result at a contract price. */
   const feeAvailable = contractType === 'open-book' && feeTotal > 0;
+  // Whether the totals block builds up to the total (Subtotal, Total tax)
+  // or is just Total price. It builds up when tax is broken out, or when the
+  // builder markup is stated and needs the rows around it to add up.
+  const showPriceBuildUp = !hideTaxDetail || (feeAvailable && !hideFee);
   const taxableBase = lines.reduce((s, l) => s + (l.taxable ? linePrice(l) : 0), 0);
   const totalTax = lines.reduce((s, l) => s + lineTax(l), 0);
   const totalPrice = subtotal + totalTax;
@@ -951,7 +963,14 @@ export default function ClientPreviewModal({ onClose }: { onClose?: () => void }
             in the header summary and this block stays the invoice's own
             arithmetic. */}
         <div className={"cpi-totals" + (hideLineItems && hiddenLinesLayout === 'summary' ? ' cpm-totals-full' : '') + (hideLineItems && hiddenLinesLayout === 'totals' ? ' cpm-totals-only' : '')}>
-          <div className="cpi-totals-line cpi-totals-parent"><span>Subtotal</span><span>${fmt(subtotal)}</span></div>
+          {/* Tax breakdown off: the block collapses to just Total price, so
+              the client reads the lines and one total. The exception is an
+              open-book invoice still stating its builder markup: the
+              subtotal and its components need a Total tax row under them
+              for the arithmetic to reach the total. */}
+          {showPriceBuildUp && (
+            <div className="cpi-totals-line cpi-totals-parent"><span>Subtotal</span><span>${fmt(subtotal)}</span></div>
+          )}
           {/* Cost of work and the fee are what the subtotal is made of, so
               they read as its components rather than as rows above it. This is
               the layout AJ Epding builds by hand today and the one QBO gives
@@ -960,7 +979,7 @@ export default function ClientPreviewModal({ onClose }: { onClose?: () => void }
           {feeAvailable && !hideFee && (
             <>
               <div className="cpi-totals-line cpi-totals-sub"><span>Builder cost</span><span>${fmt(costOfWork)}</span></div>
-              <div className="cpi-totals-line cpi-totals-sub"><span>{feeLabel || 'Builder markup'}</span><span>${fmt(feeTotal)}</span></div>
+              <div className="cpi-totals-line cpi-totals-sub"><span>{feeRowLabel}</span><span>${fmt(feeTotal)}</span></div>
             </>
           )}
           {/* Tax always rolls up here, whatever the line-item table shows.
@@ -968,8 +987,12 @@ export default function ClientPreviewModal({ onClose }: { onClose?: () => void }
               detail the client reads on each line, not about whether tax was
               charged: the client still has to be told the tax on what they
               owe. So this block never branches on showTax. */}
-          <div className="cpi-totals-line cpi-totals-parent"><span>Total tax</span><span>${fmt(totalTax)}</span></div>
-          {!hideTaxDetail && TAX_AGENCIES.map(a => (
+          {/* No tax charged: no Total tax row, so Subtotal and Total price
+              simply match. */}
+          {showPriceBuildUp && totalTax > 0 && (
+            <div className="cpi-totals-line cpi-totals-parent"><span>Total tax</span><span>${fmt(totalTax)}</span></div>
+          )}
+          {!hideTaxDetail && totalTax > 0 && TAX_AGENCIES.map(a => (
             <div key={a.name} className="cpi-totals-line cpi-totals-sub">
               <span>{a.name} ({(a.rate * 100).toFixed(3).replace(/0+$/, '').replace(/\.$/, '')}%)</span>
               <span>${fmt(taxableBase * a.rate)}</span>
@@ -978,7 +1001,7 @@ export default function ClientPreviewModal({ onClose }: { onClose?: () => void }
           {/* With the column hidden the client can no longer see which lines
               were taxed, so the breakdown says what the rate was applied to.
               Only worth saying when some lines are exempt. */}
-          {!showTax && taxableBase < subtotal && (
+          {showPriceBuildUp && !showTax && taxableBase < subtotal && (
             <div className="cpi-totals-line cpi-totals-sub"><span>Taxed on</span><span>${fmt(taxableBase)}</span></div>
           )}
           <div className="cpi-totals-line cpi-totals-heading"><span>Total price</span><strong>${fmt(totalPrice)}</strong></div>
@@ -1338,7 +1361,7 @@ export default function ClientPreviewModal({ onClose }: { onClose?: () => void }
                   {feeAvailable && (
                     <label className="cpi-check">
                       <input type="checkbox" checked={!hideFee} onChange={e => setHideFee(!e.target.checked)} />
-                      <span>Builder markup</span>
+                      <span>Markup amount</span>
                     </label>
                   )}
                   {totalTax > 0 && (
