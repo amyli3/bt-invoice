@@ -1344,7 +1344,7 @@ export default function ClientPreviewModal({ onClose }: { onClose?: () => void }
                   {totalTax > 0 && (
                     <label className="cpi-check">
                       <input type="checkbox" checked={!hideTaxDetail} onChange={e => setHideTaxDetail(!e.target.checked)} />
-                      <span>Tax by agency</span>
+                      <span>Tax breakdown</span>
                     </label>
                   )}
                 </RailSection>
