@@ -34,7 +34,36 @@ export type OrderTracking = {
   // Last carrier sync. Mocked in the prototype; production would call a
   // tracking aggregator and refresh on a schedule.
   synced?: { status: string; detail: string; at: string; delivered: boolean };
+  // Where the tracking details came from, so the builder can trust them.
+  importedFrom?: { from: string; subject: string; received: string };
+  deliveredOn?: string;
+  receivedBy?: string;
+  // Installed: proof photos and the daily log they came from / were posted to.
+  installedOn?: string;
+  installPhotos?: string[];
+  dailyLog?: { title: string; date: string; author: string };
 };
+
+// Mock inbox matches for "Import from email". Production would search the
+// builder's connected inbox (or a job-specific forwarding address) for order
+// and shipping confirmations that mention this item.
+const MOCK_ORDER_EMAILS = [
+  { from: 'orders@fergusonhome.com', subject: 'Your order #FH-48213 has shipped', received: 'Oct 3', carrier: 'ups' as Carrier, trackingNumber: '1Z84F7120394827561', supplierOrderNumber: 'FH-48213', eta: 9 },
+  { from: 'noreply@build.com', subject: 'Shipping confirmation for order 9928-1174', received: 'Sep 29', carrier: 'fedex' as Carrier, trackingNumber: '771234567890', supplierOrderNumber: '9928-1174', eta: 6 },
+];
+// Stand-in install photos. Production pulls from the photo picker or a daily log.
+const MOCK_INSTALL_PHOTOS = [
+  'https://images.thdstatic.com/productImages/a96c1819-3c0e-4dea-bf0c-ead6d07eb686/svn/chrome-moen-bathtub-shower-faucet-combos-82603-64_1000.jpg',
+  'https://images.thdstatic.com/productImages/d9b0b956-0169-4319-ad0e-f96098bc1fcc/svn/white-kohler-farmhouse-kitchen-sinks-k-28668-0-e1_600.jpg',
+  'https://images.thdstatic.com/productImages/342247dc-6a7d-47d3-ad33-2e140184c3fe/svn/carrara-white-glass-tile-mabq-whi-10-4f_600.jpg',
+];
+const MOCK_DAILY_LOGS = [
+  { title: 'Master bath trim-out', date: 'Oct 6, 2026', author: 'Larry Johnson', photos: 3 },
+  { title: 'Kitchen fixtures and punch list', date: 'Oct 2, 2026', author: "La'trell Swanson", photos: 5 },
+  { title: 'Plumbing final', date: 'Sep 28, 2026', author: 'Larry Johnson', photos: 2 },
+];
+const isoInDays = (d: number) => { const x = new Date(); x.setDate(x.getDate() + d); return x.toISOString().split('T')[0]; };
+const todayLabel = () => new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
 // Guess the carrier from the tracking number format so builders can paste and go.
 function detectCarrier(n: string): Carrier | undefined {
@@ -130,6 +159,10 @@ function getStatusBadge(optionStatus: string, dueDate: string): {
 
 export default function OptionDetailPage({ onBack, selectionData, prefilledAllowance, variant = 'page', orderStage, onOrderStageChange, tracking = {}, onTrackingChange }: Props) {
   const [syncing, setSyncing] = useState(false);
+  const [emailPickerOpen, setEmailPickerOpen] = useState(false);
+  const [emailSearching, setEmailSearching] = useState(false);
+  const [manualEntry, setManualEntry] = useState(false);
+  const [logPickerOpen, setLogPickerOpen] = useState(false);
   const isPanel = variant === 'panel';
   const isViewing = !!selectionData;
   const isPending = selectionData?.status === 'pending';
@@ -618,17 +651,34 @@ export default function OptionDetailPage({ onBack, selectionData, prefilledAllow
     }, 700);
   };
 
-  const trackingBlock = (
-    <div className="od-tracking">
-      <div className="od-tracking-hdr">
-        <span className="od-tracking-title">Shipment tracking</span>
-        {canSync && (
-          <button type="button" className="btn-g od-tracking-sync" onClick={syncTracking} disabled={syncing}>
-            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" className={syncing ? 'od-spin' : undefined}><path d="M13.5 8a5.5 5.5 0 0 1-9.9 3.3M2.5 8a5.5 5.5 0 0 1 9.9-3.3M12.5 2v3h-3M3.5 14v-3h3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
-            {syncing ? 'Syncing' : tracking.synced ? 'Sync again' : `Sync with ${carrierLabel}`}
-          </button>
-        )}
-      </div>
+  const openEmailImport = () => {
+    setEmailPickerOpen(true);
+    setEmailSearching(true);
+    window.setTimeout(() => setEmailSearching(false), 600);
+  };
+  const importFromEmail = (m: typeof MOCK_ORDER_EMAILS[number]) => {
+    setTracking({
+      carrier: m.carrier, trackingNumber: m.trackingNumber, supplierOrderNumber: m.supplierOrderNumber,
+      expectedDate: isoInDays(m.eta), importedFrom: { from: m.from, subject: m.subject, received: m.received }, synced: undefined,
+    });
+    setEmailPickerOpen(false);
+  };
+  const hasTracking = !!(tracking.trackingNumber || tracking.supplierOrderNumber);
+  const photos = tracking.installPhotos ?? [];
+  const addPhoto = () => setTracking({ installPhotos: [...photos, MOCK_INSTALL_PHOTOS[photos.length % MOCK_INSTALL_PHOTOS.length]], installedOn: tracking.installedOn ?? todayLabel() });
+  const removePhoto = (i: number) => setTracking({ installPhotos: photos.filter((_, j) => j !== i) });
+  const linkLog = (log: typeof MOCK_DAILY_LOGS[number]) => {
+    // Linking a log also pulls its photos in when none were added yet.
+    setTracking({
+      dailyLog: { title: log.title, date: log.date, author: log.author },
+      installPhotos: photos.length ? photos : MOCK_INSTALL_PHOTOS.slice(0, Math.min(log.photos, MOCK_INSTALL_PHOTOS.length)),
+      installedOn: tracking.installedOn ?? log.date,
+    });
+    setLogPickerOpen(false);
+  };
+
+  const trackingFields = (
+    <>
       <div className="od-field-row">
         <div className="od-field" style={{ flex: 1 }}>
           <label className="fl" htmlFor="od-carrier">Carrier</label>
@@ -668,18 +718,198 @@ export default function OptionDetailPage({ onBack, selectionData, prefilledAllow
           <input id="od-expected" type="date" className="fi" value={tracking.expectedDate ?? ''} onChange={e => setTracking({ expectedDate: e.target.value })} />
         </div>
       </div>
-      {tracking.synced && (
-        <div className={`od-tracking-status${tracking.synced.delivered ? ' is-delivered' : ''}`}>
-          <div>
-            <div className="od-tracking-status-line"><strong>{carrierLabel}: {tracking.synced.status}</strong></div>
-            <div className="od-tracking-status-detail">{tracking.synced.detail}</div>
-            <div className="od-tracking-status-at">Synced {tracking.synced.at}</div>
+    </>
+  );
+
+  const syncStatus = tracking.synced && (
+    <div className={`od-tracking-status${tracking.synced.delivered ? ' is-delivered' : ''}`}>
+      <div>
+        <div className="od-tracking-status-line"><strong>{carrierLabel}: {tracking.synced.status}</strong></div>
+        <div className="od-tracking-status-detail">{tracking.synced.detail}</div>
+        <div className="od-tracking-status-at">Synced {tracking.synced.at}</div>
+      </div>
+      {tracking.synced.delivered && orderStage === 'ordered' && (
+        <button type="button" className="btn btn-s" onClick={() => onOrderStageChange?.('delivered')}>Mark as delivered</button>
+      )}
+    </div>
+  );
+
+  const syncButton = canSync && (
+    <button type="button" className="btn-g od-tracking-sync" onClick={syncTracking} disabled={syncing}>
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" className={syncing ? 'od-spin' : undefined}><path d="M13.5 8a5.5 5.5 0 0 1-9.9 3.3M2.5 8a5.5 5.5 0 0 1 9.9-3.3M12.5 2v3h-3M3.5 14v-3h3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+      {syncing ? 'Syncing' : tracking.synced ? 'Sync again' : `Sync with ${carrierLabel}`}
+    </button>
+  );
+
+  const emailIcon = <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/></svg>;
+
+  const emailPicker = emailPickerOpen && (
+    <div className="od-picker" role="dialog" aria-label="Import from email">
+      <div className="od-picker-hdr">
+        <span>{emailSearching ? 'Searching your inbox' : `${MOCK_ORDER_EMAILS.length} order emails found`}</span>
+        <button type="button" className="ws-detail-close" onClick={() => setEmailPickerOpen(false)} aria-label="Close">
+          <svg width="16" height="16" viewBox="0 0 20 20" fill="none"><path d="M5 5L15 15M15 5L5 15" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+        </button>
+      </div>
+      {emailSearching ? (
+        <div className="od-picker-loading">Looking for order and shipping confirmations that mention "{title || 'this item'}"</div>
+      ) : (
+        <ul className="od-picker-list">
+          {MOCK_ORDER_EMAILS.map(m => (
+            <li key={m.subject}>
+              <button type="button" className="od-picker-item" onClick={() => importFromEmail(m)}>
+                <span className="od-picker-item-main">
+                  <span className="od-picker-item-title">{m.subject}</span>
+                  <span className="od-picker-item-sub">{m.from} · {m.received}</span>
+                </span>
+                <span className="od-picker-item-meta">{CARRIERS.find(c => c.id === m.carrier)?.label} · {m.trackingNumber.slice(0, 6)}…</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="od-picker-foot">Or forward confirmations to <strong>smith-home@orders.buildertrend.net</strong> and they attach here automatically.</div>
+    </div>
+  );
+
+  const orderedStage = (
+    <>
+      <div className="od-tracking-hdr">
+        <span className="od-tracking-title">Shipment tracking</span>
+        {hasTracking && syncButton}
+      </div>
+      {!hasTracking && !manualEntry ? (
+        <div className="od-tracking-empty">
+          <p>Add tracking so you know when this lands on site.</p>
+          <div className="od-tracking-empty-actions">
+            <button type="button" className="btn btn-s" onClick={openEmailImport}>{emailIcon}Import from email</button>
+            <button type="button" className="btn-g" onClick={() => setManualEntry(true)}>Enter manually</button>
           </div>
-          {tracking.synced.delivered && orderStage === 'ordered' && (
-            <button type="button" className="btn btn-s" onClick={() => onOrderStageChange?.('delivered')}>Mark as delivered</button>
+          {emailPicker}
+        </div>
+      ) : (
+        <>
+          {tracking.importedFrom && (
+            <div className="od-tracking-source">
+              {emailIcon}
+              <span>From <strong>{tracking.importedFrom.from}</strong>, "{tracking.importedFrom.subject}" ({tracking.importedFrom.received})</span>
+            </div>
           )}
+          {trackingFields}
+          {!tracking.importedFrom && (
+            <div style={{ marginBottom: 12 }}>
+              <button type="button" className="btn-g od-tracking-sync" onClick={openEmailImport}>{emailIcon}Import from email</button>
+              {emailPicker}
+            </div>
+          )}
+          {syncStatus}
+        </>
+      )}
+    </>
+  );
+
+  const deliveredStage = (
+    <>
+      <div className="od-tracking-hdr">
+        <span className="od-tracking-title">Delivery</span>
+        {syncButton}
+      </div>
+      <div className="od-field-row">
+        <div className="od-field" style={{ flex: 1 }}>
+          <label className="fl" htmlFor="od-delivered-on">Delivered on</label>
+          <input id="od-delivered-on" type="date" className="fi" value={tracking.deliveredOn ?? ''} onChange={e => setTracking({ deliveredOn: e.target.value })} />
+        </div>
+        <div className="od-field" style={{ flex: 1 }}>
+          <label className="fl" htmlFor="od-received-by">Received by</label>
+          <input id="od-received-by" className="fi" placeholder="Who signed for it" value={tracking.receivedBy ?? ''} onChange={e => setTracking({ receivedBy: e.target.value })} />
+        </div>
+      </div>
+      {syncStatus}
+      {hasTracking && (
+        <div className="od-tracking-summary">
+          {carrierLabel && <span>{carrierLabel}</span>}
+          {tracking.trackingNumber && (trackUrl ? <a href={trackUrl} target="_blank" rel="noreferrer">{tracking.trackingNumber}</a> : <span>{tracking.trackingNumber}</span>)}
+          {tracking.supplierOrderNumber && <span>Order {tracking.supplierOrderNumber}</span>}
         </div>
       )}
+    </>
+  );
+
+  const logPicker = logPickerOpen && (
+    <div className="od-picker" role="dialog" aria-label="Link a daily log">
+      <div className="od-picker-hdr">
+        <span>Recent daily logs on this job</span>
+        <button type="button" className="ws-detail-close" onClick={() => setLogPickerOpen(false)} aria-label="Close">
+          <svg width="16" height="16" viewBox="0 0 20 20" fill="none"><path d="M5 5L15 15M15 5L5 15" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+        </button>
+      </div>
+      <ul className="od-picker-list">
+        {MOCK_DAILY_LOGS.map(l => (
+          <li key={l.title}>
+            <button type="button" className="od-picker-item" onClick={() => linkLog(l)}>
+              <span className="od-picker-item-main">
+                <span className="od-picker-item-title">{l.title}</span>
+                <span className="od-picker-item-sub">{l.date} · {l.author}</span>
+              </span>
+              <span className="od-picker-item-meta">{l.photos} photos</span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+
+  const installedStage = (
+    <>
+      <div className="od-tracking-hdr">
+        <span className="od-tracking-title">Installed</span>
+        {tracking.installedOn && <span className="od-tracking-meta">{tracking.installedOn}</span>}
+      </div>
+      <label className="fl">Install photos</label>
+      <div className="od-install-photos">
+        {photos.map((url, i) => (
+          <div key={`${url}-${i}`} className="od-install-photo" style={{ backgroundImage: `url(${url})` }}>
+            <button type="button" className="od-install-photo-remove" onClick={() => removePhoto(i)} aria-label="Remove photo">
+              <svg width="12" height="12" viewBox="0 0 20 20" fill="none"><path d="M5 5L15 15M15 5L5 15" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
+            </button>
+          </div>
+        ))}
+        <button type="button" className="od-install-photo-add" onClick={addPhoto}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+          Add photo
+        </button>
+      </div>
+      <span className="sh-hint" style={{ marginBottom: 14 }}>Shown to the client on this selection as proof it's in.</span>
+
+      <label className="fl">Daily log</label>
+      {tracking.dailyLog ? (
+        <div className="od-log-link">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg>
+          <span className="od-log-link-main">
+            <a href="#" onClick={e => e.preventDefault()}>{tracking.dailyLog.title}</a>
+            <span className="od-picker-item-sub">{tracking.dailyLog.date} · {tracking.dailyLog.author}</span>
+          </span>
+          <button type="button" className="btn-g" onClick={() => setTracking({ dailyLog: undefined })}>Unlink</button>
+        </div>
+      ) : (
+        <div className="od-tracking-empty-actions" style={{ marginBottom: 14 }}>
+          <button type="button" className="btn btn-s" onClick={() => setLogPickerOpen(o => !o)}>Link existing log</button>
+          <button
+            type="button"
+            className="btn-g"
+            onClick={() => setTracking({ dailyLog: { title: `Installed: ${title || 'selection'}`, date: todayLabel(), author: 'You' }, installedOn: tracking.installedOn ?? todayLabel() })}
+          >
+            Post to a new daily log
+          </button>
+        </div>
+      )}
+      {logPicker}
+    </>
+  );
+
+  const trackingBlock = (
+    <div className="od-tracking">
+      {orderStage === 'installed' ? installedStage : orderStage === 'delivered' ? deliveredStage : orderedStage}
     </div>
   );
 

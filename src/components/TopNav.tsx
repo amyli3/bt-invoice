@@ -216,6 +216,7 @@ export default function TopNav({ onNavigate }: TopNavProps) {
                 )}
               </div>
               <button className="topnav-dropdown-item" onClick={() => { setFinancialOpen(false); onNavigate?.('client-preview-invoice'); }}>Client preview invoice</button>
+              <button className="topnav-dropdown-item" onClick={() => { setFinancialOpen(false); onNavigate?.('client-preview-modal'); }}>Client preview - modal</button>
               {/* The pre-redesign presentation, kept alongside the current one
                   so the two can be compared in a review. Sits directly under
                   it because it is the same screen, not a separate surface. */}

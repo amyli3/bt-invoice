@@ -48,6 +48,7 @@ import ClientSelections3 from './components/ClientSelections3';
 import ClientPortal, { ClientTopNav } from './components/ClientPortal';
 import ClientPreviewInvoice from './components/ClientPreviewInvoice';
 import ClientPreviewInvoiceOld from './components/ClientPreviewInvoiceOld';
+import ClientPreviewModal from './components/ClientPreviewModal';
 import JobCostingBudget from './components/JobCostingBudget';
 import UnderageFlows from './components/UnderageFlows';
 import OpenbookFlow from './components/OpenbookFlow';
@@ -64,9 +65,9 @@ import { getNextId } from './mockData';
 import { TIME_INTERVAL_DEMO_INVOICES, JULY_TIME_INTERVAL_ITEMS, type DemoInvoiceRow } from './mockData';
 import type { InvoicingMode, DrawScheduleLine, Job } from './types';
 
-type PageType = 'invoice' | 'invoice-2' | 'invoice-3' | 'invoice-3-modal' | 'invoice-full-page' | 'invoice-full-page-reimagined' | 'client-preview-invoice' | 'client-preview-invoice-old' | 'job-price-summary' | 'selections' | 'selections-workshop' | 'option-detail' | 'progress-invoice' | 'change-order' | 'change-order-list' | 'client-portal' | 'client-jps' | 'estimate' | 'estimate-ob' | 'job-proposal' | 'job-proposal-ob' | 'client-selections' | 'client-selections-workshop' | 'client-selections-2' | 'client-selections-3' | 'job-costing-budget' | 'underage-flows' | 'job-details-clients' | 'owner-invoices' | 'openbook' | 'job-details' | 'company-settings' | 'bills' | 'invoice-exploration' | 'invoice-type-preview';
+type PageType = 'invoice' | 'invoice-2' | 'invoice-3' | 'invoice-3-modal' | 'invoice-full-page' | 'invoice-full-page-reimagined' | 'client-preview-invoice' | 'client-preview-invoice-old' | 'client-preview-modal' | 'job-price-summary' | 'selections' | 'selections-workshop' | 'option-detail' | 'progress-invoice' | 'change-order' | 'change-order-list' | 'client-portal' | 'client-jps' | 'estimate' | 'estimate-ob' | 'job-proposal' | 'job-proposal-ob' | 'client-selections' | 'client-selections-workshop' | 'client-selections-2' | 'client-selections-3' | 'job-costing-budget' | 'underage-flows' | 'job-details-clients' | 'owner-invoices' | 'openbook' | 'job-details' | 'company-settings' | 'bills' | 'invoice-exploration' | 'invoice-type-preview';
 
-const validPages: PageType[] = ['invoice', 'invoice-2', 'invoice-3', 'invoice-3-modal', 'invoice-full-page', 'invoice-full-page-reimagined', 'client-preview-invoice', 'client-preview-invoice-old', 'job-price-summary', 'selections', 'selections-workshop', 'option-detail', 'progress-invoice', 'change-order', 'change-order-list', 'client-portal', 'client-jps', 'estimate', 'estimate-ob', 'job-proposal', 'job-proposal-ob', 'client-selections', 'client-selections-workshop', 'client-selections-2', 'client-selections-3', 'job-costing-budget', 'underage-flows', 'job-details-clients', 'owner-invoices', 'openbook', 'job-details', 'company-settings', 'bills', 'invoice-exploration', 'invoice-type-preview'];
+const validPages: PageType[] = ['invoice', 'invoice-2', 'invoice-3', 'invoice-3-modal', 'invoice-full-page', 'invoice-full-page-reimagined', 'client-preview-invoice', 'client-preview-invoice-old', 'client-preview-modal', 'job-price-summary', 'selections', 'selections-workshop', 'option-detail', 'progress-invoice', 'change-order', 'change-order-list', 'client-portal', 'client-jps', 'estimate', 'estimate-ob', 'job-proposal', 'job-proposal-ob', 'client-selections', 'client-selections-workshop', 'client-selections-2', 'client-selections-3', 'job-costing-budget', 'underage-flows', 'job-details-clients', 'owner-invoices', 'openbook', 'job-details', 'company-settings', 'bills', 'invoice-exploration', 'invoice-type-preview'];
 
 function getInitialPage(): PageType {
   // Support ?page=X query param (used when hash is occupied by Figma capture)
@@ -1067,6 +1068,19 @@ export default function App() {
         <div style={{flex: 1, minHeight: 0}}>
           <ClientPreviewInvoice />
         </div>
+      </div>
+    );
+  }
+
+  /* The client preview as a modal over the app, rather than a page of its
+     own - see ClientPreviewModal.tsx. Closing it lands on the invoice list. */
+  if (activePage === 'client-preview-modal') {
+    return (
+      <div style={{display: 'flex', flexDirection: 'column', height: '100vh'}}>
+        <TopNav onNavigate={(page) => setActivePage(page as PageType)} />
+        <div style={{flex: 1, minHeight: 0, background: 'var(--g100)'}} />
+        <div className="cpm-backdrop" />
+        <ClientPreviewModal onClose={() => setActivePage('owner-invoices')} />
       </div>
     );
   }

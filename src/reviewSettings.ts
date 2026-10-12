@@ -21,10 +21,13 @@ import { useEffect, useState } from 'react';
 
 export type ContractType = 'open-book' | 'fixed-price';
 export type CoLayout = 'inline' | 'ownGrid';
+export type HiddenLinesLayout = 'oneLine' | 'totals' | 'summary';
 
 export interface ReviewSettings {
   contractType: ContractType;
   coLayout: CoLayout;
+  // How the client preview reads with "Hide line items" on.
+  hiddenLinesLayout: HiddenLinesLayout;
 }
 
 const DEFAULTS: ReviewSettings = {
@@ -32,6 +35,7 @@ const DEFAULTS: ReviewSettings = {
   // there, and that is what this page is currently being reviewed for.
   contractType: 'open-book',
   coLayout: 'inline',
+  hiddenLinesLayout: 'oneLine',
 };
 
 const KEY = 'bt-review-settings';

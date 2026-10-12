@@ -94,15 +94,195 @@ function RichTextBox({ value, onChange, placeholder }: { value: string; onChange
   );
 }
 
+/* ── Proposed client preview defaults ─────────────────────────────────────
+   The company-level home for the invoice's Customize panel. Every display
+   setting from that panel has a default here, kept separately per contract
+   type because the two bill different things (fixed price groups by the
+   estimate, open book by bills and hours, and only open book has a price
+   breakdown). Recipient settings (Bill to, Also send to, Attn) are not here:
+   they name people on a job, so they save to the job instead. */
+type ContractKey = 'fixed' | 'openbook';
+type GroupKey = 'source' | 'costcode' | 'all';
+interface PreviewDefaults {
+  hideLineItems: boolean;
+  groupBy: GroupKey;
+  hideChangeOrderLines: boolean;
+  showCostCodes: boolean;
+  showVendor: boolean;
+  columns: string[];
+  hideMarkup: boolean;
+  hideTaxDetail: boolean;
+  qrCode: boolean;
+  customFields: boolean;
+  introText: boolean;
+  closingText: boolean;
+  orientation: 'portrait' | 'landscape';
+}
+const ALL_PREVIEW_COLUMNS = ['Items', 'Date', 'Quantity', 'Unit cost', 'Markup amount', 'Client price', 'Tax'];
+const PREVIEW_DEFAULTS: Record<ContractKey, PreviewDefaults> = {
+  fixed: {
+    hideLineItems: false, groupBy: 'source', hideChangeOrderLines: false, showCostCodes: true, showVendor: false,
+    columns: ['Items', 'Quantity', 'Client price', 'Tax'], hideMarkup: false, hideTaxDetail: false,
+    qrCode: false, customFields: true, introText: true, closingText: true, orientation: 'portrait',
+  },
+  openbook: {
+    hideLineItems: false, groupBy: 'source', hideChangeOrderLines: false, showCostCodes: true, showVendor: true,
+    columns: ['Items', 'Date', 'Quantity', 'Unit cost', 'Markup amount', 'Client price', 'Tax'], hideMarkup: false, hideTaxDetail: false,
+    qrCode: false, customFields: true, introText: true, closingText: true, orientation: 'portrait',
+  },
+};
+
+function SegControl<T extends string>({ value, options, onChange }: { value: T; options: { value: T; label: string }[]; onChange: (v: T) => void }) {
+  return (
+    <div className="tabs" style={{ width: 'fit-content' }}>
+      {options.map(o => (
+        <button key={o.value} type="button" className={'tab' + (value === o.value ? ' on' : '')} onClick={() => onChange(o.value)}>{o.label}</button>
+      ))}
+    </div>
+  );
+}
+
+function SubHead({ children }: { children: React.ReactNode }) {
+  return <div className="fl" style={{ marginBottom: 8, fontSize: 13, color: 'var(--g800)' }}>{children}</div>;
+}
+
+// The contract toggle is the modal's own, so the Payment schedule (fixed) and
+// Open book invoicing cards below still follow it.
+function ProposedClientPreviewCard({ contract, setContract, useJobAddress, setUseJobAddress }: {
+  contract: ContractKey; setContract: (c: ContractKey) => void;
+  useJobAddress: boolean; setUseJobAddress: (v: boolean) => void;
+}) {
+  const [defaults, setDefaults] = useState(PREVIEW_DEFAULTS);
+  const d = defaults[contract];
+  const set = <K extends keyof PreviewDefaults>(k: K, v: PreviewDefaults[K]) =>
+    setDefaults(prev => ({ ...prev, [contract]: { ...prev[contract], [k]: v } }));
+  const addable = ALL_PREVIEW_COLUMNS.filter(c => !d.columns.includes(c));
+
+  return (
+    <SectionCard>
+      <div className="est-sec-title">Client preview defaults</div>
+      <div className="est-desc" style={{ marginBottom: 16 }}>
+        New invoices start with these settings. Builders can still change them on any invoice from Customize, and Save as company default there updates this page.
+      </div>
+
+      <div style={{ marginBottom: 20 }}>
+        <div className="fl">Edit defaults for</div>
+        <SegControl value={contract} onChange={setContract} options={[{ value: 'fixed', label: 'Fixed price' }, { value: 'openbook', label: 'Open book' }]} />
+      </div>
+
+      <div style={{ display: 'flex', gap: 40, flexWrap: 'wrap' }}>
+        {/* Left: what the client sees of the line items. */}
+        <div style={{ flex: '1 1 420px', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 22 }}>
+          <div>
+            <SubHead>Display to client</SubHead>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <Checkbox checked={!d.hideLineItems} onChange={v => set('hideLineItems', !v)} label="Line items" />
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--g600)', margin: '4px 0 6px' }}>Group line items by</div>
+                <SegControl
+                  value={d.groupBy}
+                  onChange={v => set('groupBy', v)}
+                  options={[
+                    { value: 'source', label: contract === 'fixed' ? 'Estimate' : 'Cost source' },
+                    { value: 'costcode', label: 'Cost code' },
+                    { value: 'all', label: 'All line items' },
+                  ]}
+                />
+              </div>
+              <Checkbox checked={!d.hideChangeOrderLines} onChange={v => set('hideChangeOrderLines', !v)} label="Change order line items" />
+              <Checkbox checked={d.showCostCodes} onChange={v => set('showCostCodes', v)} label="Cost codes" />
+              <Checkbox checked={d.showVendor} onChange={v => set('showVendor', v)} label="Vendor and employee names" />
+            </div>
+          </div>
+
+          <div>
+            <SubHead>Columns shown</SubHead>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center', border: '1px solid var(--g200)', borderRadius: 6, padding: 8 }}>
+              {d.columns.map(col => (
+                <span key={col} className="badge" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'var(--g50)' }}>
+                  {col}
+                  {col !== 'Items' && (
+                    <span style={{ cursor: 'pointer', color: 'var(--g400)', fontWeight: 700 }} onClick={() => set('columns', d.columns.filter(c => c !== col))}>×</span>
+                  )}
+                </span>
+              ))}
+              {addable.length > 0 && (
+                <select
+                  value=""
+                  onChange={e => e.target.value && set('columns', ALL_PREVIEW_COLUMNS.filter(c => c === e.target.value || d.columns.includes(c)))}
+                  style={{ border: 'none', outline: 'none', fontSize: 13, fontFamily: 'inherit', color: 'var(--g500)', background: 'transparent', cursor: 'pointer' }}
+                  aria-label="Add a column"
+                >
+                  <option value="">+ Add column</option>
+                  {addable.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+              )}
+            </div>
+          </div>
+
+          {contract === 'openbook' && (
+            <div>
+              <SubHead>Price breakdown</SubHead>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <Checkbox checked={!d.hideMarkup} onChange={v => set('hideMarkup', !v)} label="Builder markup" />
+                <Checkbox checked={!d.hideTaxDetail} onChange={v => set('hideTaxDetail', !v)} label="Tax by agency" />
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Right: what else is on the page, and how it's laid out. */}
+        <div style={{ flex: '0 0 240px', display: 'flex', flexDirection: 'column', gap: 22 }}>
+          <div>
+            <SubHead>General information</SubHead>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <Checkbox checked={d.qrCode} onChange={v => set('qrCode', v)} label={<span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>QR code <InfoDot /></span>} />
+              <Checkbox checked={d.customFields} onChange={v => set('customFields', v)} label="Custom fields" />
+              <Checkbox checked={d.introText} onChange={v => set('introText', v)} label="Introduction text" />
+              <Checkbox checked={d.closingText} onChange={v => set('closingText', v)} label="Closing text" />
+            </div>
+          </div>
+          <div>
+            <SubHead>Page layout</SubHead>
+            <SegControl value={d.orientation} onChange={v => set('orientation', v)} options={[{ value: 'portrait', label: 'Vertical' }, { value: 'landscape', label: 'Horizontal' }]} />
+          </div>
+          {/* Replaces "Use job address on invoices" from Invoices setup. The
+              same choice, stated as which address the bill goes to. Applies
+              to both contract types, so it reads the shared setting. */}
+          <div>
+            <SubHead>Bill to address</SubHead>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--g800)', cursor: 'pointer' }}>
+                <input type="radio" name="bill-to-address" checked={!useJobAddress} onChange={() => setUseJobAddress(false)} style={{ margin: 0, accentColor: 'var(--bt-blue)' }} />
+                Client's address
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--g800)', cursor: 'pointer' }}>
+                <input type="radio" name="bill-to-address" checked={useJobAddress} onChange={() => setUseJobAddress(true)} style={{ margin: 0, accentColor: 'var(--bt-blue)' }} />
+                Job site address
+              </label>
+              <div style={{ fontSize: 12, color: 'var(--g500)', lineHeight: 1.45 }}>Uses the job site when a client has no address on file. All contract types.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </SectionCard>
+  );
+}
+
 interface ModalProps {
   onClose: () => void;
   // Lifted to App so the reimagined invoice page reads the same value the
   // picker's "Always invoice this way" checkbox writes.
   defaultInvoiceKind?: DefaultInvoiceKind;
   onDefaultInvoiceKindChange?: (kind: DefaultInvoiceKind) => void;
+  // 'proposed' swaps in the Client preview defaults card that mirrors the
+  // invoice's Customize panel. Only Company settings passes it for now, so
+  // the Invoices pages keep today's card for comparison.
+  clientPreviewVariant?: 'current' | 'proposed';
 }
 
-export default function InvoicesSettingsModal({ onClose, defaultInvoiceKind = 'regular', onDefaultInvoiceKindChange }: ModalProps) {
+export default function InvoicesSettingsModal({ onClose, defaultInvoiceKind = 'regular', onDefaultInvoiceKindChange, clientPreviewVariant = 'current' }: ModalProps) {
+  const proposed = clientPreviewVariant === 'proposed';
   const [invoicePrefix, setInvoicePrefix] = useState('INV-');
   const [notifyInternal, setNotifyInternal] = useState(false);
   const [notifyBefore, setNotifyBefore] = useState(true);
@@ -207,7 +387,9 @@ export default function InvoicesSettingsModal({ onClose, defaultInvoiceKind = 'r
                 </div>
               )}
 
-              <Checkbox checked={useJobAddress} onChange={setUseJobAddress} label="Use job address on invoices" />
+              {/* In the proposed layout this moves to Client preview defaults
+                  as "Bill to address". */}
+              {!proposed && <Checkbox checked={useJobAddress} onChange={setUseJobAddress} label="Use job address on invoices" />}
             </div>
 
             <div style={{ margin: '16px 0' }}>
@@ -233,7 +415,8 @@ export default function InvoicesSettingsModal({ onClose, defaultInvoiceKind = 'r
           </SectionCard>
 
           {/* ── Client preview settings (contract type controls what follows) ── */}
-          <SectionCard>
+          {proposed && <ProposedClientPreviewCard contract={contractType} setContract={setContractType} useJobAddress={useJobAddress} setUseJobAddress={setUseJobAddress} />}
+          {!proposed && <SectionCard>
             <div className="est-sec-title">Client preview settings</div>
 
             <div style={{ marginBottom: 16 }}>
@@ -286,7 +469,7 @@ export default function InvoicesSettingsModal({ onClose, defaultInvoiceKind = 'r
                 </div>
               </div>
             </div>
-          </SectionCard>
+          </SectionCard>}
 
           {/* ── Payment schedule: fixed-price jobs only ── */}
           {contractType === 'fixed' && (

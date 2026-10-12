@@ -74,6 +74,17 @@ function MoneyInput({ value, onChange, placeholder = 'Unlimited' }: { value: str
     </div>
   );
 }
+/* Clients on this job, for the Invoicing card's Bill to. Mock data matching
+   the invoice prototype: one primary, each with their own address on file
+   (BT stores one address per client contact, separate from the job's). */
+const JOB_CLIENTS = [
+  { id: 'c1', name: 'Delanie Walker', primary: true, address: ['88 Harbor Point Ln', 'Annapolis, MD 21403'] },
+  { id: 'c2', name: 'Marcus Walker', primary: false, address: ['88 Harbor Point Ln', 'Annapolis, MD 21403'] },
+];
+
+const radioRowStyle: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--bds-color-gray-80)', cursor: 'pointer' };
+const helpTextStyle: React.CSSProperties = { fontSize: 12, color: 'var(--bds-color-gray-60)', lineHeight: 1.5 };
+
 const sectionCardStyle: React.CSSProperties = {
   border: '1px solid var(--bds-color-gray-15)', borderRadius: 'var(--bds-radius-lg)',
   padding: 20, display: 'flex', flexDirection: 'column', gap: 16, background: '#fff', marginBottom: 20,
@@ -135,6 +146,22 @@ export default function JobDetailsPage({
   const [jobPoLimit, setJobPoLimit] = useState('');
   const [workingTemplate, setWorkingTemplate] = useState(false);
   const [billApprovers, setBillApprovers] = useState('');
+
+  // Invoicing: job-level defaults for new invoices on this job. Billing
+  // settings live only here (and on the invoice), never at company level,
+  // because they name this job's people and places. Client preview follows
+  // the company defaults until the builder customizes it for this job, either
+  // here or with "Save for this job" on an invoice.
+  const [billToClientId, setBillToClientId] = useState('c1');
+  const [billingAddressMode, setBillingAddressMode] = useState<'client' | 'jobsite' | 'other'>('client');
+  const [otherBillingAddress, setOtherBillingAddress] = useState('');
+  const [previewSource, setPreviewSource] = useState<'company' | 'job'>('company');
+  const [jobGroupBy, setJobGroupBy] = useState<'source' | 'costcode' | 'all'>('source');
+  const [jobHideLineItems, setJobHideLineItems] = useState(false);
+  const [jobHideCoLines, setJobHideCoLines] = useState(false);
+  const [jobShowCostCodes, setJobShowCostCodes] = useState(true);
+  const [jobShowVendor, setJobShowVendor] = useState(contractType === 'open-book');
+  const [jobOrientation, setJobOrientation] = useState<'portrait' | 'landscape'>('portrait');
 
   const addWorkday = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const day = e.target.value;
@@ -318,6 +345,87 @@ export default function JobDetailsPage({
                   New invoices on this job open as a {(invoiceKindDefault === 'company' ? companyInvoiceKindDefault : invoiceKindDefault) === 'progress' ? 'progress invoice' : 'standard invoice'}. You can still switch on any individual invoice.
                 </div>
               </Field>
+
+              {/* Who new invoices on this job are billed to. Job level only:
+                  Company settings can't hold these. */}
+              <SubHeading style={{ marginTop: 8 }}>Bill to</SubHeading>
+              <Field label="Client">
+                <select className="bds-r-input" style={inputStyle} value={billToClientId} onChange={e => setBillToClientId(e.target.value)}>
+                  {JOB_CLIENTS.map(c => <option key={c.id} value={c.id}>{c.name}{c.primary ? ' (primary)' : ''}</option>)}
+                </select>
+              </Field>
+              <Field label="Billing address">
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <label style={radioRowStyle}>
+                    <input type="radio" name="billing-address" checked={billingAddressMode === 'client'} onChange={() => setBillingAddressMode('client')} />
+                    Client's address
+                  </label>
+                  {billingAddressMode === 'client' && (
+                    <div style={{ ...helpTextStyle, marginLeft: 22 }}>{(JOB_CLIENTS.find(c => c.id === billToClientId) ?? JOB_CLIENTS[0]).address.join(', ')}</div>
+                  )}
+                  <label style={radioRowStyle}>
+                    <input type="radio" name="billing-address" checked={billingAddressMode === 'jobsite'} onChange={() => setBillingAddressMode('jobsite')} />
+                    Job site address
+                  </label>
+                  {billingAddressMode === 'jobsite' && (
+                    <div style={{ ...helpTextStyle, marginLeft: 22 }}>{[street, [city, state].filter(Boolean).join(', ') + (zip ? ` ${zip}` : '')].filter(s => s.trim()).join(', ') || 'Add the job address under Job details'}</div>
+                  )}
+                  <label style={radioRowStyle}>
+                    <input type="radio" name="billing-address" checked={billingAddressMode === 'other'} onChange={() => setBillingAddressMode('other')} />
+                    Other
+                  </label>
+                  {billingAddressMode === 'other' && (
+                    <textarea
+                      className="bds-r-input"
+                      rows={3}
+                      style={{ ...inputStyle, marginLeft: 22, width: 'calc(100% - 22px)', resize: 'vertical', fontFamily: 'inherit', height: 'auto', padding: '8px 10px' }}
+                      placeholder={'Street\nCity, State ZIP'}
+                      value={otherBillingAddress}
+                      onChange={e => setOtherBillingAddress(e.target.value)}
+                      aria-label="Other billing address"
+                    />
+                  )}
+                </div>
+              </Field>
+
+              {/* How the client sees invoices on this job. Starts on the
+                  company defaults; customizing here (or "Save for this job"
+                  on an invoice) gives the job its own. */}
+              <SubHeading style={{ marginTop: 8 }}>Client preview</SubHeading>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <label style={radioRowStyle}>
+                  <input type="radio" name="preview-source" checked={previewSource === 'company'} onChange={() => setPreviewSource('company')} />
+                  Use company defaults
+                </label>
+                <label style={radioRowStyle}>
+                  <input type="radio" name="preview-source" checked={previewSource === 'job'} onChange={() => setPreviewSource('job')} />
+                  Customize for this job
+                </label>
+              </div>
+              {previewSource === 'company' ? (
+                <div style={helpTextStyle}>Display settings come from Company settings, under Invoices. Changes there apply to this job.</div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12, paddingLeft: 12, borderLeft: '2px solid var(--bds-color-gray-15)' }}>
+                  <Field label="Group line items by">
+                    <select className="bds-r-input" style={inputStyle} value={jobGroupBy} onChange={e => setJobGroupBy(e.target.value as 'source' | 'costcode' | 'all')}>
+                      <option value="source">{contractType === 'fixed-price' ? 'Estimate' : 'Cost source'}</option>
+                      <option value="costcode">Cost code</option>
+                      <option value="all">All line items</option>
+                    </select>
+                  </Field>
+                  <CheckboxRow checked={!jobHideLineItems} onChange={v => setJobHideLineItems(!v)} label="Line items" />
+                  <CheckboxRow checked={!jobHideCoLines} onChange={v => setJobHideCoLines(!v)} label="Change order line items" />
+                  <CheckboxRow checked={jobShowCostCodes} onChange={setJobShowCostCodes} label="Cost codes" />
+                  <CheckboxRow checked={jobShowVendor} onChange={setJobShowVendor} label="Vendor and employee names" />
+                  <Field label="Page layout">
+                    <select className="bds-r-input" style={inputStyle} value={jobOrientation} onChange={e => setJobOrientation(e.target.value as 'portrait' | 'landscape')}>
+                      <option value="portrait">Vertical</option>
+                      <option value="landscape">Horizontal</option>
+                    </select>
+                  </Field>
+                  <div style={helpTextStyle}>Columns and the rest of the display settings can be changed on any invoice from Customize.</div>
+                </div>
+              )}
             </div>
           </div>
         </div>

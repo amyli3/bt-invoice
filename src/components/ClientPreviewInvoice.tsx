@@ -296,6 +296,9 @@ export default function ClientPreviewInvoice() {
      the document stays the page, and the controls are one tap away. The
      same markup is the docked rail at desktop width; only CSS differs. */
   const [customizeSheetOpen, setCustomizeSheetOpen] = useState(false);
+  // Desktop only: the docked rail folds down to a thin strip so the invoice
+  // gets the full width. Opens expanded every time the page loads.
+  const [railCollapsed, setRailCollapsed] = useState(false);
   // Escape closes it, the way any overlay should.
   useEffect(() => {
     if (!customizeSheetOpen) return;
@@ -1026,7 +1029,7 @@ export default function ClientPreviewInvoice() {
   );
 
   const renderClientPreviewTab = () => (
-    <div className="cpi-3pane">
+    <div className={"cpi-3pane" + (railCollapsed ? ' is-rail-collapsed' : '')}>
       {/* Center — the document canvas. A Print/Email toggle sits in its own
           toolbar rather than a left rail of document cards: there's one
           invoice record, not several drafts to pick between, so a segmented
@@ -1106,15 +1109,44 @@ export default function ClientPreviewInvoice() {
           over the document rather than a column beside it. */}
       {customizeSheetOpen && <div className="cpi-sheet-scrim" onClick={() => setCustomizeSheetOpen(false)} />}
 
-      {/* Right rail — everything that edits what the client sees. Which
+      {/* Left rail — everything that edits what the client sees. Which
           sections show depends on the document open in the canvas: Print
           gets layout/display/general; Email gets the message it can carry
           plus who it's addressed to, since the email isn't a layout the
           builder is arranging, just a short note attached to a fixed template. */}
       <aside
-        className={"cpi-rail cpi-rail-right" + (customizeSheetOpen ? ' is-sheet-open' : '')}
+        className={"cpi-rail cpi-rail-left" + (customizeSheetOpen ? ' is-sheet-open' : '')}
         aria-label="Customize invoice"
       >
+        {/* Collapsed strip (desktop): a chevron and a sideways label, the
+            whole strip clickable to bring the rail back. */}
+        <button
+          type="button"
+          className="cpi-rail-strip"
+          onClick={() => setRailCollapsed(false)}
+          aria-label="Expand customize"
+          aria-expanded={false}
+        >
+          <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+            <path d="M8 5l5 5-5 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          <span className="cpi-rail-strip-label">Customize</span>
+        </button>
+        {/* Expanded header (desktop): title plus the collapse chevron. */}
+        <div className="cpi-rail-head">
+          <span className="cpi-rail-head-title">Customize invoice</span>
+          <button
+            type="button"
+            className="cpi-rail-collapse"
+            onClick={() => setRailCollapsed(true)}
+            aria-label="Collapse customize"
+            aria-expanded={true}
+          >
+            <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+              <path d="M12 5l-5 5 5 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
+        </div>
         {/* Sheet header: a handle to grab and a way out. Hidden at desktop
             width, where the rail is just a column and needs neither. */}
         <div className="cpi-sheet-head">

@@ -7023,6 +7023,108 @@ button.jps-term-label { cursor: pointer; }
    controls card above a document "paper", dark logo mark, right-aligned company
    block, title + summary row, gray-headed tables, right-aligned totals. */
 .cpi-shell { display: flex; flex-direction: column; height: 100%; background: var(--g100); }
+/* Client preview - modal (#client-preview-modal): the same shell, floated
+   as a near-full-screen dialog over a dimmed app instead of filling the page. */
+.cpm-backdrop { position: fixed; inset: 0; z-index: 300; background: rgba(15, 23, 42, 0.5); }
+.cpi-shell.cpm-modal {
+  position: fixed; inset: 10px; z-index: 301; height: auto;
+  border-radius: 8px; overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+}
+.cpm-modal .cpi-titlebar { padding: 20px 28px 12px; border-bottom: none; }
+.cpm-modal .cpi-title { font-size: 24px; }
+@media (max-width: 640px) {
+  .cpi-shell.cpm-modal { inset: 0; border-radius: 0; }
+}
+/* Flatter customize rail: sections drop their card borders and sit on the
+   rail itself, split by hairline dividers, so it reads as one panel instead
+   of a stack of boxes. */
+.cpm-modal .cpi-rail-head { border-bottom: 1px solid var(--g100); padding-left: 16px; padding-right: 8px; }
+.cpm-modal .cpi-rail-fields { padding: 0; gap: 0; }
+.cpm-modal .cpi-rail-section { border: none; border-radius: 0; border-bottom: 1px solid var(--g100); }
+.cpm-modal .cpi-rail-section:last-child { border-bottom: none; }
+.cpm-modal .cpi-rail-section-title { padding: 20px 16px 10px; }
+.cpm-modal .cpi-rail-section-body { padding: 0 16px 24px; gap: 10px; }
+.cpm-modal .cpi-rail-footer { border-top: 1px solid var(--g100); }
+/* Display to client: controls that only apply with line items shown sit
+   indented under that switch; per-line details are one two-column list. */
+.cpm-nested { display: flex; flex-direction: column; gap: 10px; margin-left: 8px; padding-left: 12px; border-left: 2px solid var(--g100); }
+.cpm-nested .fl { margin-bottom: 0; }
+/* "On each line item": chips in a field that opens a checklist below it. */
+.cpm-multi { position: relative; }
+.cpm-multi-field { margin-top: 0; cursor: pointer; background: white; }
+.cpm-multi-field:hover, .cpm-multi-field.is-open { border-color: var(--bt-blue); }
+.cpm-multi-pop {
+  position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 30;
+  padding: 4px; background: white; border: 1px solid var(--g200); border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.12); max-height: 280px; overflow-y: auto;
+}
+.cpm-multi-option { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 6px; font-size: 13px; color: var(--g700); cursor: pointer; }
+.cpm-multi-option:hover { background: var(--g50); }
+.cpm-multi-option input { width: 15px; height: 15px; accent-color: var(--bt-blue); margin: 0; }
+/* Group-by toggle in the rail: full width with equal, roomier tabs. */
+.cpm-modal .client-group-toggle { display: flex; width: 100%; margin-right: 0; padding: 3px; border-radius: 8px; }
+.cpm-modal .client-group-tab { flex: 1; padding: 8px 10px; font-size: 13px; border-radius: 6px; white-space: nowrap; }
+.cpm-modal .cpm-nested .client-group-tab { padding: 7px 4px; font-size: 12px; }
+/* Slightly wider rail on the modal page (base layout is 300px). Desktop only, so
+   narrow screens still stack the panes and use the sheet. */
+@media (min-width: 1101px) {
+  .cpm-modal .cpi-3pane { grid-template-columns: 320px minmax(0, 1fr); }
+  .cpm-modal .cpi-3pane.is-rail-collapsed { grid-template-columns: 40px minmax(0, 1fr); }
+}
+
+/* Line items hidden: the totals widen into a full-width invoice summary that
+   runs from the price to the amount due. */
+.cpm-summary-title { margin-top: 28px; padding-bottom: 8px; border-bottom: 1px solid var(--g200); }
+.cpm-modal .cpi-totals.cpm-totals-full { width: 100%; margin-top: 4px; font-size: 13px; }
+.cpm-totals-full .cpi-totals-line { padding: 7px 8px; }
+/* Components (tax agencies, builder cost/markup) nest under their roll-up:
+   indented, smaller, and hung off a thin guide line. */
+.cpm-totals-full .cpi-totals-sub {
+  padding: 3px 8px 3px 14px; margin-left: 18px;
+  border-left: 2px solid var(--g200); font-size: 12px; color: var(--g500);
+}
+.cpm-totals-full .cpi-totals-parent + .cpi-totals-sub { margin-top: 2px; }
+.cpm-totals-full .cpi-totals-sub + .cpi-totals-parent,
+.cpm-totals-full .cpi-totals-sub + .cpi-totals-heading { margin-top: 6px; }
+/* "Totals" variant: the usual right-hand block, a little wider since it is
+   the whole body, and with room above it. */
+.cpm-modal .cpi-totals.cpm-totals-only { width: 300px; margin-top: 28px; font-size: 13px; }
+/* "One line" variant: the single row reads like a flat-fee invoice line. */
+.cpm-oneline td { padding-top: 12px; padding-bottom: 12px; }
+
+/* Rail footer: the company save is a BDS tertiary button, in link blue. */
+.cpm-company-link.bds-r-button-tertiary { color: var(--bds-color-blue-70, #004fd6); }
+
+/* Recipient: billing address preview and free-text address. */
+.cpm-address-preview { padding: 8px 10px; border-radius: 6px; background: var(--g50); font-size: 12.5px; color: var(--g700); line-height: 1.45; }
+.cpm-address-input { resize: vertical; font-family: inherit; }
+.cpi-seg-btn:disabled { color: var(--g300); cursor: not-allowed; background: white; }
+
+/* Feedback lightbulb beside the collapse chevron in the rail header. */
+.cpm-rail-head-actions { display: flex; align-items: center; gap: 2px; }
+.cpm-feedback { position: relative; }
+.cpm-feedback-pop {
+  position: absolute; top: calc(100% + 6px); right: -36px; z-index: 40; width: 248px;
+  padding: 14px 16px; background: white; border: 1px solid var(--g200); border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+}
+.cpm-feedback-title { font-size: 14px; font-weight: 700; color: var(--bt-midnight); }
+.cpm-feedback-sub { margin: 4px 0 10px; font-size: 12.5px; color: var(--g600); line-height: 1.4; }
+.cpm-feedback-link { font-size: 13px; font-weight: 600; color: var(--bt-blue); text-decoration: underline; }
+
+/* Footer: the overflow trigger shows at every width here (it holds Print
+   and Cancel), as a bare ellipsis rather than a bordered button. On phones
+   Save and Record payment stay in the bar and Send drops to an icon-only
+   square, so all four fit on one row. */
+.cpm-modal .cpm-foot-more { display: block; margin-right: 4px; align-self: center; }
+.cpm-modal .cpm-foot-pop { left: auto; right: 0; }
+@media (max-width: 600px) {
+  .cpm-modal .cpi-footer { justify-content: flex-end; }
+  .cpm-modal .cpi-foot-wide { display: inline-flex; }
+  .cpm-modal .cpm-send .bds-r-button--text { display: none; }
+  .cpm-modal .cpm-foot-pop { left: 0; right: auto; }
+}
 .cpi-titlebar { display: flex; align-items: center; justify-content: space-between; padding: 16px 28px; background: white; border-bottom: 1px solid var(--g200); flex-shrink: 0; }
 .cpi-breadcrumb { font-size: 13px; color: var(--g500); margin-bottom: 2px; }
 .cpi-title { display: flex; align-items: center; gap: 8px; font-size: 20px; font-weight: 700; color: var(--bt-midnight); }
@@ -7046,19 +7148,54 @@ button.jps-term-label { cursor: pointer; }
 /* Client preview tab is the three-pane layout below, which manages its own
    scrolling per pane — the shared .cpi-body scroller and padding would just
    fight it. */
-.cpi-body-preview { padding: 0; overflow: hidden; }
+.cpi-body-preview { padding: 0; overflow: hidden; align-items: stretch; }
 
 /* ============================================================
-   Client preview: two-pane layout (document canvas, right rail of customize
-   controls). A Print/Email segmented toggle lives in the canvas toolbar
+   Client preview: two-pane layout (left rail of customize controls, document
+   canvas). A Print/Email segmented toggle lives in the canvas toolbar
    rather than a left rail of document cards — there's one invoice record,
    not several drafts to choose between, so a view switch fits better than a
    picker list. Modeled on the proposal concept's canvas / right-rail split.
    ============================================================ */
-.cpi-3pane { display: grid; grid-template-columns: minmax(0, 1fr) 300px; height: 100%; min-height: 0; }
+.cpi-3pane { display: grid; grid-template-columns: 300px minmax(0, 1fr); height: 100%; min-height: 0; }
 
 .cpi-rail { display: flex; flex-direction: column; min-width: 0; background: white; overflow-y: auto; }
-.cpi-rail-right { border-left: 1px solid var(--g200); }
+/* Rail sits left of the canvas on desktop. It comes after the canvas in the
+   markup so the document still leads when the panes stack on narrow screens. */
+.cpi-rail-left { order: -1; border-right: 1px solid var(--g200); }
+
+/* Collapsible rail (desktop). Expanded: a header with the title and a "<"
+   chevron. Collapsed: the column narrows to a strip with a ">" chevron and a
+   sideways label, and the controls hide. */
+.cpi-3pane { transition: grid-template-columns .18s ease; }
+.cpi-3pane.is-rail-collapsed { grid-template-columns: 40px minmax(0, 1fr); }
+.cpi-rail-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  position: sticky; top: 0; z-index: 2;
+  padding: 10px 8px 10px 16px; background: white; border-bottom: 1px solid var(--g100);
+}
+.cpi-rail-head-title { font-size: 14px; font-weight: 700; color: var(--bt-midnight); }
+.cpi-rail-collapse {
+  display: flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; padding: 0; border: none; border-radius: 6px;
+  background: none; color: var(--g600); cursor: pointer;
+}
+.cpi-rail-collapse:hover { background: var(--g100); color: var(--bt-midnight); }
+.cpi-rail-strip {
+  display: none; flex-direction: column; align-items: center; gap: 12px;
+  width: 100%; height: 100%; padding: 14px 0; border: none; background: white;
+  color: var(--g700); cursor: pointer; font-family: inherit;
+}
+.cpi-rail-strip:hover { background: var(--g50); color: var(--bt-midnight); }
+.cpi-rail-strip-label {
+  writing-mode: vertical-rl; transform: rotate(180deg);
+  font-size: 13px; font-weight: 600; letter-spacing: 0.01em;
+}
+.cpi-3pane.is-rail-collapsed .cpi-rail-left { overflow: hidden; }
+.cpi-3pane.is-rail-collapsed .cpi-rail-strip { display: flex; }
+.cpi-3pane.is-rail-collapsed .cpi-rail-head,
+.cpi-3pane.is-rail-collapsed .cpi-rail-fields,
+.cpi-3pane.is-rail-collapsed .cpi-rail-footer { display: none; }
 
 .cpi-doc-status { display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--g500); }
 .cpi-doc-status-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; background: var(--g300); }
@@ -7130,6 +7267,14 @@ button.jps-term-label { cursor: pointer; }
 @media (max-width: 1100px) {
   .cpi-body-preview { overflow-y: auto; }
   .cpi-3pane { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto; height: auto; min-height: 100%; }
+  .cpi-rail-left { order: 0; }
+  /* Collapsing is a desktop affordance; narrow screens use the sheet, so the
+     controls always show there whatever the desktop state was. */
+  .cpi-3pane.is-rail-collapsed { grid-template-columns: minmax(0, 1fr); }
+  .cpi-rail-head, .cpi-3pane.is-rail-collapsed .cpi-rail-strip { display: none; }
+  .cpi-3pane.is-rail-collapsed .cpi-rail-fields { display: flex; }
+  .cpi-3pane.is-rail-collapsed .cpi-rail-footer { display: flex; }
+  .cpi-3pane.is-rail-collapsed .cpi-rail-left { overflow-y: auto; }
   .cpi-canvas-wrap { overflow: visible; }
   /* The canvas is the page's scroller on desktop; stacked, the page itself
      scrolls, so it has to size to the document instead of to a 1fr track
@@ -7137,7 +7282,7 @@ button.jps-term-label { cursor: pointer; }
   .cpi-canvas { flex: none; overflow: visible; }
   .cpi-canvas-toolbar { position: sticky; top: 0; z-index: 5; }
   /* The rail becomes a sheet over the document instead of a second column
-     below it — see the .cpi-rail-right rules in the phone block. */
+     below it — see the .cpi-rail-left rules in the phone block. */
 }
 
 .cpi-seg { display: inline-flex; border: 1px solid var(--g300); border-radius: 8px; overflow: hidden; }
@@ -7212,6 +7357,9 @@ button.jps-term-label { cursor: pointer; }
    other lines, so it takes the ordinary row treatment — bolded like an item
    name, since the title is all the client gets. */
 .cpi-co-collapsed td { font-weight: 600; color: var(--bt-midnight); }
+/* A change order under the "Change orders" heading: a sub-heading, a step
+   lighter than the group row (no fill, semibold). */
+.cpm-subgrp-row td { font-weight: 600; color: var(--bt-midnight) !important; border-bottom: 1px solid var(--g100) !important; }
 .cpi-hidden-note { padding: 20px; text-align: center; font-size: 12px; color: var(--g500); font-style: italic; background: var(--g50); border: 1px solid var(--g200); border-radius: 8px; margin-bottom: 24px; }
 
 .cpi-block-body { font-size: 12px; color: var(--g700); line-height: 1.7; }
@@ -7374,14 +7522,14 @@ button.jps-term-label { cursor: pointer; }
   /* The customize rail slides up over the document rather than sitting
      below it: the invoice is what the page is for, and a phone screen of
      settings buries it. Closed, it's off-canvas entirely. */
-  .cpi-rail-right {
+  .cpi-rail-left {
     position: fixed; left: 0; right: 0; bottom: 0; z-index: 70;
-    max-height: 78%; border-left: 0; border-top: 1px solid var(--g200);
+    max-height: 78%; border-right: 0; border-top: 1px solid var(--g200);
     border-radius: 14px 14px 0 0; overflow-y: auto;
     box-shadow: 0 -10px 34px rgba(0,0,0,0.22);
     transform: translateY(100%); transition: transform .22s ease;
   }
-  .cpi-rail-right.is-sheet-open { transform: translateY(0); }
+  .cpi-rail-left.is-sheet-open { transform: translateY(0); }
   .cpi-sheet-head { display: flex; }
   .cpi-sheet-scrim { display: block; }
   .cpi-customize-btn { display: inline-flex; }
@@ -7765,6 +7913,36 @@ button.jps-term-label { cursor: pointer; }
 .od-tracking-status.is-delivered { border-left-color: #12B76A; }
 .od-tracking-status-detail { margin-top: 2px; }
 .od-tracking-status-at { margin-top: 2px; font-size: 12px; color: var(--g500); }
+.od-tracking { position: relative; }
+.od-tracking-meta { font-size: 12px; color: var(--g500); }
+.od-tracking-empty { position: relative; padding-bottom: 14px; }
+.od-tracking-empty p { margin: 0 0 10px; font-size: 13px; color: var(--g600, #4E555F); }
+.od-tracking-empty-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.od-tracking-empty-actions .btn { padding: 6px 12px; font-size: 13px; }
+.od-tracking-source { display: flex; align-items: flex-start; gap: 6px; margin: -2px 0 12px; font-size: 12px; color: var(--g600, #4E555F); }
+.od-tracking-source svg { flex-shrink: 0; margin-top: 2px; color: var(--g500); }
+.od-tracking-summary { display: flex; flex-wrap: wrap; gap: 6px 12px; margin: 0 0 14px; font-size: 12px; color: var(--g600, #4E555F); }
+.od-tracking-summary a { color: var(--bt-blue); }
+.od-picker { position: relative; margin-top: 10px; background: #fff; border: 1px solid var(--g200); border-radius: var(--radius); box-shadow: 0 8px 24px rgba(16, 24, 40, 0.12); overflow: hidden; z-index: 2; }
+.od-picker-hdr { display: flex; align-items: center; justify-content: space-between; padding: 8px 8px 8px 12px; font-size: 12px; font-weight: 600; color: var(--g600, #4E555F); border-bottom: 1px solid var(--g100); }
+.od-picker-loading { padding: 14px 12px; font-size: 13px; color: var(--g500); }
+.od-picker-list { list-style: none; margin: 0; padding: 4px; }
+.od-picker-item { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px; text-align: left; background: none; border: none; border-radius: 6px; cursor: pointer; font-family: inherit; }
+.od-picker-item:hover { background: #F5F8FF; }
+.od-picker-item-main { display: flex; flex-direction: column; min-width: 0; }
+.od-picker-item-title { font-size: 13px; font-weight: 600; color: #1A1F26; }
+.od-picker-item-sub { font-size: 12px; color: var(--g500); }
+.od-picker-item-meta { font-size: 12px; color: var(--g500); white-space: nowrap; }
+.od-picker-foot { padding: 8px 12px; font-size: 12px; color: var(--g600, #4E555F); background: #F8FAFC; border-top: 1px solid var(--g100); }
+.od-install-photos { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 4px; }
+.od-install-photo { position: relative; width: 88px; height: 88px; border-radius: 6px; background: #EEF1F5 center / cover no-repeat; border: 1px solid var(--g200); }
+.od-install-photo-remove { position: absolute; top: 4px; right: 4px; display: inline-flex; padding: 3px; color: #fff; background: rgba(16, 24, 40, 0.6); border: none; border-radius: 999px; cursor: pointer; }
+.od-install-photo-add { width: 88px; height: 88px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; font-family: inherit; font-size: 12px; font-weight: 600; color: var(--bt-blue); background: #fff; border: 1px dashed #B8C4D6; border-radius: 6px; cursor: pointer; }
+.od-install-photo-add:hover { background: #F5F8FF; border-color: var(--bt-blue); }
+.od-log-link { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; padding: 10px 12px; background: #fff; border: 1px solid var(--g200); border-radius: var(--radius); }
+.od-log-link > svg { color: var(--g500); flex-shrink: 0; }
+.od-log-link-main { flex: 1; display: flex; flex-direction: column; min-width: 0; font-size: 13px; }
+.od-log-link-main a { font-weight: 600; color: var(--bt-blue); text-decoration: none; }
 
 /* Chosen badge doubles as an unchoose toggle */
 .ws-badge-toggle { border: none; padding: 0; cursor: pointer; font: inherit; transition: background .12s, transform .12s; }
@@ -8714,14 +8892,10 @@ span.fp-room { display: flex; }
 .rv-collapse-btn svg { margin-top: 2px; }
 .rv-collapse-btn > span { display: flex; flex-direction: column; }
 
-/* Review pill bar: Desktop / Mobile switch next to Review */
+/* Review pill bar: holds the Review button (viewport lives in its panel) */
 .rf-pill-bar { position: fixed; right: 20px; bottom: 76px; z-index: 9000; display: flex; align-items: center; gap: 8px; }
 .rf-pill-bar .rf-pill { position: static; }
-.rf-pill-seg { display: inline-flex; padding: 4px; gap: 2px; background: #4b5563; border-radius: 999px; box-shadow: 0 4px 14px rgba(0,0,0,0.22); }
-.rf-pill-seg-btn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; font-family: inherit; font-size: 14px; font-weight: 600; color: #E5E7EB; background: transparent; border: none; border-radius: 999px; cursor: pointer; }
-.rf-pill-seg-btn:hover { color: #fff; }
-.rf-pill-seg-btn.on { background: #fff; color: #1F2937; }
-.rf-pill-seg-btn:focus-visible, .rf-pill:focus-visible { outline: 2px solid #93C5FD; outline-offset: 2px; }
+.rf-pill:focus-visible { outline: 2px solid #93C5FD; outline-offset: 2px; }
 /* When the phone frame is showing, the desktop app behind it (and its footer) is not rendered,
    so the only footer is the one inside the phone. */
 /* Phone footer: summary on the left, Review & submit pinned to the far right */
@@ -8730,11 +8904,10 @@ span.fp-room { display: flex; }
   .cs-sticky-actions .bds-button { flex: 0 0 auto; }
 }
 
-/* Review bar: bottom-left, Desktop/Mobile stacked above Review */
+/* Review bar: bottom-left */
 .rf-pill-bar { right: auto; left: 20px; bottom: 20px; flex-direction: column; align-items: stretch; gap: 8px; }
 .rf-pill-bar .rf-pill { justify-content: center; }
-.rf-pill-seg { justify-content: center; }
-.rf-panel { right: auto; left: 20px; bottom: 132px; }
+.rf-panel { right: auto; left: 20px; bottom: 80px; }
 
 /* Full floor plan page: status badges + legend */
 .fp-full .fp-room-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }

@@ -218,6 +218,7 @@ export default function CompanySettingsPage({ defaultInvoiceKind, onDefaultInvoi
           onClose={() => setInvoicesModalOpen(false)}
           defaultInvoiceKind={defaultInvoiceKind}
           onDefaultInvoiceKindChange={onDefaultInvoiceKindChange}
+          clientPreviewVariant="proposed"
         />
       )}
     </div>
