@@ -40,7 +40,6 @@ import ChangeOrderPage, { type COInvoiceTarget } from './components/ChangeOrderP
 import ChangeOrderListPage from './components/ChangeOrderListPage';
 import EstimatePage from './components/EstimatePage';
 import ProposalPage from './components/ProposalPage';
-import InvoiceTypePreviewPage from './components/InvoiceTypePreviewPage';
 import ClientSelections from './components/ClientSelections';
 import ClientSelectionsWorkshop from './components/ClientSelectionsWorkshop';
 import ClientSelections2 from './components/ClientSelections2';
@@ -55,9 +54,6 @@ import OpenbookFlow from './components/OpenbookFlow';
 import OwnerInvoicesPage from './components/OwnerInvoicesPage';
 import JobDetailsPage from './components/JobDetailsPage';
 import CompanySettingsPage from './components/CompanySettingsPage';
-import InvoiceExplorationPage, { type CadencePlacement } from './components/InvoiceExplorationPage';
-import { type Cadence } from './components/CadenceQuestion';
-import ExplorationInvoicesPage from './components/ExplorationInvoicesPage';
 import BillsGridPage from './components/BillsGridPage';
 import { type InvoiceCadence } from './components/InvoiceScheduleModal';
 import { JOBS, INVOICE_TEMPLATES } from './mockData';
@@ -65,9 +61,9 @@ import { getNextId } from './mockData';
 import { TIME_INTERVAL_DEMO_INVOICES, JULY_TIME_INTERVAL_ITEMS, type DemoInvoiceRow } from './mockData';
 import type { InvoicingMode, DrawScheduleLine, Job } from './types';
 
-type PageType = 'invoice' | 'invoice-2' | 'invoice-3' | 'invoice-3-modal' | 'invoice-full-page' | 'invoice-full-page-reimagined' | 'client-preview-invoice' | 'client-preview-invoice-old' | 'client-preview-modal' | 'job-price-summary' | 'selections' | 'selections-workshop' | 'option-detail' | 'progress-invoice' | 'change-order' | 'change-order-list' | 'client-portal' | 'client-jps' | 'estimate' | 'estimate-ob' | 'job-proposal' | 'job-proposal-ob' | 'client-selections' | 'client-selections-workshop' | 'client-selections-2' | 'client-selections-3' | 'job-costing-budget' | 'underage-flows' | 'job-details-clients' | 'owner-invoices' | 'openbook' | 'job-details' | 'company-settings' | 'bills' | 'invoice-exploration' | 'invoice-type-preview';
+type PageType = 'invoice' | 'invoice-2' | 'invoice-3' | 'invoice-3-modal' | 'invoice-full-page' | 'invoice-full-page-reimagined' | 'invoice-full-page-reimagined-2' | 'client-preview-invoice' | 'client-preview-invoice-old' | 'client-preview-modal' | 'job-price-summary' | 'selections' | 'selections-workshop' | 'option-detail' | 'progress-invoice' | 'change-order' | 'change-order-list' | 'client-portal' | 'client-jps' | 'estimate' | 'estimate-ob' | 'job-proposal' | 'job-proposal-ob' | 'client-selections' | 'client-selections-workshop' | 'client-selections-2' | 'client-selections-3' | 'job-costing-budget' | 'underage-flows' | 'job-details-clients' | 'owner-invoices' | 'openbook' | 'job-details' | 'company-settings' | 'bills';
 
-const validPages: PageType[] = ['invoice', 'invoice-2', 'invoice-3', 'invoice-3-modal', 'invoice-full-page', 'invoice-full-page-reimagined', 'client-preview-invoice', 'client-preview-invoice-old', 'client-preview-modal', 'job-price-summary', 'selections', 'selections-workshop', 'option-detail', 'progress-invoice', 'change-order', 'change-order-list', 'client-portal', 'client-jps', 'estimate', 'estimate-ob', 'job-proposal', 'job-proposal-ob', 'client-selections', 'client-selections-workshop', 'client-selections-2', 'client-selections-3', 'job-costing-budget', 'underage-flows', 'job-details-clients', 'owner-invoices', 'openbook', 'job-details', 'company-settings', 'bills', 'invoice-exploration', 'invoice-type-preview'];
+const validPages: PageType[] = ['invoice', 'invoice-2', 'invoice-3', 'invoice-3-modal', 'invoice-full-page', 'invoice-full-page-reimagined', 'invoice-full-page-reimagined-2', 'client-preview-invoice', 'client-preview-invoice-old', 'client-preview-modal', 'job-price-summary', 'selections', 'selections-workshop', 'option-detail', 'progress-invoice', 'change-order', 'change-order-list', 'client-portal', 'client-jps', 'estimate', 'estimate-ob', 'job-proposal', 'job-proposal-ob', 'client-selections', 'client-selections-workshop', 'client-selections-2', 'client-selections-3', 'job-costing-budget', 'underage-flows', 'job-details-clients', 'owner-invoices', 'openbook', 'job-details', 'company-settings', 'bills'];
 
 function getInitialPage(): PageType {
   // Support ?page=X query param (used when hash is occupied by Figma capture)
@@ -201,7 +197,7 @@ export default function App() {
   // without the default immediately reapplying. Switching jobs re-applies,
   // since it's a different job's rule.
   useEffect(() => {
-    if (activePage !== 'invoice-full-page-reimagined') return;
+    if (activePage !== 'invoice-full-page-reimagined' && activePage !== 'invoice-full-page-reimagined-2') return;
     const kind = pendingKindRef.current !== undefined ? pendingKindRef.current : jobDefaultInvoiceKind;
     pendingKindRef.current = undefined;
     setReimaginedKind(kind);
@@ -348,6 +344,9 @@ export default function App() {
     setActivePage('invoice-full-page-reimagined');
   };
   const [customizePanelOpen, setCustomizePanelOpen] = useState(true);
+  // Reimagined 2: the rail opens from the header's ellipsis menu instead.
+  const [splitCustomizeOpen, setSplitCustomizeOpen] = useState(false);
+  const [headerMenuOpen, setHeaderMenuOpen] = useState(false);
   const [clientHideLineItems, setClientHideLineItems] = useState(false);
   const [clientShowQrCode, setClientShowQrCode] = useState(false);
   const [clientShowCustomFields, setClientShowCustomFields] = useState(false);
@@ -422,28 +421,12 @@ export default function App() {
   // Invoices the job actually has in that loop. Created in one go from a
   // payment schedule, one per draw.
   const [createdInvoicesByJob, setCreatedInvoicesByJob] = useState<Record<number, DemoInvoiceRow[]>>({});
+  // Which page the open invoice should return to on Cancel.
+  const [invoiceReturnPage, setInvoiceReturnPage] = useState<PageType>('owner-invoices');
   /* "Create" on the schedule: every draw becomes an Unreleased invoice, and the
      job's default invoice type becomes Standard. The schedule has answered the
      cadence question, so the next "+ Invoice" shouldn't ask it again — it opens
      a standard invoice, switchable from the invoice itself. */
-  /* The exploration page's own state. Kept out of the by-job maps on purpose:
-     poking at a sandbox shouldn't leave a schedule or a draft behind on the
-     job the other routes are demoed with. */
-  const [explorationDraws, setExplorationDraws] = useState<DrawScheduleLine[]>([]);
-  const [explorationInvoices, setExplorationInvoices] = useState<DemoInvoiceRow[]>([]);
-  const [explorationDefaultKind, setExplorationDefaultKind] = useState<'regular' | 'progress'>('regular');
-  const [explorationJobKind, setExplorationJobKind] = useState<'regular' | 'progress' | null>(null);
-  // Which placement of the cadence question is being tried, and its answer.
-  const [cadencePlacement, setCadencePlacement] = useState<CadencePlacement>('empty-state');
-  /* Which page the open invoice should return to. The exploration page opens
-     invoices the same way the Financial > Invoice loop does, so without this
-     Cancel would drop a builder onto the grid they didn't come from. */
-  const [invoiceReturnPage, setInvoiceReturnPage] = useState<PageType>('owner-invoices');
-  const [explorationCadence, setExplorationCadence] = useState<Cadence | null>(null);
-  /* Interval's step 2 sets an invoice schedule, so this route needs somewhere
-     to keep the dates. Local for the same reason as the draws: poking at the
-     sandbox shouldn't leave a cadence on the demo job. */
-  const [explorationInvoiceCadence, setExplorationInvoiceCadence] = useState<InvoiceCadence | null>(null);
 
   const createInvoicesFromSchedule = (draws: DrawScheduleLine[]) => {
     const jobId = currentJobWithOverrides.id;
@@ -1200,92 +1183,6 @@ export default function App() {
     );
   }
 
-  /* Concept: the invoice type is picked on the invoice, and the document is a
-     tab away rather than a pane beside it. Its own page so the type-first
-     dialog on the other routes stays as it is while this is compared to it. */
-  if (activePage === 'invoice-type-preview') {
-    return (
-      <div style={{display: 'flex', flexDirection: 'column', height: '100vh'}}>
-        <TopNav onNavigate={(page) => setActivePage(page as PageType)} />
-        <div style={{flex: 1, minHeight: 0, overflow: 'hidden'}}>
-          <InvoiceTypePreviewPage
-            job={currentJobWithOverrides}
-            onExit={() => setActivePage('owner-invoices')}
-          />
-        </div>
-      </div>
-    );
-  }
-
-  if (activePage === 'invoice-exploration') {
-    /* The exploration banner sits above a working copy of the fixed-price
-       invoices page, so an idea gets tried on the real surface instead of a
-       stand-in header. The copy is its own file (ExplorationInvoicesPage), free
-       to diverge without touching the routes stakeholders walk through. */
-    const explorationJob = { ...currentJobWithOverrides, drawSchedule: explorationDraws };
-    const addExplorationInvoice = (title: string) => setExplorationInvoices(prev => [
-      ...prev,
-      { id: String(prev.length + 1).padStart(4, '0'), title, status: 'Unreleased' as const, amount: 0 },
-    ]);
-    return (
-      <div style={{display: 'flex', flexDirection: 'column', height: '100vh'}}>
-        <TopNav onNavigate={(page) => setActivePage(page as PageType)} />
-        <div style={{flex: 1, overflowY: 'auto'}}>
-          <InvoiceExplorationPage
-            placement={cadencePlacement}
-            onPlacementChange={setCadencePlacement}
-            answer={explorationCadence}
-            onReset={() => { setExplorationCadence(null); setExplorationInvoices([]); setExplorationDraws([]); setExplorationJobKind(null); setExplorationInvoiceCadence(null); }}
-          />
-          <ExplorationInvoicesPage
-            job={explorationJob}
-            showModePicker={false}
-            onSetInvoicingMode={() => {}}
-            onRequestChangeMode={() => {}}
-            onAddInvoice={() => {}}
-            onAddInvoiceSmart={() => {}}
-            onSavePaymentSchedule={setExplorationDraws}
-            onDeletePaymentSchedule={() => setExplorationDraws([])}
-            invoiceCadence={explorationInvoiceCadence}
-            onSaveInvoiceCadence={setExplorationInvoiceCadence}
-            onDeleteInvoiceCadence={() => setExplorationInvoiceCadence(null)}
-            /* Fixed price, no invoices yet: the same configuration Financial >
-               Invoice > Fixed opens on. */
-            emptyState
-            invoiceTypeChoices={['standard', 'progress']}
-            createdInvoices={explorationInvoices}
-            onCreateInvoicesFromSchedule={(draws) => {
-              setExplorationDraws(draws);
-              setExplorationInvoices(draws.map(d => ({
-                id: String(d.drawNumber).padStart(4, '0'),
-                title: d.title,
-                status: 'Unreleased' as const,
-                amount: d.amount,
-              })));
-              setExplorationJobKind('regular');
-            }}
-            /* Create opens the actual invoice, standard or progress, using the
-               same handler the Financial > Invoice loop uses. A row appearing in
-               the grid was enough to see the modal flow, but it stopped short of
-               the thing the flow exists to reach. */
-            onAddInvoiceDirect={(choice, makeDefault) => {
-              addExplorationInvoice(choice === 'progress' ? 'Progress invoice' : 'Standard invoice');
-              if (makeDefault) setExplorationJobKind(choice === 'progress' ? 'progress' : 'regular');
-              startBaseInvoiceOfType(choice, false, 'invoice-exploration');
-            }}
-            onImportTemplate={(templateId) => addExplorationInvoice(`From template ${templateId}`)}
-            cadencePlacement={cadencePlacement}
-            cadenceAnswer={explorationCadence}
-            onCadenceAnswer={setExplorationCadence}
-            jobDefaultInvoiceKind={explorationJobKind}
-            defaultInvoiceKind={explorationDefaultKind}
-            onDefaultInvoiceKindChange={setExplorationDefaultKind}
-          />
-        </div>
-      </div>
-    );
-  }
-
   if (activePage === 'company-settings') {
     return (
       <div style={{display: 'flex', flexDirection: 'column', height: '100vh'}}>
@@ -1585,7 +1482,8 @@ export default function App() {
   // section leads with a Regular / Progress decision instead of a Flat fee /
   // Line items toggle — everything else about the page is identical, so it
   // travels with 'invoice-full-page' through all the layout flags below.
-  const isReimaginedFullPage = activePage === 'invoice-full-page-reimagined';
+  const isSplitReimagined = activePage === 'invoice-full-page-reimagined-2';
+  const isReimaginedFullPage = activePage === 'invoice-full-page-reimagined' || isSplitReimagined;
   const isFullPageInvoice = activePage === 'invoice-full-page' || isReimaginedFullPage;
   /* Financial > Invoice: the reference copy of today's product, the baseline
      the other routes are compared against. So it carries the shipped field set
@@ -1636,7 +1534,7 @@ export default function App() {
   // hide it; it now gets the same top-level tab as every other invoice-3
   // presentation, carrying over the same client-preview data and Customize
   // panel that split view already used.
-  const useTabsLayout = showInvoiceAsModal || isFullPageInvoice || isBaseInvoicePage;
+  const useTabsLayout = showInvoiceAsModal || (isFullPageInvoice && !isSplitReimagined) || isBaseInvoicePage;
   /* Invoice (modal - OB) only: the combined views open as their own centered
      dialog rather than docking beside the invoice. The invoice is already a
      modal on this route, so a panel splits one overlay into two competing
@@ -1694,6 +1592,142 @@ export default function App() {
       >
         Client preview
       </button>
+    </div>
+  );
+
+  // The Customize view rail, shared by the tab layout and the split layout.
+  const renderCustomizeRail = (closeCustomize: () => void) => (
+    <div style={{ width: 280, flexShrink: 0, borderLeft: '1px solid var(--g200)', background: 'white', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <div style={{ flex: 1, overflowY: 'auto', padding: 20 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+          <strong style={{ fontSize: 14 }}>Customize view</strong>
+          <button
+            type="button"
+            onClick={closeCustomize}
+            aria-label="Close customize panel"
+            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, lineHeight: 1, color: 'var(--g500)', padding: 4 }}
+          >
+            ×
+          </button>
+        </div>
+
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--g500)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: 0.3 }}>Display to client</div>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--g700)', cursor: 'pointer', marginBottom: 10 }}>
+            <input type="checkbox" checked={clientHideLineItems} onChange={e => { setClientHideLineItems(e.target.checked); setCustomizeSavedAsDefault(false); }} />
+            Hide line items
+          </label>
+          {!clientHideLineItems && (
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--g700)', cursor: 'pointer' }}>
+              <input type="checkbox" checked={clientGroupBy === 'costcode'} onChange={e => { setClientGroupBy(e.target.checked ? 'costcode' : 'estimate'); setCustomizeSavedAsDefault(false); }} />
+              Combine line items by cost code
+            </label>
+          )}
+        </div>
+
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--g500)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.3 }}>Columns</div>
+          <ClientColumnChips columns={clientVis} onChange={v => { setClientVis(v); setCustomizeSavedAsDefault(false); }} />
+          <div style={{ fontSize: 11, color: 'var(--g400)', marginTop: 6 }}>Description and Amount always show.</div>
+        </div>
+
+        {/* Backup detail sits between Columns and General information
+            because it is neither: columns are a layout question, general
+            information is boilerplate, and this is a disclosure question
+            about where the money went. Only reachable when line items
+            show at all — there is nothing to nest backup under otherwise. */}
+        {!clientHideLineItems && (
+          <div style={{ marginBottom: 20 }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--g500)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.3 }}>Backup detail</div>
+            <div style={{ fontSize: 11, color: 'var(--g400)', marginBottom: 10, lineHeight: 1.45 }}>
+              {isOpenBookJob
+                ? 'This job is open book, so the client is entitled to see where their money went.'
+                : 'This job is fixed price. The client is buying a result, not your costs.'}
+            </div>
+            {CLIENT_DETAIL_OPTIONS.map(o => (
+              <label key={o.key} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13, color: 'var(--g700)', cursor: 'pointer', marginBottom: 10 }}>
+                <input
+                  type="checkbox"
+                  checked={!!clientDetail[o.key]}
+                  onChange={e => { setClientDetail({ ...clientDetail, [o.key]: e.target.checked }); setCustomizeSavedAsDefault(false); }}
+                  style={{ marginTop: 2 }}
+                />
+                <span>
+                  {o.label}
+                  <span style={{ display: 'block', fontSize: 11, color: 'var(--g400)', marginTop: 1 }}>{o.hint}</span>
+                </span>
+              </label>
+            ))}
+            {clientDetail.laborDetail && !isOpenBookJob && (
+              <div style={{ fontSize: 11, color: 'var(--g600)', lineHeight: 1.45, background: 'var(--amber-bg, #fff8e6)', border: '1px solid var(--g200)', borderRadius: 4, padding: '6px 8px' }}>
+                This shows each person's hourly rate to the client.
+              </div>
+            )}
+            <div style={{ fontSize: 11, color: 'var(--g400)', marginTop: 2, lineHeight: 1.45 }}>
+              Lines from the estimate, change orders or selections have no backup to show.
+            </div>
+          </div>
+        )}
+
+        <div>
+          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--g500)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: 0.3 }}>General information</div>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--g700)', cursor: 'pointer', marginBottom: 10 }}>
+            <input type="checkbox" checked={clientShowQrCode} onChange={e => { setClientShowQrCode(e.target.checked); setCustomizeSavedAsDefault(false); }} />
+            QR code
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--g700)', cursor: 'pointer', marginBottom: 10 }}>
+            <input type="checkbox" checked={clientShowCustomFields} onChange={e => { setClientShowCustomFields(e.target.checked); setCustomizeSavedAsDefault(false); }} />
+            Custom fields
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--g700)', cursor: 'pointer' }}>
+            <input type="checkbox" checked={clientShowDescription} onChange={e => { setClientShowDescription(e.target.checked); setCustomizeSavedAsDefault(false); }} />
+            Description
+          </label>
+          {clientShowDescription && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8, paddingLeft: 22 }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--g700)', cursor: 'pointer' }}>
+                <input type="checkbox" checked={clientShowIntroText} onChange={e => { setClientShowIntroText(e.target.checked); setCustomizeSavedAsDefault(false); }} />
+                Intro text
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--g700)', cursor: 'pointer' }}>
+                <input type="checkbox" checked={clientShowClosingText} onChange={e => { setClientShowClosingText(e.target.checked); setCustomizeSavedAsDefault(false); }} />
+                Closing text
+              </label>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div style={{ flexShrink: 0, borderTop: '1px solid var(--g200)', padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {customizeSavedAsDefault && (
+          <div style={{ fontSize: 12, color: 'var(--green, #1a7f4e)', display: 'flex', alignItems: 'center', gap: 4 }}>✓ Saved as default</div>
+        )}
+        <div className="bds-scope" style={{ display: 'flex', gap: 6 }}>
+          <BdsButton
+            displayType="secondary"
+            text="Reset"
+            style={{ flex: 1 }}
+            onClick={() => {
+              setClientHideLineItems(false);
+              setClientGroupBy(DEFAULT_CLIENT_GROUP_BY);
+              setClientVis(DEFAULT_CLIENT_VIS);
+              setClientShowQrCode(false);
+              setClientShowCustomFields(false);
+              setClientShowDescription(true);
+              setClientShowIntroText(true);
+              setClientShowClosingText(false);
+              setClientDetail({});
+              setCustomizeSavedAsDefault(false);
+            }}
+          />
+          <BdsButton
+            displayType="primary"
+            text="Set as default"
+            style={{ flex: 1 }}
+            onClick={() => setCustomizeSavedAsDefault(true)}
+          />
+        </div>
+      </div>
     </div>
   );
 
@@ -1928,8 +1962,40 @@ export default function App() {
             ← Back to Invoices
           </button>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, marginTop: 12, flexWrap: 'wrap' }}>
-            {renderDetailsTabs()}
+            {isSplitReimagined ? <span /> : renderDetailsTabs()}
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+              {isSplitReimagined && (
+                <div style={{ position: 'relative' }}>
+                  <button
+                    type="button"
+                    className="btn btn-s"
+                    aria-label="More actions"
+                    aria-haspopup="menu"
+                    aria-expanded={headerMenuOpen}
+                    onClick={() => setHeaderMenuOpen(o => !o)}
+                    style={{ padding: '0 10px', fontSize: 18, lineHeight: 1, letterSpacing: 1 }}
+                  >
+                    …
+                  </button>
+                  {headerMenuOpen && (
+                    <>
+                      <div onClick={() => setHeaderMenuOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 40 }} />
+                      <div role="menu" style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, zIndex: 41, minWidth: 160, background: 'white', border: '1px solid var(--g200)', borderRadius: 6, boxShadow: '0 4px 16px rgba(0,0,0,0.12)', padding: 4 }}>
+                        <button
+                          type="button"
+                          role="menuitem"
+                          className="topnav-dropdown-item"
+                          disabled={showProgressClientPreview}
+                          title={showProgressClientPreview ? 'Customize applies to the line-item invoice, not the pay application' : undefined}
+                          onClick={() => { setSplitCustomizeOpen(true); setHeaderMenuOpen(false); }}
+                        >
+                          Customize
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
               <button className="btn btn-s" onClick={() => { setInvoice(defaultInvoice); setAutoFilledDraw(null); leaveInvoice(); }}>Cancel</button>
               <button className="btn btn-s">Save</button>
               <button className="btn btn-p">
@@ -1945,7 +2011,37 @@ export default function App() {
         <PageHeader invoice={invoice} jobOpen={jobOpen} onToggleJob={() => setJobOpen(true)} onClose={leaveInvoice} flush={showInvoiceAsModal || isBaseInvoicePage} />
       )}
 
-      {useTabsLayout ? (
+      {isSplitReimagined ? (
+        /* Reimagined full page, 2: the same details form as the reimagined
+           page, with the client preview docked beside it instead of a tab
+           away, so a change on the left shows on the right as it is typed. */
+        <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+          <div className="builder builder-full builder-flush" style={{ flex: 1, minHeight: 0, minWidth: 0 }}>
+            {renderDetailsForm()}
+          </div>
+          <div style={{ flex: 1, minWidth: 0, overflowY: 'auto', padding: 24, background: 'var(--g50)', borderLeft: '1px solid var(--g200)' }}>
+            {showProgressClientPreview ? (
+              <AiaPreview job={currentJobWithOverrides} />
+            ) : (
+              <ClientPreview
+                invoice={invoice}
+                clientVis={clientVis}
+                clientDetail={clientDetail}
+                groupBy={clientGroupBy}
+                hideLineItems={clientHideLineItems}
+                showQrCode={clientShowQrCode}
+                showCustomFields={clientShowCustomFields}
+                showDescription={clientShowDescription}
+                showIntroText={clientShowIntroText}
+                showClosingText={clientShowClosingText}
+                maxWidth={780}
+                minHeight="100%"
+              />
+            )}
+          </div>
+          {!showProgressClientPreview && splitCustomizeOpen && renderCustomizeRail(() => setSplitCustomizeOpen(false))}
+        </div>
+      ) : useTabsLayout ? (
         <>
           {(showInvoiceAsModal || isBaseInvoicePage) && (
             <div style={{ padding: '16px 24px', borderBottom: '1px solid var(--g200)', flexShrink: 0, background: 'white' }}>
@@ -2078,140 +2174,7 @@ export default function App() {
                 )}
               </div>
 
-              {!showProgressClientPreview && customizePanelOpen && (
-                <div style={{ width: 280, flexShrink: 0, borderLeft: '1px solid var(--g200)', background: 'white', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-                  <div style={{ flex: 1, overflowY: 'auto', padding: 20 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-                      <strong style={{ fontSize: 14 }}>Customize view</strong>
-                      <button
-                        type="button"
-                        onClick={() => setCustomizePanelOpen(false)}
-                        aria-label="Close customize panel"
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, lineHeight: 1, color: 'var(--g500)', padding: 4 }}
-                      >
-                        ×
-                      </button>
-                    </div>
-
-                    <div style={{ marginBottom: 20 }}>
-                      <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--g500)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: 0.3 }}>Display to client</div>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--g700)', cursor: 'pointer', marginBottom: 10 }}>
-                        <input type="checkbox" checked={clientHideLineItems} onChange={e => { setClientHideLineItems(e.target.checked); setCustomizeSavedAsDefault(false); }} />
-                        Hide line items
-                      </label>
-                      {!clientHideLineItems && (
-                        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--g700)', cursor: 'pointer' }}>
-                          <input type="checkbox" checked={clientGroupBy === 'costcode'} onChange={e => { setClientGroupBy(e.target.checked ? 'costcode' : 'estimate'); setCustomizeSavedAsDefault(false); }} />
-                          Combine line items by cost code
-                        </label>
-                      )}
-                    </div>
-
-                    <div style={{ marginBottom: 20 }}>
-                      <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--g500)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.3 }}>Columns</div>
-                      <ClientColumnChips columns={clientVis} onChange={v => { setClientVis(v); setCustomizeSavedAsDefault(false); }} />
-                      <div style={{ fontSize: 11, color: 'var(--g400)', marginTop: 6 }}>Description and Amount always show.</div>
-                    </div>
-
-                    {/* Backup detail sits between Columns and General information
-                        because it is neither: columns are a layout question, general
-                        information is boilerplate, and this is a disclosure question
-                        about where the money went. Only reachable when line items
-                        show at all — there is nothing to nest backup under otherwise. */}
-                    {!clientHideLineItems && (
-                      <div style={{ marginBottom: 20 }}>
-                        <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--g500)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.3 }}>Backup detail</div>
-                        <div style={{ fontSize: 11, color: 'var(--g400)', marginBottom: 10, lineHeight: 1.45 }}>
-                          {isOpenBookJob
-                            ? 'This job is open book, so the client is entitled to see where their money went.'
-                            : 'This job is fixed price. The client is buying a result, not your costs.'}
-                        </div>
-                        {CLIENT_DETAIL_OPTIONS.map(o => (
-                          <label key={o.key} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13, color: 'var(--g700)', cursor: 'pointer', marginBottom: 10 }}>
-                            <input
-                              type="checkbox"
-                              checked={!!clientDetail[o.key]}
-                              onChange={e => { setClientDetail({ ...clientDetail, [o.key]: e.target.checked }); setCustomizeSavedAsDefault(false); }}
-                              style={{ marginTop: 2 }}
-                            />
-                            <span>
-                              {o.label}
-                              <span style={{ display: 'block', fontSize: 11, color: 'var(--g400)', marginTop: 1 }}>{o.hint}</span>
-                            </span>
-                          </label>
-                        ))}
-                        {clientDetail.laborDetail && !isOpenBookJob && (
-                          <div style={{ fontSize: 11, color: 'var(--g600)', lineHeight: 1.45, background: 'var(--amber-bg, #fff8e6)', border: '1px solid var(--g200)', borderRadius: 4, padding: '6px 8px' }}>
-                            This shows each person's hourly rate to the client.
-                          </div>
-                        )}
-                        <div style={{ fontSize: 11, color: 'var(--g400)', marginTop: 2, lineHeight: 1.45 }}>
-                          Lines from the estimate, change orders or selections have no backup to show.
-                        </div>
-                      </div>
-                    )}
-
-                    <div>
-                      <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--g500)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: 0.3 }}>General information</div>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--g700)', cursor: 'pointer', marginBottom: 10 }}>
-                        <input type="checkbox" checked={clientShowQrCode} onChange={e => { setClientShowQrCode(e.target.checked); setCustomizeSavedAsDefault(false); }} />
-                        QR code
-                      </label>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--g700)', cursor: 'pointer', marginBottom: 10 }}>
-                        <input type="checkbox" checked={clientShowCustomFields} onChange={e => { setClientShowCustomFields(e.target.checked); setCustomizeSavedAsDefault(false); }} />
-                        Custom fields
-                      </label>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--g700)', cursor: 'pointer' }}>
-                        <input type="checkbox" checked={clientShowDescription} onChange={e => { setClientShowDescription(e.target.checked); setCustomizeSavedAsDefault(false); }} />
-                        Description
-                      </label>
-                      {clientShowDescription && (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8, paddingLeft: 22 }}>
-                          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--g700)', cursor: 'pointer' }}>
-                            <input type="checkbox" checked={clientShowIntroText} onChange={e => { setClientShowIntroText(e.target.checked); setCustomizeSavedAsDefault(false); }} />
-                            Intro text
-                          </label>
-                          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--g700)', cursor: 'pointer' }}>
-                            <input type="checkbox" checked={clientShowClosingText} onChange={e => { setClientShowClosingText(e.target.checked); setCustomizeSavedAsDefault(false); }} />
-                            Closing text
-                          </label>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  <div style={{ flexShrink: 0, borderTop: '1px solid var(--g200)', padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    {customizeSavedAsDefault && (
-                      <div style={{ fontSize: 12, color: 'var(--green, #1a7f4e)', display: 'flex', alignItems: 'center', gap: 4 }}>✓ Saved as default</div>
-                    )}
-                    <div className="bds-scope" style={{ display: 'flex', gap: 6 }}>
-                      <BdsButton
-                        displayType="secondary"
-                        text="Reset"
-                        style={{ flex: 1 }}
-                        onClick={() => {
-                          setClientHideLineItems(false);
-                          setClientGroupBy(DEFAULT_CLIENT_GROUP_BY);
-                          setClientVis(DEFAULT_CLIENT_VIS);
-                          setClientShowQrCode(false);
-                          setClientShowCustomFields(false);
-                          setClientShowDescription(true);
-                          setClientShowIntroText(true);
-                          setClientShowClosingText(false);
-                          setClientDetail({});
-                          setCustomizeSavedAsDefault(false);
-                        }}
-                      />
-                      <BdsButton
-                        displayType="primary"
-                        text="Set as default"
-                        style={{ flex: 1 }}
-                        onClick={() => setCustomizeSavedAsDefault(true)}
-                      />
-                    </div>
-                  </div>
-                </div>
-              )}
+              {!showProgressClientPreview && customizePanelOpen && renderCustomizeRail(() => setCustomizePanelOpen(false))}
             </div>
           )}
         </>
@@ -2320,7 +2283,7 @@ export default function App() {
         // to be empty for the offer to mean anything. The lines arrive when the
         // builder takes it.
         if (page === 'invoice-full-page') setInvoice({ ...DEMO_INVOICE, lineItems: [] });
-        else if (page === 'invoice-full-page-reimagined') {
+        else if (page === 'invoice-full-page-reimagined' || page === 'invoice-full-page-reimagined-2') {
           // Start this one at the decision point with a blank invoice, since
           // picking a billing type is the first step of the flow.
           setInvoice(defaultInvoice);

@@ -201,17 +201,10 @@ export default function TopNav({ onNavigate }: TopNavProps) {
                         live version. The route still resolves at
                         #invoice-full-page if the old layout needs comparing. */}
                     <button className="topnav-dropdown-item" onClick={() => { setFinancialOpen(false); setFinancialSubmenu(null); onNavigate?.('invoice-full-page-reimagined'); }}>Full page - reimagined</button>
+                    <button className="topnav-dropdown-item" onClick={() => { setFinancialOpen(false); setFinancialSubmenu(null); onNavigate?.('invoice-full-page-reimagined-2'); }}>Full page - reimagined 2</button>
                     {/* Grid, not invoice: this one opens the invoices list, and
                         the old label read as another invoice presentation. */}
                     <button className="topnav-dropdown-item" onClick={() => { setFinancialOpen(false); setFinancialSubmenu(null); onNavigate?.('owner-invoices'); }}>Invoice grid (reimagined)</button>
-                    {/* Type picked on the invoice, document a tab away. Sits
-                        with the other presentations because that's what it is:
-                        the same invoice, laid out differently. */}
-                    <button className="topnav-dropdown-item" onClick={() => { setFinancialOpen(false); setFinancialSubmenu(null); onNavigate?.('invoice-type-preview'); }}>Type + preview</button>
-                    {/* Scratch surface, last in the list: it holds ideas that
-                        aren't a route yet, so it shouldn't sit among the
-                        presentations a stakeholder is walked through. */}
-                    <button className="topnav-dropdown-item" onClick={() => { setFinancialOpen(false); setFinancialSubmenu(null); onNavigate?.('invoice-exploration'); }}>Exploration</button>
                   </div>
                 )}
               </div>
