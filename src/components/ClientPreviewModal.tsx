@@ -51,8 +51,8 @@ type LineSource = 'estimate' | 'bill' | 'timeClock' | 'changeOrder' | 'selection
 
 const SOURCE_LABELS: Record<LineSource, string> = {
   estimate: 'Estimate',
-  bill: 'Bills',
-  timeClock: 'Time clock',
+  bill: 'Materials (bills and receipts)',
+  timeClock: 'Labor (time clock)',
   changeOrder: 'Change orders',
   selection: 'Selections',
 };
@@ -321,6 +321,11 @@ export default function ClientPreviewModal({ onClose }: { onClose?: () => void }
      the invoice without re-litigating lines that were agreed weeks ago. */
   const [hideChangeOrderLines, setHideChangeOrderLines] = useState(false);
   const [groupBy, setGroupBy] = useState<GroupBy>('estimate');
+  /* Open book "by cost source" groups have no natural order: Charlene Smith
+     wants labor at the bottom, Christine Haley wants it first. So the builder
+     sets it by dragging the group headings, and the client sees that order. */
+  const [sourceOrder, setSourceOrder] = useState<string[]>([]);
+  const [dragGroup, setDragGroup] = useState<string | null>(null);
   const [cols, setCols] = useState<ColKey[]>(['items', 'date', 'tax', 'unitCost', 'quantity', 'clientPrice', 'markup']);
   const [qrCode, setQrCode] = useState(false);
   const [customFields, setCustomFields] = useState(true);
@@ -561,12 +566,37 @@ export default function ClientPreviewModal({ onClose }: { onClose?: () => void }
       if (!byGroup[k]) { order.push(k); byGroup[k] = []; }
       byGroup[k].push(l);
     }
-    return order.map(name => ({
+    // Builder-set order wins; groups they haven't placed yet keep their natural
+    // position after the ones they have.
+    const rank = (n: string) => { const i = sourceOrder.indexOf(n); return i === -1 ? sourceOrder.length : i; };
+    const ordered = groupBy === 'source' ? [...order].sort((a, b) => rank(a) - rank(b)) : order;
+    return ordered.map(name => ({
       name,
       items: byGroup[name],
       subtotal: byGroup[name].reduce((s, l) => s + displayLinePrice(l), 0),
     }));
   })();
+
+  /* Open book's flat list reads in date order, since with no group headings
+     the date is the only thing telling a client what came when. Lines with no
+     date (selections) go last. Fixed price keeps the estimate's own order. */
+  const lineSortKey = (l: PreviewLine) => {
+    const m = l.date?.match(/(\d{2})\/(\d{2})(?:\/(\d{2}))?/);
+    if (!m) return Number.MAX_SAFE_INTEGER;
+    const yr = l.date!.match(/\/(\d{2})$/)?.[1] ?? '26';
+    return Number(yr) * 10000 + Number(m[1]) * 100 + Number(m[2]);
+  };
+  const flatLines = contractType === 'open-book'
+    ? [...standardLines].sort((a, b) => lineSortKey(a) - lineSortKey(b))
+    : standardLines;
+
+  const moveSourceGroup = (from: string, to: string) => {
+    if (from === to || !standardGroups) return;
+    const names = standardGroups.map(g => g.name);
+    names.splice(names.indexOf(from), 1);
+    names.splice(names.indexOf(to), 0, from);
+    setSourceOrder(names);
+  };
 
   // `depth` indents nested rows: 1 for a line under a group header, 2 for a
   // line under a change order nested inside a group.
@@ -603,11 +633,22 @@ export default function ClientPreviewModal({ onClose }: { onClose?: () => void }
 
   // A group/change-order header row: a title with its rolled-up price, which
   // is the one-price-per-group view builders keep asking for.
-  const renderGroupRow = (key: string, name: string, groupSubtotal: number, className: string, lines?: PreviewLine[], depth = 0) => {
+  const renderGroupRow = (key: string, name: string, groupSubtotal: number, className: string, lines?: PreviewLine[], depth = 0, reorderable = false) => {
     const taxLabel = lines ? groupTaxLabel(lines) : null;
     return (
-      <tr key={key} className={className}>
-        <td><span style={{ paddingLeft: depth * 16, display: 'inline-block' }}>{name}</span></td>
+      <tr
+        key={key}
+        className={className + (reorderable ? ' cpm-grp-drag' : '') + (reorderable && dragGroup === name ? ' is-dragging' : '')}
+        draggable={reorderable || undefined}
+        onDragStart={reorderable ? e => { setDragGroup(name); e.dataTransfer.effectAllowed = 'move'; } : undefined}
+        onDragOver={reorderable ? e => { if (dragGroup) e.preventDefault(); } : undefined}
+        onDrop={reorderable ? e => { e.preventDefault(); if (dragGroup) moveSourceGroup(dragGroup, name); setDragGroup(null); } : undefined}
+        onDragEnd={reorderable ? () => setDragGroup(null) : undefined}
+      >
+        <td>
+          {reorderable && <span className="cpm-grp-handle" aria-label={`Drag to reorder ${name}`} title="Drag to reorder">⋮⋮</span>}
+          <span style={{ paddingLeft: depth * 16, display: 'inline-block' }}>{name}</span>
+        </td>
         {showDate && <td></td>}
         {showQty && <td></td>}
         {showUnitCost && <td></td>}
@@ -875,16 +916,19 @@ export default function ClientPreviewModal({ onClose }: { onClose?: () => void }
                       lines that make it up, which is the point of asking for
                       that grouping. Unshaded, because the row IS the billed
                       line now. Every other grouping heads its visible lines. */}
+                  {/* Open book is the exception: its client is paying actuals and
+                      is entitled to see which bills sit under each code, so the
+                      cost-code heading keeps its lines nested beneath it. */}
                   {standardGroups
                     ? standardGroups.flatMap(g =>
-                        groupBy === 'costcode'
+                        groupBy === 'costcode' && contractType !== 'open-book'
                           ? [renderGroupRow(`grp-${g.name}`, g.name, g.subtotal, 'cpi-co-collapsed', g.items)]
                           : [
-                              renderGroupRow(`grp-${g.name}`, g.name, g.subtotal, 'cpi-grp-row', g.items),
+                              renderGroupRow(`grp-${g.name}`, g.name, g.subtotal, 'cpi-grp-row', g.items, 0, groupBy === 'source'),
                               ...g.items.map(l => renderLineRow(l, 1)),
                             ]
                       )
-                    : standardLines.map(l => renderLineRow(l, 0))}
+                    : flatLines.map(l => renderLineRow(l, 0))}
 
                   {/* Change orders get one heading of their own, the way Bills
                       or Labor do, totalling every change order on the
@@ -1261,20 +1305,26 @@ export default function ClientPreviewModal({ onClose }: { onClose?: () => void }
                     that switch and goes away when they're hidden. */}
                 {!hideLineItems && (
                   <div className="cpm-nested">
-                    {/* Fixed price bills the estimate, so the first option
-                        reads "Estimate", the grouping that matches the
-                        proposal the client approved. Open book has no
-                        estimate behind its lines, so it offers "Cost source"
-                        (the bills and hours) in that slot. */}
+                    {/* Fixed price bills the estimate, so it leads with
+                        "Estimate", the grouping that matches the proposal the
+                        client approved. Open book leads with "Cost source"
+                        (the bills and hours) and offers Estimate as a
+                        fourth way in, for the cost plus builders who put the
+                        proposal's groups on the invoice. */}
                     <div className="cpi-rail-sublabel">Group by</div>
-                    <div className="client-group-toggle" role="tablist" aria-label="Group line items for client">
-                      {([
-                        contractType === 'open-book'
-                          ? { value: 'source' as const, label: 'Cost source' }
-                          : { value: 'estimate' as const, label: 'Estimate' },
-                        { value: 'costcode' as const, label: 'Cost code' },
-                        { value: 'all' as const, label: 'All line items' },
-                      ] as { value: GroupBy; label: string }[]).map(o => (
+                    <div className={'client-group-toggle' + (contractType === 'open-book' ? ' cpm-group-4' : '')} role="tablist" aria-label="Group line items for client">
+                      {((contractType === 'open-book'
+                        ? [
+                            { value: 'source', label: 'Cost source' },
+                            { value: 'costcode', label: 'Cost code' },
+                            { value: 'estimate', label: 'Estimate' },
+                            { value: 'all', label: 'All line items' },
+                          ]
+                        : [
+                            { value: 'estimate', label: 'Estimate' },
+                            { value: 'costcode', label: 'Cost code' },
+                            { value: 'all', label: 'All line items' },
+                          ]) as { value: GroupBy; label: string }[]).map(o => (
                         <button
                           key={o.value}
                           type="button"
@@ -1287,6 +1337,10 @@ export default function ClientPreviewModal({ onClose }: { onClose?: () => void }
                         </button>
                       ))}
                     </div>
+
+                    {contractType === 'open-book' && groupBy === 'source' && (
+                      <div className="cpm-hint">Drag the handles on the invoice to set the group order.</div>
+                    )}
 
                     {/* Whether a change order lists its lines or collapses to
                         its title and approved total. Only offered when the

@@ -7066,6 +7066,8 @@ button.jps-term-label { cursor: pointer; }
 .cpm-modal .client-group-toggle { display: flex; width: 100%; margin-right: 0; padding: 3px; border-radius: 8px; }
 .cpm-modal .client-group-tab { flex: 1; padding: 8px 10px; font-size: 13px; border-radius: 6px; white-space: nowrap; }
 .cpm-modal .cpm-nested .client-group-tab { padding: 7px 4px; font-size: 12px; }
+/* Open book offers four groupings, too many for one row in the rail. */
+.cpm-modal .client-group-toggle.cpm-group-4 { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; }
 /* Slightly wider rail on the modal page (base layout is 300px). Desktop only, so
    narrow screens still stack the panes and use the sheet. */
 @media (min-width: 1101px) {
@@ -7360,6 +7362,12 @@ button.jps-term-label { cursor: pointer; }
 /* A change order under the "Change orders" heading: a sub-heading, a step
    lighter than the group row (no fill, semibold). */
 .cpm-subgrp-row td { font-weight: 600; color: var(--bt-midnight) !important; border-bottom: 1px solid var(--g100) !important; }
+/* Open book "by cost source": the builder drags the group headings to set the
+   order the client reads them in. */
+.cpm-grp-drag { cursor: grab; }
+.cpm-grp-drag.is-dragging { opacity: .45; }
+.cpm-grp-handle { display: inline-block; margin-right: 8px; color: var(--g400); font-weight: 400; letter-spacing: -2px; user-select: none; }
+.cpm-hint { font-size: 12px; color: var(--g500); margin: -2px 0 4px; }
 .cpi-hidden-note { padding: 20px; text-align: center; font-size: 12px; color: var(--g500); font-style: italic; background: var(--g50); border: 1px solid var(--g200); border-radius: 8px; margin-bottom: 24px; }
 
 .cpi-block-body { font-size: 12px; color: var(--g700); line-height: 1.7; }
