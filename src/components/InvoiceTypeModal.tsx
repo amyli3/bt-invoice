@@ -98,9 +98,27 @@ interface Props {
      modal opens as a consequence of that answer rather than as a fresh
      question. Additive and optional: callers that don't pass it are unchanged. */
   answeredContext?: { answer: string };
+  /* Choosing Standard asks a second question before leaving the modal: pull
+     costs into the invoice, or set up a payment schedule. A payment schedule
+     produces a standard invoice per draw, so it belongs under Standard rather
+     than beside it. Off for callers with no schedule to offer (open book). */
+  askStandardSource?: boolean;
 }
 
-export default function InvoiceTypeModal({ job, onClose, onChoose, onImportTemplate, variant = 'new', initialChoice, choices, answeredContext }: Props) {
+const STANDARD_SOURCE_OPTIONS: { key: 'standard' | 'payment-schedule'; label: string; blurb: string }[] = [
+  {
+    key: 'standard',
+    label: 'Pull costs into an invoice',
+    blurb: 'Start from the costs on this job. Pick what to bill, line by line or as one flat fee.',
+  },
+  {
+    key: 'payment-schedule',
+    label: 'Set up a payment schedule',
+    blurb: 'Split the contract price into draws by percentage. Buildertrend creates an invoice for each draw, ready to send as each phase completes.',
+  },
+];
+
+export default function InvoiceTypeModal({ job, onClose, onChoose, onImportTemplate, variant = 'new', initialChoice, choices, answeredContext, askStandardSource = false }: Props) {
   const options = choices ? INVOICE_TYPE_OPTIONS.filter(o => choices.includes(o.key)) : INVOICE_TYPE_OPTIONS;
   const recommendation = recommendedChoice(job);
   /* The recommender answers across all three documents, so it can land on one
@@ -112,6 +130,8 @@ export default function InvoiceTypeModal({ job, onClose, onChoose, onImportTempl
     initialChoice ?? (showRecommendation ? recommendation.key : options[0].key)
   );
   const [makeDefault, setMakeDefault] = useState(false);
+  const [step, setStep] = useState<'type' | 'source'>('type');
+  const [source, setSource] = useState<'standard' | 'payment-schedule'>('standard');
   const [previewChoice, setPreviewChoice] = useState<InvoiceTypeChoice | null>(null);
   const recommendedLabel = INVOICE_TYPE_OPTIONS.find(o => o.key === recommendation.key)!.label;
 
@@ -119,10 +139,55 @@ export default function InvoiceTypeModal({ job, onClose, onChoose, onImportTempl
     <div className="modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="est-modal bds-scope" style={{ maxWidth: 860 }} onClick={(e) => e.stopPropagation()}>
         <div className="est-modal-hdr">
-          <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--bds-color-gray-90)', margin: 0 }}>How do you want to invoice this job?</h2>
+          <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--bds-color-gray-90)', margin: 0 }}>{step === 'source' ? 'How do you want to create this invoice?' : 'How do you want to invoice this job?'}</h2>
           <button className="est-modal-close" onClick={onClose}>&times;</button>
         </div>
 
+        {step === 'source' ? (
+          <div className="est-modal-body">
+            <div style={{ display: 'grid', gap: 14, gridTemplateColumns: 'repeat(2, 1fr)', marginTop: 4, marginBottom: 18 }}>
+              {STANDARD_SOURCE_OPTIONS.map(opt => {
+                const isSelected = opt.key === source;
+                return (
+                  <label
+                    key={opt.key}
+                    style={{
+                      textAlign: 'left', cursor: 'pointer', borderRadius: 'var(--bds-radius-lg)',
+                      border: isSelected ? '2px solid var(--bds-color-blue-70)' : '1px solid var(--bds-color-gray-25)',
+                      background: isSelected ? 'var(--bds-color-blue-5)' : '#fff',
+                      padding: '22px 18px 18px', display: 'flex', gap: 10, alignItems: 'flex-start',
+                    }}
+                  >
+                    <input
+                      type="radio"
+                      name="standard-source"
+                      checked={isSelected}
+                      onChange={() => setSource(opt.key)}
+                      style={{ marginTop: 3, width: 16, height: 16, accentColor: 'var(--bds-color-blue-70)', flexShrink: 0 }}
+                    />
+                    <span style={{ minWidth: 0 }}>
+                      <span style={{ display: 'block', fontWeight: 600, fontSize: 15, color: 'var(--bds-color-gray-90)' }}>{opt.label}</span>
+                      <span style={{ display: 'block', fontSize: 13, color: 'var(--bds-color-gray-60)', lineHeight: 1.45, marginTop: 4 }}>{opt.blurb}</span>
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+            {/* Only the pull-costs path produces a single invoice, so only it
+                can become the job's default. A schedule is a setup step. */}
+            {source === 'standard' && (
+              <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, marginTop: 14, fontSize: 13, color: 'var(--bds-color-gray-80)', cursor: 'pointer', userSelect: 'none' }}>
+                <input
+                  type="checkbox"
+                  checked={makeDefault}
+                  onChange={e => setMakeDefault(e.target.checked)}
+                  style={{ width: 15, height: 15, accentColor: 'var(--bds-color-blue-70)', margin: 0 }}
+                />
+                Always invoice this job this way. Skip this step on new invoices.
+              </label>
+            )}
+          </div>
+        ) : (
         <div className="est-modal-body">
           {/* Above the options: it's the reason one of them is already
               selected, which is unreadable as a footnote after the fact. */}
@@ -215,13 +280,14 @@ export default function InvoiceTypeModal({ job, onClose, onChoose, onImportTempl
             </label>
           )}
         </div>
+        )}
 
         {previewChoice && (
           <InvoicePreviewPanel mode={INVOICE_TYPE_PREVIEW_MODE[previewChoice]} job={job} onClose={() => setPreviewChoice(null)} />
         )}
 
         <div className="est-modal-footer" style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'flex-end' }}>
-          {onImportTemplate && variant === 'new' && (
+          {onImportTemplate && variant === 'new' && step === 'type' && (
             <button
               type="button"
               onClick={onImportTemplate}
@@ -230,8 +296,33 @@ export default function InvoiceTypeModal({ job, onClose, onChoose, onImportTempl
               Import from template
             </button>
           )}
-          <BdsButton text="Cancel" displayType="secondary" onClick={onClose} />
-          <BdsButton text="Continue" displayType="primary" onClick={() => onChoose(selected, makeDefault && selected !== 'payment-schedule' && selected !== 'invoice-schedule')} />
+          {step === 'source' ? (
+            <>
+              <button
+                type="button"
+                onClick={() => setStep('type')}
+                style={{ marginRight: 'auto', background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 13, fontWeight: 500, color: 'var(--bds-color-blue-70)', fontFamily: 'inherit' }}
+              >
+                Back
+              </button>
+              <BdsButton text="Cancel" displayType="secondary" onClick={onClose} />
+              <BdsButton
+                text="Continue" displayType="primary"
+                onClick={() => source === 'payment-schedule' ? onChoose('payment-schedule', false) : onChoose('standard', makeDefault)}
+              />
+            </>
+          ) : (
+            <>
+              <BdsButton text="Cancel" displayType="secondary" onClick={onClose} />
+              <BdsButton
+                text="Continue" displayType="primary"
+                onClick={() => {
+                  if (askStandardSource && selected === 'standard') { setStep('source'); return; }
+                  onChoose(selected, makeDefault && selected !== 'payment-schedule' && selected !== 'invoice-schedule');
+                }}
+              />
+            </>
+          )}
         </div>
       </div>
     </div>

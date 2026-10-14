@@ -266,17 +266,11 @@ export default function OwnerInvoicesPage({
                   levels into the settings page. */}
               <BdsButton ariaLabel="Settings" displayType="secondary" icon={<GearGlyph />} onClick={() => setShowSettingsModal(true)} />
               <BdsButton text="Filter" displayType="secondary" icon={<FilterGlyph />} />
-              {/* Once a schedule exists the button stops being "add one" and
-                  becomes the way to look at it. */}
-              {!hidePaymentSchedule && (scheduleReady
-                ? <BdsButton text="Payment schedule" displayType="secondary" onClick={() => setShowTracker(true)} />
-                : <BdsButton
-                    text="Payment schedule" displayType="secondary" icon={<BdsIcon name="plus" size={14} />}
-                    /* Stays enabled and answers on click: a disabled button
-                       with no explanation is the thing builders call support
-                       about. */
-                    onClick={() => nothingLeftToSchedule ? setShowNothingToSchedule(true) : setShowScheduleModal(true)}
-                  />)}
+              {/* Creating a schedule now lives under "+ Invoice > Standard", so the
+                  button only appears once one exists, as the way to look at it. */}
+              {!hidePaymentSchedule && scheduleReady && (
+                <BdsButton text="Payment schedule" displayType="secondary" onClick={() => setShowTracker(true)} />
+              )}
               {/* Same slot on an open book job, holding that job's generator.
                   The grid is where a builder notices invoices aren't showing up
                   when they expected, and the proposal is signed by then, so the
@@ -787,12 +781,13 @@ export default function OwnerInvoicesPage({
         <InvoiceTypeModal
           job={job}
           choices={invoiceTypeChoices}
+          askStandardSource={!hidePaymentSchedule && !scheduleReady}
           onClose={() => setShowTypeModal(false)}
           onImportTemplate={onImportTemplate ? () => { setShowTypeModal(false); setShowTemplateModal(true); } : undefined}
           onChoose={(choice, makeDefault) => {
             setShowTypeModal(false);
             // Payment schedule is set up here, not in the invoice.
-            if (choice === 'payment-schedule') { setShowScheduleModal(true); return; }
+            if (choice === 'payment-schedule') { nothingLeftToSchedule ? setShowNothingToSchedule(true) : setShowScheduleModal(true); return; }
             onAddInvoiceDirect(choice, makeDefault);
           }}
         />
