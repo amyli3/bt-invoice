@@ -3,12 +3,28 @@ import { allAllowances, allSelections } from '../allowanceMockData';
 import { DrawScheduleLine, Job } from '../types';
 import SendToBudgetModal from './SendToBudgetModal';
 import PaymentScheduleModal from './PaymentScheduleModal';
+import { SCHEDULE_PHASES, SOV_ESTIMATE_LINES, phaseById, setPhaseLinks, usePhaseLinks } from '../scheduleLinks';
 
 type EstimateItem = { id: string; name: string; costCode: string; costCodeRaw: string; desc: string; qty: number; unit: string; unitCost: number; costType: string; builderCost: number; markup: number; };
 type EstimateGroup = { group: string; budgetAmount: number; items: EstimateItem[]; };
 
+/* Scope lines for the structure, mechanicals, kitchen and bath work, grouped
+   the way the estimate is laid out. They mirror the invoice's schedule of
+   values one to one. */
+const scopeItems: (EstimateItem & { estGroup: string })[] = SOV_ESTIMATE_LINES.map(l => {
+  const unitCost = Math.round(l.owner / 1.2);
+  return {
+    id: l.id, name: l.name, costCode: `${l.costCode} - ${l.costCodeName}`, costCodeRaw: l.costCode,
+    desc: l.vendor, qty: 1, unit: 'ls', unitCost, costType: l.costType, builderCost: unitCost, markup: 20, estGroup: l.group,
+  };
+});
+const scopeGroups: EstimateGroup[] = Array.from(new Set(scopeItems.map(i => i.estGroup))).map(g => {
+  const items = scopeItems.filter(i => i.estGroup === g);
+  return { group: g, budgetAmount: items.reduce((s, i) => s + i.builderCost, 0), items };
+});
+
 // All items flat
-const allItems: EstimateItem[] = allAllowances.flatMap(allowance => {
+const allowanceItems: EstimateItem[] = allAllowances.flatMap(allowance => {
   const selections = allSelections.filter(s => allowance.selectionIds.includes(s.id));
   return selections.flatMap(sel =>
     sel.options.map(opt => ({
@@ -26,9 +42,10 @@ const allItems: EstimateItem[] = allAllowances.flatMap(allowance => {
     }))
   );
 });
+const allItems: EstimateItem[] = [...scopeItems, ...allowanceItems];
 
 // Group by proposal worksheet (allowance)
-const proposalData: EstimateGroup[] = allAllowances.map(allowance => {
+const proposalData: EstimateGroup[] = [...scopeGroups, ...allAllowances.map(allowance => {
   const selections = allSelections.filter(s => allowance.selectionIds.includes(s.id));
   const items = selections.flatMap(sel =>
     sel.options.map(opt => ({
@@ -50,7 +67,7 @@ const proposalData: EstimateGroup[] = allAllowances.map(allowance => {
     budgetAmount: allowance.budgetAmount,
     items,
   };
-});
+})];
 
 // Group by cost code
 const costCodeData: EstimateGroup[] = (() => {
@@ -98,9 +115,14 @@ interface Props {
      promised goes on the proposal instead. Forced by the route rather than read
      off the job, so either estimate can be demoed against any job. */
   billingModel?: 'fixed' | 'open-book';
+  /* Mass actions on the checked lines. Each line goes over at its owner price. */
+  onCreateInvoice?: (lines: EstimateInvoiceLine[]) => void;
+  onAddToInvoice?: (lines: EstimateInvoiceLine[]) => void;
 }
 
-export default function EstimatePage({ jobOpen, onToggleJob, locked, onSendToBudget, onUnlock, existingDrawSchedule, onScheduleCreated, onScheduleDeleted, onBuildProposal, job, billingModel = 'fixed' }: Props) {
+export type EstimateInvoiceLine = { name: string; costCode: string; costType: string; amount: number };
+
+export default function EstimatePage({ jobOpen, onToggleJob, locked, onSendToBudget, onUnlock, existingDrawSchedule, onScheduleCreated, onScheduleDeleted, onBuildProposal, job, billingModel = 'fixed', onCreateInvoice, onAddToInvoice }: Props) {
   const [groupBy, setGroupBy] = useState<'proposal' | 'costcode'>('proposal');
   // The Send to Budget flow is a confirm step plus one optional side-step in
   // the same dialog: setting up a draw schedule, since the contract price it
@@ -114,6 +136,21 @@ export default function EstimatePage({ jobOpen, onToggleJob, locked, onSendToBud
   const [groupByOpen, setGroupByOpen] = useState(false);
   const groupByRef = useRef<HTMLDivElement>(null);
   const groupByBtnRef = useRef<HTMLButtonElement>(null);
+  /* Estimate item id -> schedule phase id. Fixed price only: open book bills
+     what the job spends, so there is no scope to release on completion. */
+  /* Checked line ids. The group checkbox checks every line in its group, and
+     the same line stays checked when the grouping changes. */
+  const [checked, setChecked] = useState<Set<string>>(new Set());
+  const toggleChecked = (ids: string[], on: boolean) => setChecked(prev => {
+    const next = new Set(prev);
+    ids.forEach(id => (on ? next.add(id) : next.delete(id)));
+    return next;
+  });
+  const checkedItems = allItems.filter(i => checked.has(i.id));
+  const toInvoiceLines = (): EstimateInvoiceLine[] => checkedItems.map(i => ({ name: i.name, costCode: i.costCodeRaw, costType: i.costType, amount: i.builderCost * (1 + i.markup / 100) }));
+  const [massMenu, setMassMenu] = useState<null | 'root' | 'create' | 'add'>(null);
+  const phaseLinks = usePhaseLinks();
+  const setLink = setPhaseLinks;
   const [dropdownPos, setDropdownPos] = useState<{top: number; left: number}>({top: 0, left: 0});
 
   useEffect(() => {
@@ -254,15 +291,17 @@ export default function EstimatePage({ jobOpen, onToggleJob, locked, onSendToBud
       <div className="ep-table-wrap">
         <table className="ep-table">
           <colgroup>
-            <col style={{width: '4%'}} />
-            <col style={{width: '24%'}} />
-            <col style={{width: '16%'}} />
-            <col style={{width: '8%'}} />
-            <col style={{width: '6%'}} />
-            <col style={{width: '10%'}} />
-            <col style={{width: '10%'}} />
-            <col style={{width: '12%'}} />
-            <col style={{width: '10%'}} />
+            <col style={{width: isOpenBook ? '4%' : '5%'}} />
+            <col style={{width: isOpenBook ? '24%' : '16%'}} />
+            <col style={{width: isOpenBook ? '16%' : '10%'}} />
+            <col style={{width: isOpenBook ? '8%' : '7%'}} />
+            <col style={{width: isOpenBook ? '6%' : '5%'}} />
+            <col style={{width: isOpenBook ? '10%' : '8%'}} />
+            <col style={{width: isOpenBook ? '10%' : '8%'}} />
+            <col style={{width: isOpenBook ? '12%' : '10%'}} />
+            <col style={{width: isOpenBook ? '10%' : '7%'}} />
+            {!isOpenBook && <col style={{width: '16%'}} />}
+            {!isOpenBook && <col style={{width: '8%'}} />}
           </colgroup>
           <thead>
             <tr>
@@ -275,6 +314,8 @@ export default function EstimatePage({ jobOpen, onToggleJob, locked, onSendToBud
               <th>Cost type</th>
               <th style={{textAlign: 'right'}}>Builder cost</th>
               <th style={{textAlign: 'right'}}>Markup</th>
+              {!isOpenBook && <th>Schedule phase</th>}
+              {!isOpenBook && <th style={{textAlign: 'right'}}>% complete</th>}
             </tr>
           </thead>
           <tbody>
@@ -282,22 +323,49 @@ export default function EstimatePage({ jobOpen, onToggleJob, locked, onSendToBud
               <Fragment key={group.group}>
                 <tr className="ep-group-row" onClick={() => toggleGroup(group.group)}>
                   <td>
+                    {!isOpenBook && (() => {
+                      const ids = group.items.map(i => i.id);
+                      const n = ids.filter(id => checked.has(id)).length;
+                      return (
+                        <input type="checkbox" className="ep-checkbox" checked={n === ids.length && n > 0}
+                          ref={el => { if (el) el.indeterminate = n > 0 && n < ids.length; }}
+                          onClick={ev => ev.stopPropagation()}
+                          onChange={ev => toggleChecked(ids, ev.target.checked)}
+                          aria-label={`Select all lines in ${group.group}`} />
+                      );
+                    })()}
                     <span className={`ep-chevron ${expandedGroups.has(group.group) ? 'ep-chevron-open' : ''}`}>
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg>
                     </span>
                   </td>
                   <td colSpan={6}>
                     <span className="ep-group-name">{group.group}</span>
-                    <span className="ep-group-budget">Budget: ${fmt(group.budgetAmount)}</span>
                     <button className="ep-add-btn" onClick={e => e.stopPropagation()} title="Add item">+</button>
                   </td>
                   <td style={{textAlign: 'right', fontWeight: 600}}>${fmt(group.items.reduce((s, i) => s + i.builderCost, 0))}</td>
                   <td></td>
+                  {!isOpenBook && (
+                    <td onClick={e => e.stopPropagation()}>
+                      {(() => {
+                        const ids = group.items.map(i => i.id);
+                        const set = new Set(ids.map(id => phaseLinks[id] ?? ''));
+                        const value = set.size === 1 ? Array.from(set)[0] : 'mixed';
+                        return (
+                          <select className="ep-phase-select ep-phase-select-group" value={value} onChange={e => setLink(ids, e.target.value)} aria-label={`Link all of ${group.group} to a schedule phase`}>
+                            {value === 'mixed' && <option value="mixed" disabled>Mixed phases</option>}
+                            <option value="">Link all to phase</option>
+                            {SCHEDULE_PHASES.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                          </select>
+                        );
+                      })()}
+                    </td>
+                  )}
+                  {!isOpenBook && <td></td>}
                 </tr>
                 {expandedGroups.has(group.group) && group.items.map(item => (
                   <tr key={item.id} className="ep-item-row">
                     <td>
-                      <input type="checkbox" className="ep-checkbox" />
+                      <input type="checkbox" className="ep-checkbox" checked={checked.has(item.id)} onChange={ev => toggleChecked([item.id], ev.target.checked)} aria-label={`Select ${item.name}`} />
                     </td>
                     <td>
                       <div className="ep-item-name">{item.name}</div>
@@ -312,6 +380,27 @@ export default function EstimatePage({ jobOpen, onToggleJob, locked, onSendToBud
                     </td>
                     <td style={{textAlign: 'right', fontWeight: 600}}>${fmt(item.builderCost)}</td>
                     <td style={{textAlign: 'right'}}>{item.markup > 0 ? `${item.markup}.0%` : '0.0%'}</td>
+                    {!isOpenBook && (() => {
+                      const phase = phaseById(phaseLinks[item.id]);
+                      return (
+                        <td>
+                          <select className={`ep-phase-select ${phase ? 'ep-phase-linked' : ''}`} value={phase?.id ?? ''} onChange={e => setLink([item.id], e.target.value)} aria-label={`Schedule phase for ${item.name}`}>
+                            <option value="">Not linked</option>
+                            {SCHEDULE_PHASES.map(p => <option key={p.id} value={p.id}>{p.name}{p.complete ? ' (complete)' : ''}</option>)}
+                          </select>
+                        </td>
+                      );
+                    })()}
+                    {!isOpenBook && (() => {
+                      const phase = phaseById(phaseLinks[item.id]);
+                      return (
+                        <td style={{textAlign: 'right'}}>
+                          {phase ? (
+                            <span className={`ep-phase-pct ${phase.complete ? 'ep-phase-pct-done' : ''}`}>{phase.percent}%</span>
+                          ) : <span className="ep-cell-muted">--</span>}
+                        </td>
+                      );
+                    })()}
                   </tr>
                 ))}
               </Fragment>
@@ -321,6 +410,8 @@ export default function EstimatePage({ jobOpen, onToggleJob, locked, onSendToBud
               <td colSpan={6}><strong>Totals</strong></td>
               <td style={{textAlign: 'right'}}><strong>${fmt(totalBuilderCost)}</strong></td>
               <td></td>
+              {!isOpenBook && <td></td>}
+              {!isOpenBook && <td></td>}
             </tr>
           </tbody>
         </table>
@@ -426,6 +517,42 @@ export default function EstimatePage({ jobOpen, onToggleJob, locked, onSendToBud
         </button>
       </div>{/* end ep-toolbar */}
       </div>{/* end ep-lower */}
+
+      {checkedItems.length > 0 && !isOpenBook && (
+        <div className="ep-mass-bar" role="toolbar" aria-label="Selected lines">
+          <span className="ep-mass-count">{checkedItems.length} selected</span>
+          <button className="ep-mass-x" onClick={() => { setChecked(new Set()); setMassMenu(null); }} aria-label="Clear selection">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>
+          </button>
+          <span className="ep-mass-divider" />
+          <div className="ep-mass-more">
+            <button className="ep-mass-btn" onClick={() => setMassMenu(m => (m ? null : 'root'))} aria-expanded={!!massMenu}>
+              More actions
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ transform: massMenu ? 'none' : 'rotate(180deg)' }}><polyline points="6 15 12 9 18 15"/></svg>
+            </button>
+            {massMenu && (
+              <div className="ep-mass-menu">
+                <button className={`ep-mass-item ${massMenu === 'create' ? 'on' : ''}`} onClick={() => setMassMenu('create')}>Create<span>&gt;</span></button>
+                <button className={`ep-mass-item ${massMenu === 'add' ? 'on' : ''}`} onClick={() => setMassMenu('add')}>Add to<span>&gt;</span></button>
+                {massMenu !== 'root' && (
+                  <div className="ep-mass-sub" style={{ top: massMenu === 'create' ? 0 : 'auto', bottom: massMenu === 'add' ? 0 : 'auto' }}>
+                    {massMenu === 'create' && (
+                      <button className="ep-mass-item" onClick={() => setMassMenu(null)}>
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M3 4h3l2 11h10l2-8H7"/><circle cx="9" cy="19" r="1.5"/><circle cx="17" cy="19" r="1.5"/></svg>
+                        Purchase order
+                      </button>
+                    )}
+                    <button className="ep-mass-item" onClick={() => { setMassMenu(null); (massMenu === 'create' ? onCreateInvoice : onAddToInvoice)?.(toInvoiceLines()); }}>
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M4 9l8-5 8 5v10H4z"/><polyline points="4 9 12 14 20 9"/></svg>
+                      Invoice
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

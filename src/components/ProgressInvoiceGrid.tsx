@@ -1,5 +1,6 @@
 import { Fragment, useState, type ReactNode } from 'react';
 import { fmt } from '../utils';
+import { phaseById, usePhaseLinks } from '../scheduleLinks';
 
 interface SovLine {
   id: string;
@@ -14,6 +15,10 @@ interface SovLine {
   fromPrevious: number;
   thisPeriod: number;
 }
+
+/* Each schedule of values line has one estimate line ("est-" + its id). A line whose
+   estimate item is linked to a schedule phase is billed by the schedule. */
+const estimateItemFor = (lineId: string) => `est-${lineId}`;
 
 /* The two grouping strategies BTNet actually supports. Per Epic 284004,
    LineItemGroupStrategy is CostCode = 0 or Estimate = 1 (Global.Core/Enums/
@@ -77,16 +82,28 @@ export default function ProgressInvoiceGrid({ toolbarLeft, toolbarRight }: Props
   const [lines, setLines] = useState<SovLine[]>(INITIAL_LINES);
   const [groupBy, setGroupBy] = useState<GroupBy>('costCode');
 
+  const phaseLinks = usePhaseLinks();
   const setThisPeriod = (id: string, value: number) =>
     setLines(ls => ls.map(l => (l.id === id ? { ...l, thisPeriod: value } : l)));
 
-  const totals = sum(lines);
+  /* A linked line is 100% complete to date once its phase is complete and 0%
+     this period until then. Everything else stays a manual entry. */
+  const phaseOf = (l: SovLine) => phaseById(phaseLinks[estimateItemFor(l.id)]);
+  const effective = (l: SovLine): SovLine => {
+    const phase = phaseOf(l);
+    if (!phase) return l;
+    return { ...l, thisPeriod: phase.complete ? Math.max(l.scheduledValue - l.fromPrevious, 0) : 0 };
+  };
+  const rawLines = lines;
+  const shown = rawLines.map(effective);
+
+  const totals = sum(shown);
 
   /* Groups keep first-appearance order rather than sorting alphabetically, so a
      builder who has ordered their estimate sees that order preserved. */
   const groupKey = (l: SovLine) => (groupBy === 'costCode' ? `${l.costCode} - ${l.costCodeName}` : l.estimateGroup);
   const groups: { key: string; lines: SovLine[] }[] = [];
-  lines.forEach(l => {
+  shown.forEach(l => {
     const key = groupKey(l);
     const existing = groups.find(g => g.key === key);
     if (existing) existing.lines.push(l);
@@ -99,6 +116,7 @@ export default function ProgressInvoiceGrid({ toolbarLeft, toolbarRight }: Props
   const lineRow = (l: SovLine) => {
     const toDate = l.fromPrevious + l.thisPeriod;
     const pct = l.scheduledValue > 0 ? (toDate / l.scheduledValue) * 100 : 0;
+    const phase = phaseOf(l);
     return (
       <tr key={l.id}>
         <td>
@@ -114,14 +132,23 @@ export default function ProgressInvoiceGrid({ toolbarLeft, toolbarRight }: Props
         <td style={td}>{money(l.scheduledValue)}</td>
         <td style={td}>{money(l.fromPrevious)}</td>
         <td style={td}>
-          <input
-            type="number"
-            className="fi"
-            style={{ width: 110, textAlign: 'right', padding: '6px 8px' }}
-            value={l.thisPeriod || ''}
-            placeholder="0.00"
-            onChange={e => setThisPeriod(l.id, parseFloat(e.target.value) || 0)}
-          />
+          {phase ? (
+            <div title="Pulled from the schedule">
+              <div style={{ fontWeight: 500 }}>{money(l.thisPeriod)}</div>
+              <div style={{ fontSize: 11, color: phase.complete ? '#057E4B' : 'var(--g500)' }}>
+                {phase.name}{phase.complete ? ' complete' : ' not complete'}
+              </div>
+            </div>
+          ) : (
+            <input
+              type="number"
+              className="fi"
+              style={{ width: 110, textAlign: 'right', padding: '6px 8px' }}
+              value={l.thisPeriod || ''}
+              placeholder="0.00"
+              onChange={e => setThisPeriod(l.id, parseFloat(e.target.value) || 0)}
+            />
+          )}
         </td>
         <td style={td}>{money(toDate)}</td>
         <td style={{ ...td, textAlign: 'center' }}>{pct.toFixed(0)}%</td>

@@ -228,6 +228,37 @@ export default function App() {
     setAutoFilledPeriod(null);
     setActivePage('invoice-full-page-reimagined');
   };
+  /* Mass action on the estimate: the checked lines either start a new invoice
+     or are added to the draft already open. Each line carries its owner price,
+     so the invoice opens with the scope already on it. */
+  const estimateLinesToInvoice = (lines: { name: string; costCode: string; costType: string; amount: number }[]) =>
+    lines.map(l => ({
+      id: getNextId(),
+      description: l.name,
+      costCode: l.costCode,
+      costType: l.costType,
+      unitCost: l.amount,
+      quantity: 1,
+      unit: '--',
+      markup: 0,
+    }));
+  const createInvoiceFromEstimate = (lines: Parameters<typeof estimateLinesToInvoice>[0]) => {
+    pendingKindRef.current = 'regular';
+    setInvoice({
+      ...defaultInvoice,
+      type: 'invoice',
+      lineItems: estimateLinesToInvoice(lines),
+      to: { ...defaultInvoice.to, name: currentJobWithOverrides.name },
+    });
+    setAutoFilledDraw(null);
+    setAutoFilledPeriod(null);
+    setActivePage('invoice-full-page-reimagined');
+  };
+  const addEstimateLinesToInvoice = (lines: Parameters<typeof estimateLinesToInvoice>[0]) => {
+    pendingKindRef.current = 'regular';
+    setInvoice(inv => ({ ...inv, lineItems: [...inv.lineItems, ...estimateLinesToInvoice(lines)] }));
+    setActivePage('invoice-full-page-reimagined');
+  };
   /* Saving on Financial > Invoice closes the invoice and returns to the grid,
      where the saved invoice is listed as an Unreleased row. Client price, so
      the row matches what the client would owe. */
@@ -1241,6 +1272,8 @@ export default function App() {
               }}
               onUnlock={() => setEstimateLockedByJob(prev => ({ ...prev, [1]: false }))}
               billingModel={estimateBillingModel}
+              onCreateInvoice={createInvoiceFromEstimate}
+              onAddToInvoice={addEstimateLinesToInvoice}
               onBuildProposal={() => setActivePage(estimateBillingModel === 'open-book' ? 'job-proposal-ob' : 'job-proposal')}
             />
           </div>
