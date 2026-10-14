@@ -2,6 +2,18 @@ import { useState, useRef, useEffect, type ReactNode } from 'react';
 import { fmt, fmtDate } from '../utils';
 import { useReviewSettings } from '../reviewSettings';
 import { BdsButton } from '../bds';
+import { AddFromDropdown } from './LineItemsV2';
+import AddFromAllModal, { type SourceKey } from './AddFromAllModal';
+import CostsModal from './CostsModal';
+import type { LineItem } from '../types';
+
+// Same sparkle the invoice page's Auto fill banner uses.
+const sparkle = (size: number) => (
+  <svg width={size} height={size} viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0 }} aria-hidden="true">
+    <path d="M6.8 1.2 7.9 5.7 12.4 6.8 7.9 7.9 6.8 12.4 5.7 7.9 1.2 6.8 5.7 5.7Z" fill="currentColor" />
+    <path d="M12.2 9.6 12.8 11.6 14.8 12.2 12.8 12.8 12.2 14.8 11.6 12.8 9.6 12.2 11.6 11.6Z" fill="currentColor" opacity="0.7" />
+  </svg>
+);
 
 // A collapsible group in the right-hand customize rail — Recipient, Layout,
 // Display to client, General information. Defined outside the component so
@@ -223,7 +235,89 @@ function computeDueDate(dateStr: string, terms: string) {
   return d.toISOString().split('T')[0];
 }
 
-export default function ClientPreviewModal({ onClose }: { onClose?: () => void }) {
+/* The Add from pickers hand back the invoice builder's LineItem shape; this
+   form keeps its own PreviewLine, where markup is a dollar amount. */
+const SOURCE_FOR_RELATED: Record<NonNullable<LineItem['relatedItem']>['type'], LineSource> = {
+  allowance: 'selection', selection: 'selection', bill: 'bill', timeClock: 'timeClock',
+  quickBooks: 'bill', contract: 'estimate', changeOrder: 'changeOrder',
+};
+const toPreviewLine = (li: LineItem): PreviewLine => ({
+  id: li.id,
+  item: li.description,
+  costCode: li.costCode,
+  group: li.relatedItem?.name || 'Other',
+  qty: li.quantity,
+  unitCost: li.unitCost,
+  markup: Math.round(li.unitCost * li.quantity * li.markup) / 100,
+  taxable: true,
+  source: li.relatedItem ? SOURCE_FOR_RELATED[li.relatedItem.type] : 'estimate',
+  vendor: li.provenance?.vendor,
+  unit: li.unit && li.unit !== '--' ? li.unit : undefined,
+  date: li.provenance?.billDate,
+});
+
+/* variant="modal" is the dialog with Details and Client preview as tabs.
+   variant="page" is the same pieces as one full page: the Details form on the
+   left, the invoice document on the right, and the Customize rail opening on
+   the far right from the Customize button. */
+export default function ClientPreviewModal({ onClose, variant = 'modal' }: { onClose?: () => void; variant?: 'modal' | 'page' }) {
+  const isPage = variant === 'page';
+  // Page variant: the Details column is drag-resizable. null keeps the CSS default width.
+  const [detailsWidth, setDetailsWidth] = useState<number | null>(null);
+  const pageBodyRef = useRef<HTMLDivElement>(null);
+  // Page variant: hovering or focusing a line on either side lights up the same
+  // line on the other, so builders can reconcile the form against the invoice.
+  const [linkedLineId, setLinkedLineId] = useState<string | null>(null);
+  const linkProps = (id: string, scrollTo?: 'canvas' | 'details') => !isPage ? {} : {
+    'data-line-id': id,
+    onMouseEnter: () => {
+      setLinkedLineId(id);
+      if (scrollTo) {
+        const root = scrollTo === 'canvas' ? '.cpi-canvas' : '.cpm-page-details';
+        document.querySelector(`${root} tr[data-line-id="${id}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      }
+    },
+    onMouseLeave: () => setLinkedLineId(null),
+    onFocus: () => setLinkedLineId(id),
+    onBlur: () => setLinkedLineId(null),
+  };
+  // Tablet and phone show one pane at a time (Details or Client preview).
+  const [mobileView, setMobileView] = useState<'details' | 'preview'>('details');
+  const showMobileView = (v: 'details' | 'preview') => setMobileView(v);
+  const linkedClass = (id: string) => (isPage && linkedLineId === id ? 'is-linked' : undefined);
+  // Page variant: the Customize rail is drag-resizable too. null keeps the CSS default.
+  const [railWidth, setRailWidth] = useState<number | null>(null);
+  const panesRef = useRef<HTMLDivElement>(null);
+  const startRailResize = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const box = panesRef.current?.getBoundingClientRect();
+    if (!box) return;
+    const move = (ev: PointerEvent) =>
+      setRailWidth(Math.min(Math.max(box.right - ev.clientX, 280), Math.min(720, box.width - 360)));
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      document.body.style.userSelect = '';
+    };
+    document.body.style.userSelect = 'none';
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
+  const startResize = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const box = pageBodyRef.current?.getBoundingClientRect();
+    if (!box) return;
+    const move = (ev: PointerEvent) =>
+      setDetailsWidth(Math.min(Math.max(ev.clientX - box.left, 420), box.width - 480));
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      document.body.style.userSelect = '';
+    };
+    document.body.style.userSelect = 'none';
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
   /* Opens on Client preview. The reason to come here is to see what the
      client receives; Details is where you go to change it. */
   const [activeTab, setActiveTab] = useState<'details' | 'client-preview'>('client-preview');
@@ -235,6 +329,11 @@ export default function ClientPreviewModal({ onClose }: { onClose?: () => void }
   const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().split('T')[0]);
   const [paymentTerms, setPaymentTerms] = useState('Due upon receipt');
   const [priceMode, setPriceMode] = useState<'flatFee' | 'lineItems'>('lineItems');
+  // Open book offers to pull in the job's unbilled costs; the lines are already
+  // on the prototype invoice, so accepting only flips the banner to its review state.
+  const [autoFilled, setAutoFilled] = useState(false);
+  // Which Add from picker is open (page variant): combined view with or without costs, or costs alone.
+  const [picker, setPicker] = useState<null | 'all' | 'all2' | 'costs'>(null);
   const [flatFeeAmount, setFlatFeeAmount] = useState(0);
   const [markupAdjustPct, setMarkupAdjustPct] = useState(0);
   /* Which contract the job bills under. Switching it swaps the billable
@@ -289,7 +388,10 @@ export default function ClientPreviewModal({ onClose }: { onClose?: () => void }
   const [customizeSheetOpen, setCustomizeSheetOpen] = useState(false);
   // Desktop only: the docked rail folds down to a thin strip so the invoice
   // gets the full width. Opens expanded every time the page loads.
-  const [railCollapsed, setRailCollapsed] = useState(false);
+  const [railCollapsed, setRailCollapsed] = useState(isPage);
+  // Opening or closing Customize returns Details to its default width for that
+  // state (narrower while the rail is open); dragging still overrides it.
+  useEffect(() => { setDetailsWidth(null); }, [railCollapsed]);
   // Feedback popover off the lightbulb in the rail header, the same
   // "Tell us what you think" prompt Buildertrend shows on other beta screens.
   const [feedbackOpen, setFeedbackOpen] = useState(false);
@@ -603,7 +705,7 @@ export default function ClientPreviewModal({ onClose }: { onClose?: () => void }
   const renderLineRow = (l: PreviewLine, depth: number) => {
     const pad = depth * 16;
     return (
-      <tr key={l.id}>
+      <tr key={l.id} className={linkedClass(l.id)} {...linkProps(l.id, 'details')}>
         <td>
           <div className="cpi-item-name" style={{ paddingLeft: pad }}>{l.item}</div>
           {showCostCodes && l.costCode && <div className="cpi-item-code" style={{ paddingLeft: pad }}>{l.costCode}</div>}
@@ -737,22 +839,20 @@ export default function ClientPreviewModal({ onClose }: { onClose?: () => void }
           </div>
 
           {priceMode === 'lineItems' && (
-            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8 }}>
-              <div>
-                <label className="fl">Adjust % markup</label>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <input
-                    type="number"
-                    className="fi"
-                    style={{ width: 80 }}
-                    value={markupAdjustPct || ''}
-                    placeholder="0.00"
-                    onChange={e => setMarkupAdjustPct(parseFloat(e.target.value) || 0)}
-                  />
-                  <span style={{ color: 'var(--g500)' }}>%</span>
-                </div>
+            <div>
+              <label className="fl">Adjust % markup</label>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <input
+                  type="number"
+                  className="fi"
+                  style={{ width: 80 }}
+                  value={markupAdjustPct || ''}
+                  placeholder="0.00"
+                  onChange={e => setMarkupAdjustPct(parseFloat(e.target.value) || 0)}
+                />
+                <span style={{ color: 'var(--g500)' }}>%</span>
+                <button className="btn-g" style={{ marginLeft: 6, lineHeight: 1 }} onClick={applyMarkupToAll}>Apply all</button>
               </div>
-              <button className="btn-g" onClick={applyMarkupToAll}>Apply all</button>
             </div>
           )}
         </div>
@@ -767,6 +867,52 @@ export default function ClientPreviewModal({ onClose }: { onClose?: () => void }
           </div>
         )}
       </div>
+
+      {priceMode === 'lineItems' && contractType === 'open-book' && (
+        <div className="sec" style={{ paddingBottom: 0 }}>
+          <div
+            role={autoFilled ? 'status' : undefined}
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap',
+              background: 'var(--bds-color-info-background)', border: '1px solid var(--bds-color-info-foreground)',
+              borderRadius: 'var(--bds-radius-lg, 12px)', padding: '14px 16px',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+              <span style={{ color: 'var(--bds-color-info-foreground)', paddingTop: 2 }}>{sparkle(16)}</span>
+              <div>
+                <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--bds-color-gray-90)' }}>
+                  {autoFilled ? 'Added line items' : 'Let Buildertrend fill in this invoice'}
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--bds-color-gray-70)', marginTop: 2, lineHeight: 1.45 }}>
+                  {autoFilled
+                    ? "Review line items and remove anything you don't want to invoice to the client yet."
+                    : "We'll pull in the unbilled costs you usually bill on this job (bills, approved time clock hours, and accounting costs) and add them as line items. You can review and make changes before you send it to your client."}
+                </div>
+              </div>
+            </div>
+            {autoFilled ? (
+              <button
+                type="button"
+                onClick={() => setAutoFilled(false)}
+                style={{ background: 'none', border: 'none', padding: 0, fontFamily: 'inherit', fontSize: 13, fontWeight: 500, color: 'var(--bds-color-info-foreground)', cursor: 'pointer' }}
+              >
+                Undo
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="btn btn-s"
+                onClick={() => setAutoFilled(true)}
+                style={{ fontSize: 13, padding: '8px 16px', gap: 6, borderColor: 'var(--g500)' }}
+              >
+                {sparkle(14)}
+                Auto fill
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {priceMode === 'lineItems' && (
         <div className="sec" style={{ paddingBottom: 0 }}>
@@ -785,7 +931,7 @@ export default function ClientPreviewModal({ onClose }: { onClose?: () => void }
               </thead>
               <tbody>
                 {lines.map(l => (
-                  <tr key={l.id}>
+                  <tr key={l.id} className={linkedClass(l.id)} {...linkProps(l.id, 'canvas')}>
                     <td>
                       <div><input className="cell-input" style={{ fontWeight: 600 }} value={l.item} onChange={e => updateLine(l.id, { item: e.target.value })} /></div>
                       <div><input className="cell-input" style={{ fontSize: 11, color: 'var(--g400)' }} value={l.costCode} onChange={e => updateLine(l.id, { costCode: e.target.value })} /></div>
@@ -816,9 +962,19 @@ export default function ClientPreviewModal({ onClose }: { onClose?: () => void }
             {/* A hand-added line has no upstream record behind it. It bills
                 like a contract line either way, so it files under the source
                 that contract bills from. */}
-            <button className="add-btn" onClick={() => setLines(prev => [...prev, { id: `l${Date.now()}`, item: '', costCode: '', group: 'Other', qty: 1, unitCost: 0, markup: 0, taxable: true, source: contractType === 'open-book' ? 'bill' : 'estimate' }])}>
-              <span className="add-icon">+</span> Item
-            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <button className="add-btn" onClick={() => setLines(prev => [...prev, { id: `l${Date.now()}`, item: '', costCode: '', group: 'Other', qty: 1, unitCost: 0, markup: 0, taxable: true, source: contractType === 'open-book' ? 'bill' : 'estimate' }])}>
+                <span className="add-icon">+</span> Item
+              </button>
+              {isPage && (
+                <AddFromDropdown
+                  hideSingleSourceOptions
+                  onOpenAll={() => setPicker('all')}
+                  onOpenAll2={() => setPicker('all2')}
+                  onOpenCosts={() => setPicker('costs')}
+                />
+              )}
+            </div>
           </div>
           <div className="totals-row" style={{ margin: '0 -24px', padding: '12px 24px' }}>
             <span>Total price</span>
@@ -1149,7 +1305,22 @@ export default function ClientPreviewModal({ onClose }: { onClose?: () => void }
   );
 
   const renderClientPreviewTab = () => (
-    <div className={"cpi-3pane" + (railCollapsed ? ' is-rail-collapsed' : '')}>
+    <div
+      className={"cpi-3pane" + (railCollapsed ? ' is-rail-collapsed' : '')}
+      ref={panesRef}
+      style={isPage && railWidth != null ? ({ '--cpm-rail-w': railWidth + 'px' } as React.CSSProperties) : undefined}
+    >
+      {isPage && !railCollapsed && (
+        <div
+          className="cpm-rail-resizer"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize customize"
+          title="Drag to resize"
+          onPointerDown={startRailResize}
+          onDoubleClick={() => setRailWidth(null)}
+        />
+      )}
       {/* Center — the document canvas. A Print/Email toggle sits in its own
           toolbar rather than a left rail of document cards: there's one
           invoice record, not several drafts to pick between, so a segmented
@@ -1194,7 +1365,7 @@ export default function ClientPreviewModal({ onClose }: { onClose?: () => void }
         </button>
         {/* Expanded header (desktop): title plus the collapse chevron. */}
         <div className="cpi-rail-head">
-          <span className="cpi-rail-head-title">Customize invoice</span>
+          <span className="cpi-rail-head-title">{selectedDoc === 'email' ? 'Customize email' : 'Customize invoice'}</span>
           <div className="cpm-rail-head-actions">
           <div className="cpm-feedback" ref={feedbackRef}>
             <button
@@ -1222,12 +1393,18 @@ export default function ClientPreviewModal({ onClose }: { onClose?: () => void }
             type="button"
             className="cpi-rail-collapse"
             onClick={() => setRailCollapsed(true)}
-            aria-label="Collapse customize"
+            aria-label={isPage ? 'Close customize' : 'Collapse customize'}
             aria-expanded={true}
           >
-            <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-              <path d="M12 5l-5 5 5 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
+            {isPage ? (
+              <svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                <path d="M5 5l10 10M15 5L5 15" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+              </svg>
+            ) : (
+              <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                <path d="M12 5l-5 5 5 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            )}
           </button>
           </div>
         </div>
@@ -1247,6 +1424,7 @@ export default function ClientPreviewModal({ onClose }: { onClose?: () => void }
           </button>
         </div>
         <div className="cpi-rail-fields">
+          {selectedDoc === 'print' && (
           <RailSection id="recipient" title="Recipient" open={!!openSections.recipient} onToggle={toggleSection}>
             {/* Who is billed. Clients on the job first, primary marked, then
                 anyone else on the job who could be the paying party. */}
@@ -1292,6 +1470,7 @@ export default function ClientPreviewModal({ onClose }: { onClose?: () => void }
 
             <div className="cpi-rail-hint">Billing settings can be saved as this job's default, not the company's.</div>
           </RailSection>
+          )}
 
           {selectedDoc === 'print' ? (
             <>
@@ -1502,9 +1681,112 @@ export default function ClientPreviewModal({ onClose }: { onClose?: () => void }
     </div>
   );
 
+  const moreMenu = (
+    <>
+    <div className="cpi-foot-more cpm-foot-more" ref={footerMenuRef}>
+      <BdsButton
+        displayType="tertiary"
+        ariaLabel="More actions"
+        className="cpm-foot-more-btn"
+        onClick={() => setFooterMenuOpen(o => !o)}
+        icon={
+          <svg width="18" height="18" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+            <circle cx="4" cy="10" r="1.6" /><circle cx="10" cy="10" r="1.6" /><circle cx="16" cy="10" r="1.6" />
+          </svg>
+        }
+      />
+      {footerMenuOpen && (
+        <div className="cpi-foot-pop cpm-foot-pop" role="menu">
+          {/* Customize at every width, always labelled "Customize".
+              Desktop: toggles the docked rail open or folded. Tablet and
+              phone: the rail is a sheet there, so this slides it up. */}
+          {(activeTab === 'client-preview' || isPage) && (
+            <button
+              type="button"
+              role="menuitem"
+              className="cpi-foot-pop-item"
+              onClick={() => {
+                if (window.matchMedia('(max-width: 1100px)').matches) { setMobileView('preview'); setCustomizeSheetOpen(true); }
+                else setRailCollapsed(c => !c);
+                setFooterMenuOpen(false);
+              }}
+            >
+              Customize
+            </button>
+          )}
+          {(activeTab === 'client-preview' || isPage) && (
+            <button type="button" role="menuitem" className="cpi-foot-pop-item" onClick={() => setFooterMenuOpen(false)}>Print</button>
+          )}
+          <button type="button" role="menuitem" className="cpi-foot-pop-item" onClick={() => setFooterMenuOpen(false)}>Cancel</button>
+        </div>
+      )}
+    </div>
+    </>
+  );
+
+  const actionButtons = (
+    <>
+    <BdsButton displayType="secondary" text="Save" className="cpi-foot-wide" />
+    {!paidAt && (
+      <BdsButton displayType="secondary" text="Record payment" className="cpi-foot-wide" onClick={() => setPaidAt(new Date())} />
+    )}
+    <BdsButton
+      displayType="primary"
+      text="Send"
+      ariaLabel="Send"
+      className="cpm-send"
+      icon={<svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M3 3l14 7-14 7 2.5-7L3 3z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/><path d="M5.5 10H11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>}
+      onClick={() => {
+        setSentAt(new Date());
+        alert(`Invoice Li-${idNumber || '0111'} sent to ${billTo.name} (${billTo.email})`);
+      }}
+    />
+    </>
+  );
+
+  const headerIcons = (
+    <>
+      {!isPage && (
+        <button className="cpi-icon-btn" title="Share">
+          <svg width="17" height="17" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+            <path fillRule="evenodd" clipRule="evenodd" d="M4.25485 1.51548C4.03255 1.39268 3.77812 1.34049 3.52542 1.36588C3.27273 1.39127 3.03377 1.49303 2.84035 1.65761C2.64692 1.82219 2.50822 2.04178 2.4427 2.28715C2.37723 2.53235 2.38812 2.79215 2.4736 3.03111L4.95804 10.0001L2.47328 16.9699C2.38793 17.2087 2.37726 17.4679 2.4427 17.713C2.50822 17.9583 2.64692 18.1779 2.84035 18.3425C3.03377 18.5071 3.27273 18.6088 3.52542 18.6342C3.77812 18.6596 4.03255 18.6074 4.25485 18.4846L17.4505 11.0938L17.4522 11.0929C17.6468 10.9848 17.8091 10.8267 17.9221 10.6349C18.0355 10.4425 18.0954 10.2233 18.0954 10.0001C18.0954 9.77677 18.0355 9.55756 17.9221 9.36521C17.8091 9.17341 17.6468 9.0153 17.4522 8.90723L17.4505 8.9063L4.25804 1.51725L4.25485 1.51548ZM16.8425 9.99847L17.1479 9.45318L16.8454 10.0001L16.8425 10.0016L3.65039 17.3905L6.06228 10.6251H10.6245C10.9697 10.6251 11.2495 10.3452 11.2495 10.0001C11.2495 9.65487 10.9697 9.37505 10.6245 9.37505H6.06228L3.6507 2.61049L3.65039 2.60962L16.8425 9.99847Z" fill="currentColor"/>
+          </svg>
+        </button>
+      )}
+      {isPage && (
+        <button className="cpi-icon-btn" title="Activity log" aria-label="Activity log">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M3.2 10a6.8 6.8 0 1 0 2-4.8M3 3.2v3.3h3.3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/><path d="M10 6.4V10l2.4 1.6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+        </button>
+      )}
+      <button className="cpi-icon-btn" title="Comments">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M10 2.5a7.25 7.25 0 1 1-3.4 13.65L2.75 17.25l1.15-3.55A7.25 7.25 0 0 1 10 2.5Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/><path d="M7 8.5h6M7 11.5h6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+      </button>
+    </>
+  );
+
   return (
-    <div className="cpi-shell cpm-modal" role="dialog" aria-modal="true" aria-label="Invoice">
-      {/* Modal-style header */}
+    <div data-view={isPage ? mobileView : undefined} className={"cpi-shell " + (isPage ? 'cpm-page' : 'cpm-modal')} role={isPage ? undefined : 'dialog'} aria-modal={isPage ? undefined : true} aria-label="Invoice">
+      {isPage ? (
+        <div className="cpi-titlebar cpm-page-head">
+          <div className="cpm-page-head-top">
+            <button className="cpi-icon-btn" title="Back" aria-label="Back" onClick={onClose}>
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M16 10H4M9 5l-5 5 5 5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            </button>
+            <div className="cpm-page-head-actions">
+              {moreMenu}
+              {headerIcons}
+              {actionButtons}
+            </div>
+          </div>
+          <div className="cpi-breadcrumb"><a href="#" onClick={e => { e.preventDefault(); onClose?.(); }}>Amy - selections test job</a> / <a href="#" onClick={e => { e.preventDefault(); onClose?.(); }}>Invoices</a></div>
+          <div className="cpi-title">
+            {title || 'Invoice'}
+            <span className={"status " + INVOICE_STATUS_CLASS[invoiceStatus]} style={{ marginLeft: 10 }}>
+              {invoiceStatus}
+            </span>
+          </div>
+        </div>
+      ) : (
       <div className="cpi-titlebar">
         <div>
           <div className="cpi-breadcrumb">Amy - selections test job</div>
@@ -1520,90 +1802,94 @@ export default function ClientPreviewModal({ onClose }: { onClose?: () => void }
           </div>
         </div>
         <div className="cpi-title-actions">
-          <button className="cpi-icon-btn" title="Share">
-            <svg width="17" height="17" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-              <path fillRule="evenodd" clipRule="evenodd" d="M4.25485 1.51548C4.03255 1.39268 3.77812 1.34049 3.52542 1.36588C3.27273 1.39127 3.03377 1.49303 2.84035 1.65761C2.64692 1.82219 2.50822 2.04178 2.4427 2.28715C2.37723 2.53235 2.38812 2.79215 2.4736 3.03111L4.95804 10.0001L2.47328 16.9699C2.38793 17.2087 2.37726 17.4679 2.4427 17.713C2.50822 17.9583 2.64692 18.1779 2.84035 18.3425C3.03377 18.5071 3.27273 18.6088 3.52542 18.6342C3.77812 18.6596 4.03255 18.6074 4.25485 18.4846L17.4505 11.0938L17.4522 11.0929C17.6468 10.9848 17.8091 10.8267 17.9221 10.6349C18.0355 10.4425 18.0954 10.2233 18.0954 10.0001C18.0954 9.77677 18.0355 9.55756 17.9221 9.36521C17.8091 9.17341 17.6468 9.0153 17.4522 8.90723L17.4505 8.9063L4.25804 1.51725L4.25485 1.51548ZM16.8425 9.99847L17.1479 9.45318L16.8454 10.0001L16.8425 10.0016L3.65039 17.3905L6.06228 10.6251H10.6245C10.9697 10.6251 11.2495 10.3452 11.2495 10.0001C11.2495 9.65487 10.9697 9.37505 10.6245 9.37505H6.06228L3.6507 2.61049L3.65039 2.60962L16.8425 9.99847Z" fill="currentColor"/>
-            </svg>
-          </button>
-          <button className="cpi-icon-btn" title="Comments">
-            <svg width="18" height="18" viewBox="0 0 20 20" fill="none"><path d="M4 5h12v8H8l-4 3V5z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/></svg>
-          </button>
-          <button className="cpi-icon-btn" title="Close" onClick={onClose}>
-            <svg width="18" height="18" viewBox="0 0 20 20" fill="none"><path d="M5 5l10 10M15 5L5 15" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
-          </button>
+          {headerIcons}
+          {!isPage && (
+            <button className="cpi-icon-btn" title="Close" onClick={onClose}>
+              <svg width="18" height="18" viewBox="0 0 20 20" fill="none"><path d="M5 5l10 10M15 5L5 15" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+            </button>
+          )}
         </div>
       </div>
+      )}
 
-      <div className="cpi-tabs-row">
+      {isPage && (
+        <div className="cpi-tabs-row cpm-page-viewswitch">
+          <div role="tablist" aria-label="Invoice view" style={{ display: 'flex' }}>
+            <button type="button" role="tab" aria-selected={mobileView === 'details'} className={"preview-tab" + (mobileView === 'details' ? ' on' : '')} onClick={() => showMobileView('details')}>Details</button>
+            <button type="button" role="tab" aria-selected={mobileView === 'preview'} className={"preview-tab" + (mobileView === 'preview' ? ' on' : '')} onClick={() => showMobileView('preview')}>Client preview</button>
+          </div>
+        </div>
+      )}
+      {!isPage && <div className="cpi-tabs-row">
         <div role="tablist" aria-label="Invoice view" style={{ display: 'flex' }}>
           <button type="button" role="tab" aria-selected={activeTab === 'details'} className={"preview-tab" + (activeTab === 'details' ? ' on' : '')} onClick={() => setActiveTab('details')}>Details</button>
           <button type="button" role="tab" aria-selected={activeTab === 'client-preview'} className={"preview-tab" + (activeTab === 'client-preview' ? ' on' : '')} onClick={() => setActiveTab('client-preview')}>Client preview</button>
         </div>
+      </div>}
+
+      <div className={"cpi-body" + (!isPage && activeTab === 'details' ? ' cpi-body-details' : ' cpi-body-preview')}>
+        {isPage ? (
+          <div
+            className={"cpm-page-body" + (railCollapsed ? '' : ' is-customizing')}
+            ref={pageBodyRef}
+            style={detailsWidth != null ? ({ '--cpm-details-w': detailsWidth + 'px' } as React.CSSProperties) : undefined}
+          >
+            <div className="cpm-page-details">{renderDetailsTab()}</div>
+            <div
+              className="cpm-page-resizer"
+              role="separator"
+              aria-orientation="vertical"
+              aria-label="Resize details"
+              title="Drag to resize"
+              onPointerDown={startResize}
+              onDoubleClick={() => setDetailsWidth(null)}
+            />
+            {renderClientPreviewTab()}
+          </div>
+        ) : activeTab === 'details' ? renderDetailsTab() : renderClientPreviewTab()}
       </div>
 
-      <div className={"cpi-body" + (activeTab === 'details' ? ' cpi-body-details' : ' cpi-body-preview')}>
-        {activeTab === 'details' ? renderDetailsTab() : renderClientPreviewTab()}
-      </div>
+      {isPage && (
+        <>
+          <AddFromAllModal
+            open={picker === 'all' || picker === 'all2'}
+            includeCosts={picker === 'all2'}
+            onClose={() => setPicker(null)}
+            onAdd={(items: LineItem[]) => setLines(prev => [...prev, ...items.map(toPreviewLine)])}
+            onAddSelections={(groups: any[]) => {
+              const added: PreviewLine[] = [];
+              groups.forEach(g => {
+                (g.children ?? []).forEach((c: any) => {
+                  if (c.newInvoiceAmt === null) return;
+                  added.push({
+                    id: `sel-${g.id}-${c.id}`, item: c.lineItem, costCode: c.costCode ?? '', group: g.name,
+                    qty: 1, unitCost: c.newInvoiceAmt, markup: 0, taxable: true, source: 'selection',
+                  });
+                });
+              });
+              setLines(prev => [...prev, ...added]);
+            }}
+            addedChildIds={[]}
+            defaultSources={(contractType === 'open-book' ? ['Costs', 'Selections', 'Change Orders'] : ['Estimate', 'Change Orders', 'Selections']) as SourceKey[]}
+          />
+          <CostsModal
+            open={picker === 'costs'}
+            onClose={() => setPicker(null)}
+            onAdd={(items: LineItem[]) => setLines(prev => [...prev, ...items.map(toPreviewLine)])}
+            jobName="Amy - selections test job"
+          />
+        </>
+      )}
 
       {/* Footer: overflow menu, Save, Record payment, Send. Print and
           Cancel live in the overflow menu, along with Customize. On phones the same buttons stay
           in the bar and Send shrinks to its icon. */}
-      <div className="cpi-footer">
-        <div className="cpi-foot-more cpm-foot-more" ref={footerMenuRef}>
-          <BdsButton
-            displayType="tertiary"
-            ariaLabel="More actions"
-            className="cpm-foot-more-btn"
-            onClick={() => setFooterMenuOpen(o => !o)}
-            icon={
-              <svg width="18" height="18" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                <circle cx="4" cy="10" r="1.6" /><circle cx="10" cy="10" r="1.6" /><circle cx="16" cy="10" r="1.6" />
-              </svg>
-            }
-          />
-          {footerMenuOpen && (
-            <div className="cpi-foot-pop cpm-foot-pop" role="menu">
-              {/* Customize at every width, always labelled "Customize".
-                  Desktop: toggles the docked rail open or folded. Tablet and
-                  phone: the rail is a sheet there, so this slides it up. */}
-              {activeTab === 'client-preview' && (
-                <button
-                  type="button"
-                  role="menuitem"
-                  className="cpi-foot-pop-item"
-                  onClick={() => {
-                    if (window.matchMedia('(max-width: 1100px)').matches) setCustomizeSheetOpen(true);
-                    else setRailCollapsed(c => !c);
-                    setFooterMenuOpen(false);
-                  }}
-                >
-                  Customize
-                </button>
-              )}
-              {activeTab === 'client-preview' && (
-                <button type="button" role="menuitem" className="cpi-foot-pop-item" onClick={() => setFooterMenuOpen(false)}>Print</button>
-              )}
-              <button type="button" role="menuitem" className="cpi-foot-pop-item" onClick={() => setFooterMenuOpen(false)}>Cancel</button>
-            </div>
-          )}
+      {!isPage && (
+        <div className="cpi-footer">
+          {moreMenu}
+          {actionButtons}
         </div>
-
-        <BdsButton displayType="secondary" text="Save" className="cpi-foot-wide" />
-        {!paidAt && (
-          <BdsButton displayType="secondary" text="Record payment" className="cpi-foot-wide" onClick={() => setPaidAt(new Date())} />
-        )}
-        <BdsButton
-          displayType="primary"
-          text="Send"
-          ariaLabel="Send"
-          className="cpm-send"
-          icon={<svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M3 3l14 7-14 7 2.5-7L3 3z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/><path d="M5.5 10H11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>}
-          onClick={() => {
-            setSentAt(new Date());
-            alert(`Invoice Li-${idNumber || '0111'} sent to ${billTo.name} (${billTo.email})`);
-          }}
-        />
-      </div>
+      )}
     </div>
   );
 }

@@ -782,6 +782,7 @@ export default function OwnerInvoicesPage({
           job={job}
           choices={invoiceTypeChoices}
           askStandardSource={!hidePaymentSchedule && !scheduleReady}
+          contract={hidePaymentSchedule ? 'open-book' : 'fixed-price'}
           onClose={() => setShowTypeModal(false)}
           onImportTemplate={onImportTemplate ? () => { setShowTypeModal(false); setShowTemplateModal(true); } : undefined}
           onChoose={(choice, makeDefault) => {

@@ -7119,8 +7119,8 @@ button.jps-term-label { cursor: pointer; }
    and Cancel), as a bare ellipsis rather than a bordered button. On phones
    Save and Record payment stay in the bar and Send drops to an icon-only
    square, so all four fit on one row. */
-.cpm-modal .cpm-foot-more { display: block; margin-right: 4px; align-self: center; }
-.cpm-modal .cpm-foot-pop { left: auto; right: 0; }
+.cpm-modal .cpm-foot-more, .cpm-page .cpm-foot-more { display: block; margin-right: 4px; align-self: center; }
+.cpm-modal .cpm-foot-pop, .cpm-page .cpm-foot-pop { left: auto; right: 0; }
 @media (max-width: 600px) {
   .cpm-modal .cpi-footer { justify-content: flex-end; }
   .cpm-modal .cpi-foot-wide { display: inline-flex; }
@@ -8924,3 +8924,116 @@ span.fp-room { display: flex; }
 .fp-full-legend span { display: inline-flex; align-items: center; gap: 6px; }
 
 .ws-cart-foot-note-top { margin: 0 0 10px; text-align: left; }
+
+/* Client preview - page (#invoice-full-page-reimagined-2): the modal's pieces as
+   one page. Details form on the left, the invoice document beside it, and the
+   Customize rail opening on the far right instead of the left. */
+.cpi-shell.cpm-page { height: 100%; }
+.cpm-page .cpi-titlebar { padding: 20px 28px 12px; }
+.cpm-page .cpi-title { font-size: 24px; }
+.cpm-page-body { display: grid; grid-template-columns: var(--cpm-details-w, clamp(560px, 48%, 840px)) 0 minmax(0, 1fr); height: 100%; min-height: 0; width: 100%; }
+.cpm-page-body.is-customizing { grid-template-columns: var(--cpm-details-w, clamp(420px, 34%, 600px)) 0 minmax(0, 1fr); }
+.cpm-page-resizer { position: relative; z-index: 3; cursor: col-resize; touch-action: none; }
+.cpm-page-resizer::before { content: ''; position: absolute; top: 0; bottom: 0; left: -4px; width: 8px; }
+.cpm-page-resizer:hover::before, .cpm-page-resizer:active::before { background: var(--bt-blue, #1e6bd6); opacity: .35; }
+.cpm-page-details { overflow-y: auto; background: white; border-right: 1px solid var(--g200); min-width: 0; }
+.cpm-page .cpi-3pane { position: relative; grid-template-columns: minmax(0, 1fr) var(--cpm-rail-w, 300px); }
+.cpm-rail-resizer { position: absolute; top: 0; bottom: 0; right: var(--cpm-rail-w, 300px); width: 0; z-index: 4; cursor: col-resize; touch-action: none; }
+.cpm-rail-resizer::before { content: ''; position: absolute; top: 0; bottom: 0; left: -4px; width: 8px; }
+.cpm-rail-resizer:hover::before, .cpm-rail-resizer:active::before { background: var(--bt-blue, #1e6bd6); opacity: .35; }
+.cpm-page .cpi-3pane.is-rail-collapsed { grid-template-columns: minmax(0, 1fr) 0; }
+.cpm-page .cpi-rail-left { order: 1; border-right: none; border-left: 1px solid var(--g200); }
+.cpm-page .cpi-3pane.is-rail-collapsed .cpi-rail-left { border-left: none; }
+.cpm-page .cpi-rail-strip,
+.cpm-page .cpi-3pane.is-rail-collapsed .cpi-rail-strip { display: none; }
+@media (max-width: 1100px) {
+  .cpm-page-body { grid-template-columns: minmax(0, 1fr); height: auto; }
+  .cpm-page-details { border-right: none; overflow: visible; }
+  .cpm-page-resizer, .cpm-rail-resizer { display: none; }
+  .cpm-page .cpi-3pane, .cpm-page .cpi-3pane.is-rail-collapsed { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* Reconcile: the same line lit on both sides while hovered or focused. */
+.cpm-page tr.is-linked > td { background: var(--bt-blue-light, #eaf2fd); }
+.cpm-page tr.is-linked > td:first-child { box-shadow: inset 3px 0 0 var(--bt-blue, #1e6bd6); }
+
+/* Tablet and phone: one pane at a time, switched from a Details / Invoice row
+   under the title. The Customize sheet lives in the Invoice pane. */
+.cpm-page-viewswitch { display: none; }
+.cpm-toolbar-customize { display: none; margin-left: auto; }
+@media (max-width: 1100px) {
+  .cpm-toolbar-customize { display: inline-flex; }
+  .cpm-page-viewswitch { display: block; padding: 0 16px; }
+  .cpm-page[data-view="details"] .cpi-3pane { display: none; }
+  .cpm-page[data-view="preview"] .cpm-page-details { display: none; }
+  .cpm-page .cpi-titlebar { padding: 14px 16px 10px; }
+  .cpm-page .cpi-title { font-size: 20px; }
+  .cpm-page-details .g3 { grid-template-columns: 1fr; }
+}
+
+/* Tablet (601 to 1100px): the Customize rail is a bottom sheet here too, as on
+   phones, so it opens over the invoice instead of stacking below it. */
+@media (max-width: 1100px) {
+  .cpm-page .cpi-rail-left {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 70;
+    max-height: 78%; border-left: 0; border-top: 1px solid var(--g200);
+    border-radius: 14px 14px 0 0; overflow-y: auto;
+    box-shadow: 0 -10px 34px rgba(0,0,0,0.22);
+    transform: translateY(100%); transition: transform .22s ease;
+  }
+  .cpm-page .cpi-rail-left.is-sheet-open { transform: translateY(0); }
+  .cpm-page .cpi-sheet-head { display: flex; }
+  .cpm-page .cpi-sheet-scrim { display: block; }
+  .cpm-page .cpi-rail-head { display: none; }
+  .cpm-page .cpi-3pane.is-rail-collapsed .cpi-rail-fields,
+  .cpm-page .cpi-3pane.is-rail-collapsed .cpi-rail-footer { display: flex; }
+  .cpm-page .cpi-rail-footer { position: sticky; bottom: 0; }
+}
+
+/* The canvas toolbar now only holds the Customize button, which is a tablet and phone affordance. */
+.cpm-page-toolbar { display: none; }
+@media (max-width: 1100px) {
+  .cpm-page-toolbar { display: flex; }
+}
+
+/* No line linking on tablet and phone: there is no hover, and only one pane shows. */
+@media (max-width: 1100px) {
+  .cpm-page tr.is-linked > td { background: none; box-shadow: none; }
+}
+
+/* Page header (#invoice-full-page-reimagined-2): back arrow at the top left, the
+   actions that used to sit in the footer at the top right, then the breadcrumb
+   and title underneath, like the other full-page views. */
+.cpm-page .cpi-titlebar.cpm-page-head { display: block; padding: 12px 28px 14px; }
+.cpm-page-head-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+.cpm-page-head-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; margin-left: auto; }
+.cpm-page .cpm-foot-more { display: block; position: relative; }
+.cpm-page .cpi-foot-pop { top: calc(100% + 6px); bottom: auto; left: auto; right: 0; }
+.cpm-page .cpi-foot-wide { display: inline-flex; }
+.cpm-page .cpi-breadcrumb a { color: var(--bt-blue, #1e6bd6); text-decoration: none; }
+.cpm-page .cpi-breadcrumb a:hover { text-decoration: underline; }
+@media (max-width: 1100px) {
+  .cpm-page .cpi-titlebar.cpm-page-head { padding: 10px 16px 12px; }
+}
+@media (max-width: 600px) {
+  .cpm-page .cpm-send .bds-r-button--text { display: none; }
+}
+@media (max-width: 600px) {
+  /* One row: back arrow, then the actions. Share and comments step aside. */
+  .cpm-page-head-top { flex-wrap: nowrap; gap: 6px; }
+  .cpm-page-head-actions { flex-wrap: nowrap; gap: 6px; }
+  .cpm-page-head-actions .cpi-icon-btn { display: none; }
+  .cpm-page .cpi-foot-pop { min-width: 148px; }
+}
+
+.ep-link-bar { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; padding: 8px 24px; background: #F7F9FC; border-bottom: 1px solid var(--g200); font-size: 12px; color: var(--g600); }
+.ep-link-bar-title { font-weight: 600; color: var(--g800); }
+.ep-link-stat strong { color: var(--g800); }
+.ep-link-ready strong { color: #057E4B; }
+.ep-link-warn strong { color: #854D00; }
+.ep-phase-select { width: 100%; padding: 5px 6px; font-size: 12px; font-family: 'Inter', sans-serif; color: var(--g600); background: #fff; border: 1px solid var(--g300); border-radius: 6px; cursor: pointer; }
+.ep-phase-select:focus { outline: 2px solid var(--bt-blue); outline-offset: 1px; }
+.ep-phase-linked { color: var(--g800); border-color: var(--bt-blue); }
+.ep-phase-select-group { font-weight: 500; background: var(--g50); }
+.ep-phase-state { font-size: 11px; color: var(--g500); margin-top: 3px; }
+.ep-phase-state-done { color: #057E4B; font-weight: 500; }

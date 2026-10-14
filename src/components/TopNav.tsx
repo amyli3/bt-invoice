@@ -195,20 +195,18 @@ export default function TopNav({ onNavigate }: TopNavProps) {
                     <button className="topnav-dropdown-item" onClick={() => { setFinancialOpen(false); setFinancialSubmenu(null); onNavigate?.('invoice-base-grid-ob'); }}>Openbook</button>
                     {/* OB in the label because this presentation runs the
                         open-book fill regardless of the job's contract type. */}
-                    <button className="topnav-dropdown-item" onClick={() => { setFinancialOpen(false); setFinancialSubmenu(null); onNavigate?.('invoice-3-modal'); }}>Modal - OB</button>
                     {/* "Invoice (full page)" is hidden: it and the reimagined
                         full page had converged, so the reimagined one is the
                         live version. The route still resolves at
                         #invoice-full-page if the old layout needs comparing. */}
                     <button className="topnav-dropdown-item" onClick={() => { setFinancialOpen(false); setFinancialSubmenu(null); onNavigate?.('invoice-full-page-reimagined'); }}>Full page - reimagined</button>
-                    <button className="topnav-dropdown-item" onClick={() => { setFinancialOpen(false); setFinancialSubmenu(null); onNavigate?.('invoice-full-page-reimagined-2'); }}>Full page - reimagined 2</button>
                     {/* Grid, not invoice: this one opens the invoices list, and
                         the old label read as another invoice presentation. */}
                     <button className="topnav-dropdown-item" onClick={() => { setFinancialOpen(false); setFinancialSubmenu(null); onNavigate?.('owner-invoices'); }}>Invoice grid (reimagined)</button>
                   </div>
                 )}
               </div>
-              <button className="topnav-dropdown-item" onClick={() => { setFinancialOpen(false); onNavigate?.('client-preview-invoice'); }}>Client preview invoice</button>
+              <button className="topnav-dropdown-item" onClick={() => { setFinancialOpen(false); onNavigate?.('invoice-full-page-reimagined-2'); }}>Invoice reimagined (full page)</button>
               <button className="topnav-dropdown-item" onClick={() => { setFinancialOpen(false); onNavigate?.('client-preview-modal'); }}>Client preview - modal</button>
               {/* The pre-redesign presentation, kept alongside the current one
                   so the two can be compared in a review. Sits directly under

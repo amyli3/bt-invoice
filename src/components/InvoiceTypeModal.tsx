@@ -103,7 +103,35 @@ interface Props {
      produces a standard invoice per draw, so it belongs under Standard rather
      than beside it. Off for callers with no schedule to offer (open book). */
   askStandardSource?: boolean;
+  /* Fixed price copy. Fixed-price jobs bill the contract, so Standard means
+     pulling in estimate line items for the scope of work that's done, and the
+     payment schedule is draws against the contract price. Open book bills
+     costs incurred, so Standard pulls in bills and time clock. Omitted keeps
+     the generic wording. */
+  contract?: 'fixed-price' | 'open-book';
 }
+
+const FIXED_PRICE_BLURBS: Partial<Record<InvoiceTypeChoice, string>> = {
+  standard: 'Pull in estimate line items and invoice for the scope of work you have completed, line by line or as one flat fee.',
+  'payment-schedule': 'Bill the contract in draws. Set a percentage of the contract price for each phase, and Buildertrend creates an invoice for each draw, ready to send as the phase completes.',
+};
+
+const OPEN_BOOK_BLURBS: Partial<Record<InvoiceTypeChoice, string>> = {
+  standard: 'Invoice the costs you have incurred, like bills and time clock hours, line by line or as one flat fee.',
+};
+
+const FIXED_PRICE_SOURCE_OPTIONS: { key: 'standard' | 'payment-schedule'; label: string; blurb: string }[] = [
+  {
+    key: 'standard',
+    label: 'Invoice completed scope of work',
+    blurb: 'Pull in estimate line items for the work that is done. Pick what to bill, line by line or as one flat fee.',
+  },
+  {
+    key: 'payment-schedule',
+    label: 'Set up a payment schedule',
+    blurb: FIXED_PRICE_BLURBS['payment-schedule']!,
+  },
+];
 
 const STANDARD_SOURCE_OPTIONS: { key: 'standard' | 'payment-schedule'; label: string; blurb: string }[] = [
   {
@@ -118,8 +146,11 @@ const STANDARD_SOURCE_OPTIONS: { key: 'standard' | 'payment-schedule'; label: st
   },
 ];
 
-export default function InvoiceTypeModal({ job, onClose, onChoose, onImportTemplate, variant = 'new', initialChoice, choices, answeredContext, askStandardSource = false }: Props) {
-  const options = choices ? INVOICE_TYPE_OPTIONS.filter(o => choices.includes(o.key)) : INVOICE_TYPE_OPTIONS;
+export default function InvoiceTypeModal({ job, onClose, onChoose, onImportTemplate, variant = 'new', initialChoice, choices, answeredContext, askStandardSource = false, contract }: Props) {
+  const baseOptions = choices ? INVOICE_TYPE_OPTIONS.filter(o => choices.includes(o.key)) : INVOICE_TYPE_OPTIONS;
+  const blurbs = contract === 'fixed-price' ? FIXED_PRICE_BLURBS : contract === 'open-book' ? OPEN_BOOK_BLURBS : null;
+  const options = blurbs ? baseOptions.map(o => ({ ...o, blurb: blurbs[o.key] ?? o.blurb })) : baseOptions;
+  const sourceOptions = contract === 'fixed-price' ? FIXED_PRICE_SOURCE_OPTIONS : STANDARD_SOURCE_OPTIONS;
   const recommendation = recommendedChoice(job);
   /* The recommender answers across all three documents, so it can land on one
      this caller doesn't offer. Rather than redirect it to a second-best answer
@@ -146,7 +177,7 @@ export default function InvoiceTypeModal({ job, onClose, onChoose, onImportTempl
         {step === 'source' ? (
           <div className="est-modal-body">
             <div style={{ display: 'grid', gap: 14, gridTemplateColumns: 'repeat(2, 1fr)', marginTop: 4, marginBottom: 18 }}>
-              {STANDARD_SOURCE_OPTIONS.map(opt => {
+              {sourceOptions.map(opt => {
                 const isSelected = opt.key === source;
                 return (
                   <label

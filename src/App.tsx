@@ -45,9 +45,9 @@ import ClientSelectionsWorkshop from './components/ClientSelectionsWorkshop';
 import ClientSelections2 from './components/ClientSelections2';
 import ClientSelections3 from './components/ClientSelections3';
 import ClientPortal, { ClientTopNav } from './components/ClientPortal';
-import ClientPreviewInvoice from './components/ClientPreviewInvoice';
 import ClientPreviewInvoiceOld from './components/ClientPreviewInvoiceOld';
 import ClientPreviewModal from './components/ClientPreviewModal';
+import { setReviewSetting } from './reviewSettings';
 import JobCostingBudget from './components/JobCostingBudget';
 import UnderageFlows from './components/UnderageFlows';
 import OpenbookFlow from './components/OpenbookFlow';
@@ -61,9 +61,9 @@ import { getNextId } from './mockData';
 import { TIME_INTERVAL_DEMO_INVOICES, JULY_TIME_INTERVAL_ITEMS, type DemoInvoiceRow } from './mockData';
 import type { InvoicingMode, DrawScheduleLine, Job } from './types';
 
-type PageType = 'invoice' | 'invoice-2' | 'invoice-3' | 'invoice-3-modal' | 'invoice-full-page' | 'invoice-full-page-reimagined' | 'invoice-full-page-reimagined-2' | 'client-preview-invoice' | 'client-preview-invoice-old' | 'client-preview-modal' | 'job-price-summary' | 'selections' | 'selections-workshop' | 'option-detail' | 'progress-invoice' | 'change-order' | 'change-order-list' | 'client-portal' | 'client-jps' | 'estimate' | 'estimate-ob' | 'job-proposal' | 'job-proposal-ob' | 'client-selections' | 'client-selections-workshop' | 'client-selections-2' | 'client-selections-3' | 'job-costing-budget' | 'underage-flows' | 'job-details-clients' | 'owner-invoices' | 'openbook' | 'job-details' | 'company-settings' | 'bills';
+type PageType = 'invoice' | 'invoice-2' | 'invoice-3' | 'invoice-full-page' | 'invoice-full-page-reimagined' | 'invoice-full-page-reimagined-2' | 'client-preview-invoice-old' | 'client-preview-modal' | 'job-price-summary' | 'selections' | 'selections-workshop' | 'option-detail' | 'progress-invoice' | 'change-order' | 'change-order-list' | 'client-portal' | 'client-jps' | 'estimate' | 'estimate-ob' | 'job-proposal' | 'job-proposal-ob' | 'client-selections' | 'client-selections-workshop' | 'client-selections-2' | 'client-selections-3' | 'job-costing-budget' | 'underage-flows' | 'job-details-clients' | 'owner-invoices' | 'openbook' | 'job-details' | 'company-settings' | 'bills';
 
-const validPages: PageType[] = ['invoice', 'invoice-2', 'invoice-3', 'invoice-3-modal', 'invoice-full-page', 'invoice-full-page-reimagined', 'invoice-full-page-reimagined-2', 'client-preview-invoice', 'client-preview-invoice-old', 'client-preview-modal', 'job-price-summary', 'selections', 'selections-workshop', 'option-detail', 'progress-invoice', 'change-order', 'change-order-list', 'client-portal', 'client-jps', 'estimate', 'estimate-ob', 'job-proposal', 'job-proposal-ob', 'client-selections', 'client-selections-workshop', 'client-selections-2', 'client-selections-3', 'job-costing-budget', 'underage-flows', 'job-details-clients', 'owner-invoices', 'openbook', 'job-details', 'company-settings', 'bills'];
+const validPages: PageType[] = ['invoice', 'invoice-2', 'invoice-3', 'invoice-full-page', 'invoice-full-page-reimagined', 'invoice-full-page-reimagined-2', 'client-preview-invoice-old', 'client-preview-modal', 'job-price-summary', 'selections', 'selections-workshop', 'option-detail', 'progress-invoice', 'change-order', 'change-order-list', 'client-portal', 'client-jps', 'estimate', 'estimate-ob', 'job-proposal', 'job-proposal-ob', 'client-selections', 'client-selections-workshop', 'client-selections-2', 'client-selections-3', 'job-costing-budget', 'underage-flows', 'job-details-clients', 'owner-invoices', 'openbook', 'job-details', 'company-settings', 'bills'];
 
 function getInitialPage(): PageType {
   // Support ?page=X query param (used when hash is occupied by Figma capture)
@@ -112,18 +112,6 @@ export default function App() {
       setJobInvoiceKindDefault(selectedJob, 'company');
       _setActivePage('owner-invoices');
       window.location.hash = 'owner-invoices';
-      return;
-    }
-    /* Same entry rule for the modal presentation: the route lands on the job's
-       invoices grid with nothing in it, and the invoice itself only opens once
-       "+ Invoice" has been answered. Whatever the last visit left in the
-       builder is cleared on the way in. */
-    if (page === 'invoice-3-modal') {
-      setInvoice({ ...DEMO_INVOICE, lineItems: [] });
-      setModalInvoiceOpen(false);
-      setInvoicesLoop('modal');
-      _setActivePage('invoice-3-modal');
-      window.location.hash = 'invoice-3-modal';
       return;
     }
     if (page === 'change-order') setSelectedCOId(null);
@@ -280,6 +268,15 @@ export default function App() {
     setInvoice({ ...defaultInvoice, type: choice === 'progress' ? 'progress' : 'invoice' });
     setAutoFilledDraw(null);
     setAutoFilledPeriod(null);
+    /* A standard invoice, the one that pulls costs in, opens on the full page
+       view (Details left, Client preview right). The loop it came from picks
+       the contract that view shows: Openbook entry bills open book, Invoice >
+       Fixed bills fixed price. Progress keeps the Invoice page's own grid. */
+    if (choice !== 'progress') {
+      setReviewSetting('contractType', invoicesLoop === 'base-ob' ? 'open-book' : 'fixed-price');
+      setActivePage('invoice-full-page-reimagined-2');
+      return;
+    }
     setActivePage('invoice-3');
   };
   // The same question, reopened from inside the invoice.
@@ -398,9 +395,7 @@ export default function App() {
   /* Which invoice route the builder backed out of, so the grid's "+ Invoice"
      returns them to that same route instead of crossing the two flows. null =
      arrived some other way, so the normal (non-empty) page shows. */
-  const [invoicesLoop, setInvoicesLoop] = useState<'reimagined' | 'base' | 'base-ob' | 'modal' | null>(
-    () => (getInitialPage() === 'invoice-3-modal' ? 'modal' : null),
-  );
+  const [invoicesLoop, setInvoicesLoop] = useState<'reimagined' | 'base' | 'base-ob' | null>(null);
   const invoicesEmptyState = invoicesLoop !== null;
   /* Open book's equivalent of the draw schedule, per job. Seeded for the demo
      job as if the signed proposal set it, since that's the ordinary case: the
@@ -1044,17 +1039,6 @@ export default function App() {
     );
   }
 
-  if (activePage === 'client-preview-invoice') {
-    return (
-      <div style={{display: 'flex', flexDirection: 'column', height: '100vh'}}>
-        <TopNav onNavigate={(page) => setActivePage(page as PageType)} />
-        <div style={{flex: 1, minHeight: 0}}>
-          <ClientPreviewInvoice />
-        </div>
-      </div>
-    );
-  }
-
   /* The client preview as a modal over the app, rather than a page of its
      own - see ClientPreviewModal.tsx. Closing it lands on the invoice list. */
   if (activePage === 'client-preview-modal') {
@@ -1064,6 +1048,20 @@ export default function App() {
         <div style={{flex: 1, minHeight: 0, background: 'var(--g100)'}} />
         <div className="cpm-backdrop" />
         <ClientPreviewModal onClose={() => setActivePage('owner-invoices')} />
+      </div>
+    );
+  }
+
+  /* Full page reimagined 2: Details form on the left, the invoice document on
+     the right, Customize opening a rail beside it. Built from the same pieces
+     as the modal above - see ClientPreviewModal.tsx (variant="page"). */
+  if (activePage === 'invoice-full-page-reimagined-2') {
+    return (
+      <div style={{display: 'flex', flexDirection: 'column', height: '100vh'}}>
+        <TopNav onNavigate={(page) => setActivePage(page as PageType)} />
+        <div style={{flex: 1, minHeight: 0}}>
+          <ClientPreviewModal variant="page" onClose={() => setActivePage(invoiceReturnPage)} />
+        </div>
       </div>
     );
   }
@@ -1482,7 +1480,9 @@ export default function App() {
   // section leads with a Regular / Progress decision instead of a Flat fee /
   // Line items toggle — everything else about the page is identical, so it
   // travels with 'invoice-full-page' through all the layout flags below.
-  const isSplitReimagined = activePage === 'invoice-full-page-reimagined-2';
+  // The route returns the client preview page above, so the split layout below
+  // is unreachable; kept so the old form + live preview page can come back.
+  const isSplitReimagined = (activePage as PageType) === 'invoice-full-page-reimagined-2';
   const isReimaginedFullPage = activePage === 'invoice-full-page-reimagined' || isSplitReimagined;
   const isFullPageInvoice = activePage === 'invoice-full-page' || isReimaginedFullPage;
   /* Financial > Invoice: the reference copy of today's product, the baseline
@@ -1517,15 +1517,17 @@ export default function App() {
   // they are buying a result. Drives the Backup detail hint copy only — every
   // option stays reachable either way.
   const isOpenBookJob = currentJobWithOverrides.contractType === 'cost-plus' || currentJobWithOverrides.contractType === 'time-and-materials';
-  const isInvoiceV2Like = activePage === 'invoice-2' || activePage === 'invoice-3' || activePage === 'invoice-3-modal' || isFullPageInvoice;
-  // 'invoice-3', 'invoice-3-modal' and the full-page routes are the same
+  const isInvoiceV2Like = activePage === 'invoice-2' || activePage === 'invoice-3' || isFullPageInvoice;
+  // 'invoice-3' and the full-page routes are the same
   // reimagine builder content — the latter are just presented with the
   // Details/Client preview tab layout (as a modal, or as a full page) instead
   // of the side-by-side Builder/Preview split. Anything gated on "am I in the
   // invoice-3 experience" (wizards launched from "Add from", the pre-fill
   // banners) needs all of them.
-  const isInvoice3Family = activePage === 'invoice-3' || activePage === 'invoice-3-modal' || isFullPageInvoice;
-  const showInvoiceAsModal = activePage === 'invoice-3-modal';
+  const isInvoice3Family = activePage === 'invoice-3' || isFullPageInvoice;
+  // The standalone invoice modal route is gone (the client preview modal covers
+  // it), so this is always false; the branches below are left in place.
+  const showInvoiceAsModal = false as boolean;
   // The full-page routes, and now the plain Invoice page, reuse the modal's
   // Details/Client-preview tab layout, just rendered inline in the content
   // area instead of inside the modal backdrop — see showInvoiceAsModal-only
@@ -2278,7 +2280,7 @@ export default function App() {
         // resets to a blank one so it never inherits the demo content (or a
         // progress invoice loaded by an earlier flow). The modal route sets its
         // own loop up in setActivePage, so it's left alone here.
-        if (page !== 'invoice-3-modal') setInvoicesLoop(null);
+        setInvoicesLoop(null);
         // Demo header content, no lines: the grid under an "Auto fill" offer has
         // to be empty for the offer to mean anything. The lines arrive when the
         // builder takes it.
