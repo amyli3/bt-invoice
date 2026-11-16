@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import InvoicesSettingsModal, { type DefaultInvoiceKind } from './InvoicesSettingsModal';
+import AccountingSetupModal from './AccountingSetupModal';
+import BillsPosBudgetModal from './BillsPosBudgetModal';
 
 function Icon({ children }: { children: React.ReactNode }) {
   return (
@@ -41,12 +43,16 @@ const ICONS: Record<string, React.ReactNode> = {
   users: <Icon><circle cx="6.7" cy="6.5" r="2.4" {...s} /><circle cx="12.2" cy="7.2" r="1.9" {...s} /><path d="M2.3 14.6c.9-2.1 2.4-3.3 4.4-3.3s3.5 1.2 4.4 3.3" {...s} /><path d="M11.3 11.6c1.6.2 2.7 1.3 3.4 3" {...s} /></Icon>,
   home: <Icon><path d="M3 8.5L9 3l6 5.5" {...s} /><path d="M4.5 7.5V15h9V7.5" {...s} /><path d="M7.3 15v-4h3.4v4" {...s} /></Icon>,
   wrench: <Icon><path d="M11.7 3.3a3.3 3.3 0 0 0-4.3 4l-5 5 2.3 2.3 5-5a3.3 3.3 0 0 0 4-4.3l-2 2-1.7-1.7z" {...s} /></Icon>,
+  tasks: <Icon><path d="M3 4.5l1.2 1.2L6.3 3.5M3 9.5l1.2 1.2 2.1-2.2M3 14.5l1.2 1.2 2.1-2.2" {...s} /><path d="M9 5h6M9 10h6M9 15h6" {...s} /></Icon>,
+  selections: <Icon><path d="M3 15l2.5-8 4 1.5L7 16.5z" {...s} /><path d="M9.5 8.5l3-5.5 3 1.8-3.2 5.7z" {...s} /></Icon>,
+  table: <Icon><rect x="2.5" y="3.5" width="13" height="11" rx="1" {...s} /><path d="M2.5 7h13M2.5 10.5h13M7 3.5v11" {...s} /></Icon>,
 };
 
 interface SettingItem {
   key: string;
   icon: keyof typeof ICONS;
   label: string;
+  beta?: boolean;
 }
 
 interface SettingCard {
@@ -59,6 +65,7 @@ const COLUMNS: SettingCard[][] = [
     { title: 'Boogie Construction', items: [
       { key: 'logo', icon: 'logo', label: 'Company logo' },
       { key: 'info', icon: 'info', label: 'Company information' },
+      { key: 'security', icon: 'lock', label: 'Account security' },
       { key: 'subs', icon: 'layers', label: 'Subscriptions' },
       { key: 'jobs', icon: 'clipboard', label: 'Jobs' },
     ] },
@@ -74,17 +81,19 @@ const COLUMNS: SettingCard[][] = [
     { title: 'Project management', items: [
       { key: 'schedule', icon: 'calendar', label: 'Schedule' },
       { key: 'dailylogs', icon: 'daily', label: 'Daily Logs' },
+      { key: 'tasks', icon: 'tasks', label: 'Tasks' },
       { key: 'co', icon: 'swap', label: 'Change Orders' },
+      { key: 'selections', icon: 'selections', label: 'Selections' },
       { key: 'warranty', icon: 'shield', label: 'Warranty' },
       { key: 'timeclock', icon: 'clock', label: 'Time Clock' },
       { key: 'risk', icon: 'umbrella', label: 'Risk insurance' },
       { key: 'clientupdates', icon: 'compass', label: 'Client Updates' },
     ] },
+  ],
+  [
     { title: 'Files', items: [
       { key: 'files', icon: 'file', label: 'Files' },
     ] },
-  ],
-  [
     { title: 'Messaging', items: [
       { key: 'surveys', icon: 'survey', label: 'Surveys' },
       { key: 'rfis', icon: 'question', label: 'RFIs' },
@@ -100,6 +109,7 @@ const COLUMNS: SettingCard[][] = [
       { key: 'invoices', icon: 'invoice', label: 'Invoices' },
       { key: 'payments', icon: 'card', label: 'Online Payments' },
       { key: 'taxes', icon: 'percent', label: 'Taxes' },
+      { key: 'pricingtable', icon: 'table', label: 'Pricing Table', beta: true },
     ] },
   ],
   [
@@ -116,7 +126,9 @@ const INTEGRATIONS: { key: string; label: string; bg: string; fg: string; glyph:
   { key: 'takeoff', label: 'Buildertrend Takeoff', bg: '#e8f1fc', fg: '#0065db', glyph: 'b' },
   { key: 'lowes', label: "Lowe's PRO", bg: '#00259e', fg: '#ffffff', glyph: 'L' },
   { key: 'homedepot', label: 'The Home Depot', bg: '#f96302', fg: '#ffffff', glyph: 'H' },
+  { key: 'quickbooks', label: 'Accounting', bg: '#f1f3f5', fg: '#374151', glyph: '🏛' },
   { key: 'gusto', label: 'Gusto', bg: '#fef0e6', fg: '#f45d48', glyph: 'g' },
+  { key: 'bluebeam', label: 'Bluebeam', bg: '#e6f1fb', fg: '#0a6ed1', glyph: 'B' },
   { key: 'hubspot', label: 'HubSpot', bg: '#fff2ec', fg: '#ff7a59', glyph: 'H' },
   { key: 'salesforce', label: 'Salesforce', bg: '#e8f3fd', fg: '#00a1e0', glyph: 'S' },
   { key: 'pipedrive', label: 'Pipedrive', bg: '#e6f4ea', fg: '#26825a', glyph: 'P' },
@@ -135,7 +147,7 @@ function SettingsCard({ title, children }: { title: string; children: React.Reac
   );
 }
 
-function SettingsRow({ icon, label, onClick }: SettingItem & { onClick?: () => void }) {
+function SettingsRow({ icon, label, beta, onClick }: SettingItem & { onClick?: () => void }) {
   return (
     <button
       style={{
@@ -149,6 +161,9 @@ function SettingsRow({ icon, label, onClick }: SettingItem & { onClick?: () => v
     >
       <span style={{ display: 'flex', color: 'var(--g600)' }}>{ICONS[icon]}</span>
       {label}
+      {beta && (
+        <span style={{ background: '#e8f1fc', color: 'var(--bt-blue)', fontSize: 12, fontWeight: 600, borderRadius: 10, padding: '1px 8px' }}>BETA</span>
+      )}
     </button>
   );
 }
@@ -160,9 +175,11 @@ interface Props {
 
 export default function CompanySettingsPage({ defaultInvoiceKind, onDefaultInvoiceKindChange }: Props) {
   const [invoicesModalOpen, setInvoicesModalOpen] = useState(false);
+  const [accountingModalOpen, setAccountingModalOpen] = useState(false);
+  const [billsModalOpen, setBillsModalOpen] = useState(false);
 
   return (
-    <div className="bds-scope" style={{ flex: 1, minWidth: 0, overflowY: 'auto', background: '#eef0f8' }}>
+    <div className="bds-scope" style={{ flex: '1 0 auto', minWidth: 0, background: '#eef0f8' }}>
       <div style={{ maxWidth: 1500, margin: '0 auto', padding: '28px 32px 48px' }}>
         <h1 style={{ fontSize: 26, fontWeight: 700, color: 'var(--g800)', margin: '0 0 24px' }}>Company settings</h1>
         <div style={{
@@ -179,7 +196,11 @@ export default function CompanySettingsPage({ defaultInvoiceKind, onDefaultInvoi
                       key={item.key}
                       icon={item.icon}
                       label={item.label}
-                      onClick={item.key === 'invoices' ? () => setInvoicesModalOpen(true) : undefined}
+                      onClick={
+                        item.key === 'invoices' ? () => setInvoicesModalOpen(true)
+                        : item.key === 'bills' ? () => setBillsModalOpen(true)
+                        : undefined
+                      }
                     />
                   ))}
                 </SettingsCard>
@@ -191,6 +212,7 @@ export default function CompanySettingsPage({ defaultInvoiceKind, onDefaultInvoi
               {INTEGRATIONS.map(int => (
                 <button
                   key={int.key}
+                  onClick={int.key === 'quickbooks' ? () => setAccountingModalOpen(true) : undefined}
                   style={{
                     display: 'flex', alignItems: 'center', gap: 10, width: '100%',
                     padding: '8px 18px', border: 'none', background: 'none', textAlign: 'left',
@@ -213,6 +235,8 @@ export default function CompanySettingsPage({ defaultInvoiceKind, onDefaultInvoi
           </div>
         </div>
       </div>
+      {accountingModalOpen && <AccountingSetupModal onClose={() => setAccountingModalOpen(false)} />}
+      {billsModalOpen && <BillsPosBudgetModal onClose={() => setBillsModalOpen(false)} />}
       {invoicesModalOpen && (
         <InvoicesSettingsModal
           onClose={() => setInvoicesModalOpen(false)}

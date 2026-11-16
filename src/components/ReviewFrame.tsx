@@ -159,7 +159,7 @@ export default function ReviewFrame({ children }: { children: ReactNode }) {
                     role="radio"
                     aria-checked={settings[v.key] === o.value}
                     className={'rf-seg-btn' + (settings[v.key] === o.value ? ' on' : '')}
-                    onClick={() => setReviewSetting(v.key, o.value)}
+                    onClick={() => { setReviewSetting(v.key, o.value); if (v.key === 'contractType') setOpen(false); }}
                   >
                     {o.label}
                   </button>

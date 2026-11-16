@@ -1,4 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
+import {
+  accountDisplayName, PEOPLE as ACCOUNT_PEOPLE, personLabel, setPaymentAccountViewer, usePaymentAccountAliases,
+  usePaymentAccountOptions, usePaymentAccountViewer,
+} from '../paymentAccounts';
 
 /* Bills — the cost side of the job, opposite the owner invoice. One bill/receipt
    record: what was bought, who it was paid to, which cost codes it lands on, who
@@ -72,6 +77,8 @@ export type BillSeed = {
   billNumber: string;
   job: string;
   costs?: CostRow[];
+  /* A record started from scratch rather than opened from the grid. */
+  blank?: boolean;
 };
 
 const COST_CODES = [
@@ -103,7 +110,14 @@ const PEOPLE = [
 ];
 
 const lbl: React.CSSProperties = {
-  display: 'block', fontSize: 13, fontWeight: 500, color: 'var(--g700)', marginBottom: 4,
+  display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--g800)', marginBottom: 4,
+};
+
+/* Today's screen is the baseline, so the sections the shipped page does not have
+   are switched off rather than deleted. Flip one back to compare. */
+const TODAY = {
+  stageStrip: false,
+  customFields: false,
 };
 
 /* The grid the form fields sit on. The frame is 1009 wide inside a 1454 page, so
@@ -169,13 +183,18 @@ const Avatar = ({ initials, bg, color, size = 28 }: { initials: string; bg: stri
    lands directly on top of the field you just clicked and hides the label and the
    value. This opens below the field instead, the way the shipped page does, and
    marks the current value rather than relying on position to convey it. */
-function Dropdown({ value, options, onChange, leading, ariaLabel, placeholder }: {
+function Dropdown({ value, options, onChange, leading, ariaLabel, placeholder, disabled, invalid, footer }: {
   value: string;
   options: string[];
   onChange: (v: string) => void;
   leading?: React.ReactNode;
   ariaLabel?: string;
   placeholder?: string;
+  disabled?: boolean;
+  invalid?: boolean;
+  /* A last row that runs an action instead of picking a value. It stays at the
+     bottom of the list while the options scroll. */
+  footer?: { label: string; action: string; onSelect: () => void };
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -202,9 +221,12 @@ function Dropdown({ value, options, onChange, leading, ariaLabel, placeholder }:
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-label={ariaLabel}
-        onClick={() => setOpen(o => !o)}
+        aria-disabled={disabled}
+        onClick={() => { if (!disabled) setOpen(o => !o); }}
         style={{
-          display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', textAlign: 'left',
+          display: 'flex', alignItems: 'center', gap: 8, cursor: disabled ? 'default' : 'pointer', textAlign: 'left',
+          ...(disabled ? { background: 'var(--g100)' } : {}),
+          ...(invalid ? { borderColor: '#d92d20' } : {}),
           ...(open ? { borderColor: 'var(--bt-blue)', boxShadow: '0 0 0 3px rgba(0,101,219,0.12)' } : {}),
         }}
       >
@@ -247,15 +269,71 @@ function Dropdown({ value, options, onChange, leading, ariaLabel, placeholder }:
                 onMouseEnter={e => { if (!selected) e.currentTarget.style.background = 'var(--g50)'; }}
                 onMouseLeave={e => { if (!selected) e.currentTarget.style.background = 'none'; }}
               >
-                {opt || '\u00a0'}
+                {opt || placeholder || '\u00a0'}
               </button>
             );
           })}
+          {footer && (
+            <button
+              type="button"
+              onClick={() => { setOpen(false); footer.onSelect(); }}
+              style={{
+                position: 'sticky', bottom: 0, display: 'flex', alignItems: 'center', gap: 6, width: '100%',
+                textAlign: 'left', padding: '10px 12px', background: 'var(--g50)', border: 'none',
+                borderTop: '1px solid var(--g200)', cursor: 'pointer', fontFamily: 'inherit', fontSize: 14, lineHeight: '20px',
+                color: 'var(--g700)',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = 'var(--g100)'; }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'var(--g50)'; }}
+            >
+              {footer.label}
+              <span style={{ color: 'var(--bt-blue)', fontWeight: 600 }}>{footer.action}</span>
+            </button>
+          )}
         </div>
       )}
     </div>
   );
 }
+
+const PAYEE_COLORS: Record<string, { bg: string; color: string }> = {
+  'Misc': { bg: '#fecaca', color: '#991b1b' },
+  'Home Depot': { bg: '#fde2e4', color: '#b5254c' },
+  'Ferguson Supply': { bg: '#dbeafe', color: '#1e40af' },
+  'Rexel Electrical': { bg: '#fef3c7', color: '#92400e' },
+};
+
+const PayeeAvatar = ({ name }: { name: string }) => {
+  const c = PAYEE_COLORS[name] ?? { bg: '#e5e7eb', color: '#374151' };
+  const initials = name.split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase();
+  return <Avatar initials={initials} bg={c.bg} color={c.color} size={22} />;
+};
+
+function DateField({ value, onChange, ariaLabel }: { value: string; onChange: (v: string) => void; ariaLabel: string }) {
+  return (
+    <div style={{ position: 'relative' }}>
+      <input className="fi" aria-label={ariaLabel} value={value} onChange={e => onChange(e.target.value)} style={{ paddingRight: 38 }} />
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--g400)', pointerEvents: 'none' }}>
+        <rect x="2" y="3" width="12" height="11" rx="1.5" stroke="currentColor" strokeWidth="1.2" />
+        <path d="M2 6.5h12M5.5 1.8v2.4M10.5 1.8v2.4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+      </svg>
+    </div>
+  );
+}
+
+const InfoIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ flexShrink: 0, color: 'var(--g500)' }}>
+    <circle cx="7" cy="7" r="6" stroke="currentColor" strokeWidth="1.2" />
+    <path d="M7 6.4v3.4M7 4.3v.1" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+  </svg>
+);
+
+const BulbIcon = () => (
+  <svg width="17" height="17" viewBox="0 0 18 18" fill="none" style={{ flexShrink: 0 }}>
+    <path d="M6.5 12.5h5M7.5 15h3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+    <path d="M9 2.5a4.5 4.5 0 0 0-2.6 8.2v1.8h5.2v-1.8A4.5 4.5 0 0 0 9 2.5Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+  </svg>
+);
 
 /* Description rich-text toolbar. Non-functional by design: the prototype is
    about the bill record, and a working editor would only add noise. */
@@ -321,29 +399,45 @@ interface Props {
 }
 
 export default function BillsPage({ jobName = 'Johnson Residence — Full Remodel', onClose, record, onRecordChange }: Props) {
+  const blank = !!record?.blank;
+  /* The accounts the admin has left visible in Accounting setup. */
+  const visibleAccounts = usePaymentAccountOptions();
+  const accountViewer = usePaymentAccountViewer();
+  const accountNicknames = usePaymentAccountAliases();
   const [tab, setTab] = useState<'record' | 'lien'>('record');
   const [type, setType] = useState(record?.type ?? 'Receipt');
-  const [paymentAccount, setPaymentAccount] = useState('Visa 1234');
-  const [datePaid, setDatePaid] = useState('Jan 20, 2026');
+  const [paymentAccount, setPaymentAccount] = useState(blank ? '' : 'Capital One Spark Business (4821)');
+  const [accountError, setAccountError] = useState(false);
+  /* "Can't find your card?" opens a short note that points people to their admin.
+     There is no request to send: the admin is a person to talk to. */
+  const [cardHelpOpen, setCardHelpOpen] = useState(false);
+  /* A record can carry an account its viewer may not use. It shows under its
+     nickname if it has one, and never under the QuickBooks name or card digits. */
+  const selectedAccountLabel = !paymentAccount
+    ? ''
+    : visibleAccounts.find(a => a.name === paymentAccount)?.label
+      ?? accountDisplayName(paymentAccount, accountNicknames);
+  const [datePaid, setDatePaid] = useState(blank ? '' : 'Jan 20, 2026');
+  const [invoiceDate, setInvoiceDate] = useState(blank ? '' : 'Jan 20, 2026');
+  const [billable, setBillable] = useState(true);
   const [job, setJob] = useState(record?.job ?? '');
   const [title, setTitle] = useState(record?.title ?? 'Electrical rough-in materials');
   const [billNumber, setBillNumber] = useState(record?.billNumber ?? '12345');
   const [paidTo, setPaidTo] = useState(record?.paidTo ?? 'Home Depot');
-  const [name, setName] = useState('Bob');
+  const [name, setName] = useState(blank ? '' : 'Bob');
   const [purchaseOrder, setPurchaseOrder] = useState('');
   const [description, setDescription] = useState('');
 
   const [costs, setCosts] = useState<CostRow[]>(record?.costs ?? INITIAL_COSTS);
   const [activeRow, setActiveRow] = useState<string | null>('c1');
   const [checkedRows, setCheckedRows] = useState<string[]>([]);
-  const [newLineItems, setNewLineItems] = useState(true);
-  const [sendToQbo, setSendToQbo] = useState(false);
+  const [newLineItems, setNewLineItems] = useState(false);
   const [customOpen, setCustomOpen] = useState(true);
   const [status, setStatus] = useState<BillStatus>(record?.status ?? 'Draft');
   const [toast, setToast] = useState<string | null>(null);
 
   // Approvers
-  const [approvers, setApprovers] = useState<Approver[]>(INITIAL_APPROVERS);
+  const [approvers, setApprovers] = useState<Approver[]>(blank ? [] : INITIAL_APPROVERS);
   const [addingApprover, setAddingApprover] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [picked, setPicked] = useState<string[]>([]);
@@ -355,8 +449,8 @@ export default function BillsPage({ jobName = 'Johnson Residence — Full Remode
   const moreRef = useRef<HTMLDivElement>(null);
 
   // Document pane: collapsed to a rail by default, expands into a split view
-  const [docOpen, setDocOpen] = useState(false);
-  const [docWidth, setDocWidth] = useState(48);
+  const [docOpen, setDocOpen] = useState(blank);
+  const [docWidth, setDocWidth] = useState(blank ? 16 : 48);
   const [docLoaded, setDocLoaded] = useState(false);
   const bodyRef = useRef<HTMLDivElement>(null);
 
@@ -394,9 +488,20 @@ export default function BillsPage({ jobName = 'Johnson Residence — Full Remode
      goes straight to the job and is marked paid. Both land In review first. */
   const hasApprovers = approvers.length > 0;
   const amountPaid = paid ? total : 0;
-  /* Billed from the moment it leaves the inbox: the flow syncs to QBO when the
-     record is saved to the job, not when it is finally paid. */
-  const qboBilled = sendToQbo && status !== 'Draft';
+  const isMisc = paidTo === 'Misc';
+  /* Today's sync triggers: a receipt syncs once it is marked Paid, a bill once it
+     reaches Ready for payment (the Accounting setup default). */
+  const qboBilled = isReceipt ? paid : (readyForPayment || paid);
+  /* Payment Account is required to save a receipt to the job or mark it paid, but
+     not to save a plain draft or approve it. */
+  const requireAccount = () => {
+    if (isReceipt && !paymentAccount) {
+      setAccountError(true);
+      setToast('Select a Payment Account before saving this receipt to the job');
+      return false;
+    }
+    return true;
+  };
   const allChecked = costs.length > 0 && checkedRows.length === costs.length;
 
   const toggleRow = (id: string) =>
@@ -498,6 +603,29 @@ export default function BillsPage({ jobName = 'Johnson Residence — Full Remode
             <div style={{ fontSize: 26, fontWeight: 700, color: 'var(--bt-midnight)', letterSpacing: '-0.02em' }}>{type}</div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+            {/* Prototype only: stands in for who is signed in, so one screen can show
+                what each person's picker offers. */}
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--g600)', background: 'var(--g50)', border: '1px dashed var(--g300)', borderRadius: 6, padding: '4px 8px' }}>
+              Viewing as
+              <select
+                aria-label="Viewing as"
+                value={accountViewer}
+                onChange={e => setPaymentAccountViewer(e.target.value)}
+                style={{ border: 'none', background: 'transparent', font: 'inherit', fontWeight: 600, color: 'var(--g800)', cursor: 'pointer', outline: 'none' }}
+              >
+                {ACCOUNT_PEOPLE.map(p => <option key={p.name} value={p.name}>{personLabel(p)}</option>)}
+              </select>
+            </label>
+            <button
+              type="button"
+              aria-label="Share"
+              onClick={() => setToast('Share link copied')}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--g600)', display: 'flex', padding: 2 }}
+            >
+              <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+                <path d="M11 14V3.5M7.5 7L11 3.5 14.5 7M5 11v6.5h12V11" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
             <button
               type="button"
               aria-label="Comments"
@@ -587,7 +715,7 @@ export default function BillsPage({ jobName = 'Johnson Residence — Full Remode
                         {' '}or drop a file to fill this form
                       </div>
                       <div style={{ fontSize: 13, color: 'var(--g500)' }}>
-                        Supported file types - .pdf, .jpg, .png, .jpeg, .heic
+                        Supported file types - .pdf, .jpg, .png, .jpeg, .heic, .docx, .xlsx, .txt, .csv
                       </div>
                     </div>
                   )}
@@ -674,7 +802,7 @@ export default function BillsPage({ jobName = 'Johnson Residence — Full Remode
 
                   <div style={{ padding: '4px 32px 40px' }}>
                     {/* ── Where this record is in the flow ── */}
-                    <div style={{ display: 'flex', gap: 4, marginBottom: 28 }}>
+                    {TODAY.stageStrip && <div style={{ display: 'flex', gap: 4, marginBottom: 28 }}>
                       {stagesFor(type).map((stage, i) => {
                         const active = stage.key === status;
                         return (
@@ -693,7 +821,7 @@ export default function BillsPage({ jobName = 'Johnson Residence — Full Remode
                           </div>
                         );
                       })}
-                    </div>
+                    </div>}
 
                     {/* ── Payment details ── */}
                     <div style={fieldGrid}>
@@ -709,18 +837,25 @@ export default function BillsPage({ jobName = 'Johnson Residence — Full Remode
                         />
                       </div>
                       <div>
-                        <label style={lbl}>Payment account</label>
+                        <label style={lbl}>Payment Account</label>
                         <Dropdown
-                          ariaLabel="Payment account"
-                          value={paymentAccount}
-                          onChange={setPaymentAccount}
-                          options={['Visa 1234', 'Amex 8890', 'Operating checking']}
+                          ariaLabel="Payment Account"
+                          /* The record keeps the QuickBooks account; the picker shows
+                             its alias, so renaming an alias later changes what people
+                             read without changing which account was picked. */
+                          value={selectedAccountLabel}
+                          onChange={label => { setPaymentAccount(visibleAccounts.find(a => a.label === label)?.name ?? ''); setAccountError(false); }}
+                          placeholder="-- None Selected --"
+                          options={['', ...visibleAccounts.map(a => a.label)]}
+                          invalid={accountError}
+                          footer={{ label: "Can't find your card?", action: 'Ask your admin', onSelect: () => setCardHelpOpen(true) }}
                         />
+                        {accountError && <div style={{ fontSize: 12, color: '#d92d20', marginTop: 4 }}>Payment Account is required</div>}
+                        {visibleAccounts.length === 0 && (
+                          <div style={{ fontSize: 12, color: 'var(--g600)', marginTop: 4 }}>No payment accounts available to you</div>
+                        )}
                       </div>
-                      <div>
-                        <label style={lbl}>Date paid</label>
-                        <input className="fi" value={datePaid} onChange={e => setDatePaid(e.target.value)} />
-                      </div>
+                      <div />
 
                       <div>
                         <label style={lbl}>Job</label>
@@ -728,7 +863,7 @@ export default function BillsPage({ jobName = 'Johnson Residence — Full Remode
                           ariaLabel="Job"
                           value={job}
                           onChange={setJob}
-                          options={['', 'Lot 27 Sunset Ridge', 'Harrison Residence', 'Maple Street Remodel']}
+                          options={Array.from(new Set(['', jobName, 'Lot 27 Sunset Ridge', 'Harrison Residence', 'Maple Street Remodel']))}
                         />
                       </div>
                       <div>
@@ -736,17 +871,23 @@ export default function BillsPage({ jobName = 'Johnson Residence — Full Remode
                         <input className="fi" value={title} onChange={e => setTitle(e.target.value)} />
                       </div>
                       <div>
-                        <label style={lbl}>Bill #</label>
-                        {/* Prefix sits inside the field frame as a fixed segment: the
-                            account-wide numbering format is the builder's, not typed
-                            per bill. */}
+                        <label style={{ ...lbl, display: 'flex', alignItems: 'center', gap: 5 }}>
+                          Bill #
+                          <span title="When left blank, a sequential bill number is generated when the bill is saved to a job." style={{ display: 'flex' }}><InfoIcon /></span>
+                        </label>
+                        {/* A bill that already has a number shows it behind the account-wide
+                            prefix. A new one is blank and numbered when it is saved to the job. */}
                         <div style={{ display: 'flex', border: '1px solid var(--g200)', borderRadius: 'var(--radius)', overflow: 'hidden', background: 'white' }}>
-                          <span style={{
-                            padding: '8px 10px', fontSize: 14, lineHeight: '20px', color: 'var(--g700)',
-                            background: 'var(--bt-blue-light)', borderRight: '1px solid var(--g200)', flexShrink: 0,
-                          }}>BILL-</span>
+                          {record?.billNumber && (
+                            <span style={{
+                              padding: '8px 10px', fontSize: 14, lineHeight: '20px', color: 'var(--g700)',
+                              background: 'var(--bt-blue-light)', borderRight: '1px solid var(--g200)', flexShrink: 0,
+                            }}>BILL-</span>
+                          )}
                           <input
+                            aria-label="Bill #"
                             value={billNumber}
+                            placeholder="(Auto Assign)"
                             onChange={e => setBillNumber(e.target.value)}
                             style={{
                               flex: 1, minWidth: 0, padding: '8px 12px', fontSize: 14, lineHeight: '20px',
@@ -764,23 +905,34 @@ export default function BillsPage({ jobName = 'Johnson Residence — Full Remode
                           ariaLabel="Paid to"
                           value={paidTo}
                           onChange={setPaidTo}
-                          options={['Home Depot', 'Ferguson Supply', 'Rexel Electrical']}
-                          leading={<Avatar initials="HD" bg="#fde2e4" color="#b5254c" size={22} />}
+                          options={['Misc', 'Home Depot', 'Ferguson Supply', 'Rexel Electrical']}
+                          leading={<PayeeAvatar name={paidTo} />}
                         />
                       </div>
                       <div>
                         <label style={lbl}>Name</label>
-                        <input className="fi" value={name} onChange={e => setName(e.target.value)} />
+                        <input className="fi" value={name} placeholder="Buildertrend Misc." onChange={e => setName(e.target.value)} />
                       </div>
                       <div>
                         <label style={lbl}>Purchase Order</label>
                         <Dropdown
                           ariaLabel="Purchase Order"
+                          disabled={isMisc}
                           value={purchaseOrder}
                           onChange={setPurchaseOrder}
                           placeholder="-- None Selected --"
                           options={['', 'PO-1042 Electrical rough-in', 'PO-1051 Finish materials']}
                         />
+                      </div>
+                    </div>
+                    <div style={{ ...fieldGrid, gridTemplateColumns: 'repeat(2, 1fr)', marginTop: 16 }}>
+                      <div>
+                        <label style={lbl}>Invoice date</label>
+                        <DateField ariaLabel="Invoice date" value={invoiceDate} onChange={setInvoiceDate} />
+                      </div>
+                      <div>
+                        <label style={lbl}>Date paid</label>
+                        <DateField ariaLabel="Date paid" value={datePaid} onChange={setDatePaid} />
                       </div>
                     </div>
 
@@ -942,18 +1094,30 @@ export default function BillsPage({ jobName = 'Johnson Residence — Full Remode
                               {!paid && (
                                 <tr style={{ borderBottom: '1px solid var(--g200)' }}>
                                   <td colSpan={9} style={{ padding: 0 }}>
-                                    <button
-                                      type="button"
-                                      onClick={addRow}
-                                      style={{
-                                        display: 'flex', alignItems: 'center', gap: 8, width: '100%',
-                                        padding: '14px 16px', background: 'none', border: 'none',
-                                        cursor: 'pointer', font: 'inherit', fontSize: 14, color: 'var(--g800)',
-                                      }}
-                                    >
-                                      <svg width="15" height="15" viewBox="0 0 14 14" fill="none"><path d="M7 2.5v9M2.5 7h9" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" /></svg>
-                                      Item
-                                    </button>
+                                    <div style={{ display: 'flex', alignItems: 'center' }}>
+                                      <button
+                                        type="button"
+                                        onClick={addRow}
+                                        style={{
+                                          display: 'flex', alignItems: 'center', gap: 8,
+                                          padding: '14px 16px', background: 'none', border: 'none',
+                                          cursor: 'pointer', font: 'inherit', fontSize: 14, color: 'var(--g800)',
+                                        }}
+                                      >
+                                        <svg width="15" height="15" viewBox="0 0 14 14" fill="none"><path d="M7 2.5v9M2.5 7h9" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" /></svg>
+                                        Item
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => setToast('Pick catalog items to add')}
+                                        style={{
+                                          padding: '14px 16px', background: 'none', border: 'none',
+                                          cursor: 'pointer', font: 'inherit', fontSize: 14, color: 'var(--g800)',
+                                        }}
+                                      >
+                                        Add from catalog
+                                      </button>
+                                    </div>
                                   </td>
                                 </tr>
                               )}
@@ -973,15 +1137,6 @@ export default function BillsPage({ jobName = 'Johnson Residence — Full Remode
                           </table>
                         </div>
                       </div>
-                      {!paid && (
-                        <button
-                          className="btn btn-s"
-                          style={{ marginTop: 16, padding: '8px 16px', fontSize: 14 }}
-                          onClick={() => setToast('Pick catalog items to add')}
-                        >
-                          Add from catalog
-                        </button>
-                      )}
                     </div>
 
                     {/* ── Approvals ── */}
@@ -1127,43 +1282,65 @@ export default function BillsPage({ jobName = 'Johnson Residence — Full Remode
                       </div>
                     </div>
 
+                    {/* ── Lien waivers ──
+                        Greyed out for a Misc payee: waivers only go to assigned
+                        subs/vendors. */}
+                    <div style={{ marginTop: 36 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, color: 'var(--g500)' }}>
+                        <span style={secTitle}>Lien waivers</span>
+                        <BulbIcon />
+                      </div>
+                      <div style={{ fontSize: 12, color: 'var(--g700)', marginBottom: 12 }}>
+                        You can only send lien waivers to assigned subs/vendors
+                      </div>
+                      <div style={{ maxWidth: 760, border: '1px solid var(--g200)', borderRadius: 4 }}>
+                        {['Conditional', 'Unconditional', 'Final unconditional'].map((label, i) => (
+                          <label key={label} style={{
+                            display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', fontSize: 14,
+                            color: isMisc ? 'var(--g600)' : 'var(--g800)', cursor: isMisc ? 'default' : 'pointer',
+                            borderTop: i === 0 ? 'none' : '1px solid var(--g200)',
+                          }}>
+                            <input type="checkbox" disabled={isMisc} style={{ width: 16, height: 16, accentColor: 'var(--bt-blue)' }} />
+                            {label}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+
                     {/* ── QuickBooks ──
-                        The sync switch and the sync state read as one row: what
-                        you're asking for on the left, where it actually stands on
-                        the right. */}
+                        What triggers the sync on the left, where it actually stands
+                        on the right. */}
                     <div style={{ marginTop: 36 }}>
                       <div style={{ ...secTitle, marginBottom: 14 }}>QuickBooks</div>
-                      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 24, maxWidth: 1010 }}>
-                        <label style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 14, color: 'var(--g800)', cursor: 'pointer' }}>
-                          <input
-                            type="checkbox"
-                            checked={sendToQbo}
-                            onChange={e => setSendToQbo(e.target.checked)}
-                            style={{ width: 16, height: 16, accentColor: 'var(--bt-blue)' }}
-                          />
-                          Send to QuickBooks
-                        </label>
-                        <div style={{ textAlign: 'left', maxWidth: 320 }}>
-                          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--g800)', marginBottom: 6 }}>QuickBooks Status</div>
-                          {/* Green only once it has actually landed in QuickBooks.
-                              Queued is a promise, not a result, so it stays neutral. */}
+                      <div style={{ ...fieldGrid, alignItems: 'flex-start' }}>
+                        <div style={{ gridColumn: 'span 2' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, color: 'var(--g800)', marginBottom: 14 }}>
+                            {isReceipt
+                              ? "Receipt will automatically be synced to QuickBooks once marked 'Paid'"
+                              : "Bill will automatically be synced to QuickBooks once status is 'Ready for payment'"}
+                            <span style={{ color: 'var(--g500)', display: 'flex' }}><BulbIcon /></span>
+                          </div>
+                          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 10, fontSize: 14, color: 'var(--g800)', cursor: 'pointer' }}>
+                            <input
+                              type="checkbox"
+                              checked={billable}
+                              onChange={e => setBillable(e.target.checked)}
+                              style={{ width: 16, height: 16, accentColor: 'var(--bt-blue)' }}
+                            />
+                            <span style={{ textDecoration: 'underline dotted', textUnderlineOffset: 3 }}>Mark as Billable to Client</span>
+                          </label>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--g800)', marginBottom: 6 }}>QuickBooks Status</div>
+                          {/* Green only once it has actually landed in QuickBooks. */}
                           <span
                             className="status"
                             style={qboBilled
                               ? { background: 'var(--green-bg)', color: 'var(--green)', fontWeight: 500 }
                               : { background: 'var(--g100)', color: 'var(--g600)', fontWeight: 500 }}
                           >
-                            {qboBilled ? 'Billed' : sendToQbo ? 'Queued' : 'Not Billed'}
+                            {qboBilled ? 'Billed' : 'Not Billed'}
                           </span>
-                          {/* Name the transaction it becomes. The whole point of the
-                              flow is that a receipt lands as an Expense against the
-                              account that paid, not as a bill still owed. */}
-                          {sendToQbo && (
-                            <div style={{ fontSize: 12, color: 'var(--g600)', marginTop: 8, lineHeight: '17px' }}>
-                              {paid ? 'Created in QuickBooks as an Expense' : 'Will send as an Expense'}
-                              {paymentAccount ? `, paid from ${paymentAccount}.` : '.'}
-                            </div>
-                          )}
                         </div>
                       </div>
                     </div>
@@ -1175,7 +1352,9 @@ export default function BillsPage({ jobName = 'Johnson Residence — Full Remode
                         <button className="btn btn-s" style={{ padding: '8px 16px', fontSize: 14 }} onClick={() => setToast('Choose a file to attach')}>Add</button>
                         <button className="btn btn-s" style={{ padding: '8px 16px', fontSize: 14 }} onClick={() => setToast('New document created')}>Create new doc</button>
                       </div>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--g800)', cursor: 'pointer', marginBottom: 12 }}>
+                      {!blank && (
+<>
+<label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--g800)', cursor: 'pointer', marginBottom: 12 }}>
                         <input type="checkbox" style={{ width: 16, height: 16, accentColor: 'var(--bt-blue)' }} />
                         Select all
                       </label>
@@ -1195,12 +1374,15 @@ export default function BillsPage({ jobName = 'Johnson Residence — Full Remode
                           <span style={{ color: 'var(--g500)', fontSize: 13, lineHeight: 1, cursor: 'pointer' }}>⋮</span>
                         </div>
                       </div>
+</>
+)}
                     </div>
 
                     {/* ── Custom fields ──
                         Collapsed by count: accounts configure their own, so the
                         header has to say how many are down there before you open it. */}
-                    <div style={{ marginTop: 36, borderTop: '1px solid var(--g200)', paddingTop: 16 }}>
+                    {TODAY.customFields && (
+<div style={{ marginTop: 36, borderTop: '1px solid var(--g200)', paddingTop: 16 }}>
                       <button
                         type="button"
                         onClick={() => setCustomOpen(o => !o)}
@@ -1228,6 +1410,7 @@ export default function BillsPage({ jobName = 'Johnson Residence — Full Remode
                         </div>
                       )}
                     </div>
+)}
                   </div>
                 </>
               )}
@@ -1334,6 +1517,7 @@ export default function BillsPage({ jobName = 'Johnson Residence — Full Remode
               <button
                 className="btn btn-p"
                 onClick={() => {
+                  if (!hasApprovers && isReceipt && !requireAccount()) return;
                   setStatus(reviewNext);
                   setToast(
                     hasApprovers ? `${type} approved to job`
@@ -1349,17 +1533,37 @@ export default function BillsPage({ jobName = 'Johnson Residence — Full Remode
             /* Inbox / Draft. Save as draft loops back here; the primary action
                moves the record on, named by whether anyone has to approve it. */
             <div style={{ display: 'flex', gap: 8 }}>
-              <button className="btn btn-s" onClick={() => setToast(`${type} deleted`)}>Delete</button>
-              <button className="btn btn-s" onClick={() => setToast('Draft saved')}>Save as draft</button>
               <button
-                className="btn btn-p"
-                onClick={() => {
-                  setStatus('In review');
-                  setToast(hasApprovers ? `${type} sent for approval` : `${type} saved to job`);
-                }}
-              >
-                {hasApprovers ? 'Send for approval' : 'Save to job'}
-              </button>
+                className="btn btn-s"
+                disabled={blank}
+                style={{ color: '#d92d20', opacity: blank ? 0.45 : 1 }}
+                onClick={() => setToast(`${type} deleted`)}
+              >Delete</button>
+              <button className="btn btn-s" onClick={() => setToast('Draft saved')}>Save draft</button>
+              {hasApprovers ? (
+                <button className="btn btn-p" onClick={() => { setStatus('In review'); setToast(`${type} sent for approval`); }}>
+                  Send for approval
+                </button>
+              ) : (
+                <>
+                  <button
+                    className="btn btn-p"
+                    onClick={() => { if (!requireAccount()) return; setStatus('In review'); setToast(`${type} saved to job`); }}
+                  >
+                    Save to Job
+                  </button>
+                  <button
+                    className="btn btn-p"
+                    onClick={() => {
+                      if (!requireAccount()) return;
+                      if (isReceipt) { setStatus('Paid'); setToast('Receipt marked as paid'); }
+                      else { setStatus('Ready for payment'); setToast(`${type} is ready for payment`); }
+                    }}
+                  >
+                    {isReceipt ? 'Mark as Paid' : 'Mark Ready for Payment'}
+                  </button>
+                </>
+              )}
             </div>
           )}
         </div>
@@ -1373,6 +1577,31 @@ export default function BillsPage({ jobName = 'Johnson Residence — Full Remode
           }}>{toast}</div>
         )}
       </div>
+
+      {/* Where to go when a card isn't listed. It sits above the record in a portal so
+          the record's own scroll and clipping can't hide it. */}
+      {cardHelpOpen && createPortal(
+        <div
+          style={{ position: 'fixed', inset: 0, zIndex: 3000, background: 'rgba(15,23,42,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          onClick={() => setCardHelpOpen(false)}
+        >
+          <div
+            role="dialog"
+            aria-label="Can't find your card"
+            onClick={e => e.stopPropagation()}
+            style={{ background: 'white', borderRadius: 10, width: 400, maxWidth: '92vw', padding: '22px 24px', boxShadow: '0 12px 40px rgba(15,23,42,0.28)' }}
+          >
+            <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--bt-midnight)', marginBottom: 8 }}>Can't find your card?</div>
+            <div style={{ fontSize: 14, color: 'var(--g700)', lineHeight: '20px' }}>
+              Your accounting admin chooses which cards and accounts you can use. Message them to get the one you need
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 18 }}>
+              <button className="btn btn-p" autoFocus onClick={() => setCardHelpOpen(false)}>Got it</button>
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )}
     </>
   );
 }

@@ -31,9 +31,8 @@ export interface ReviewSettings {
 }
 
 const DEFAULTS: ReviewSettings = {
-  // Open book is the default because the fee row (ADO 291436) only exists
-  // there, and that is what this page is currently being reviewed for.
-  contractType: 'open-book',
+  // Fixed price is the first view; open book sits behind the Review panel's Contract toggle.
+  contractType: 'fixed-price',
   coLayout: 'inline',
   hiddenLinesLayout: 'oneLine',
 };

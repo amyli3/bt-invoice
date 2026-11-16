@@ -55,6 +55,8 @@ import OwnerInvoicesPage from './components/OwnerInvoicesPage';
 import JobDetailsPage from './components/JobDetailsPage';
 import CompanySettingsPage from './components/CompanySettingsPage';
 import BillsGridPage from './components/BillsGridPage';
+import JobCostingBudgetOB from './components/JobCostingBudgetOB';
+import { useReviewSettings } from './reviewSettings';
 import { type InvoiceCadence } from './components/InvoiceScheduleModal';
 import { JOBS, INVOICE_TEMPLATES } from './mockData';
 import { getNextId } from './mockData';
@@ -76,6 +78,7 @@ function getInitialPage(): PageType {
 }
 
 export default function App() {
+  const reviewSettings = useReviewSettings();
   const [invoice, setInvoice] = useState<Invoice>(defaultInvoice);
   const [jobOpen, setJobOpen] = useState(false);
   const [selectedJob, setSelectedJob] = useState(1);
@@ -1216,7 +1219,7 @@ export default function App() {
     return (
       <div style={{display: 'flex', flexDirection: 'column', height: '100vh'}}>
         <TopNav onNavigate={(page) => setActivePage(page as PageType)} />
-        <div style={{flex: 1, overflowY: 'auto'}}>
+        <div style={{flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column'}}>
           <CompanySettingsPage
             defaultInvoiceKind={defaultInvoiceKind}
             onDefaultInvoiceKindChange={setDefaultInvoiceKind}
@@ -1474,7 +1477,9 @@ export default function App() {
         <div style={{display: 'flex', flex: 1, minHeight: 0}}>
           <JobSidebar open={jobOpen} onToggle={() => setJobOpen(false)} selectedJob={selectedJob} onSelectJob={(id) => { setSelectedJob(id); if (isNarrow) setJobOpen(false); }} onHomeClick={() => setActivePage('client-portal')} onOpenJobDetails={(id) => { setJobDetailsReturnPage(activePage); setSelectedJob(id); setActivePage('job-details'); }} />
           <div className="content-area" style={{overflowY: 'auto'}}>
-            <JobCostingBudget onBack={() => setActivePage('invoice')} onOpenJPS={() => setActivePage('job-price-summary')} />
+            {reviewSettings.contractType === 'open-book'
+              ? <JobCostingBudgetOB />
+              : <JobCostingBudget onBack={() => setActivePage('invoice')} onOpenJPS={() => setActivePage('job-price-summary')} />}
           </div>
         </div>
       </div>

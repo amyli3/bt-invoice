@@ -21,6 +21,8 @@ type Row = {
   amountPaid: number;
   status: BillStatus;
   needsApproval?: boolean;
+  /* Started from scratch, so the record opens empty. */
+  blank?: boolean;
 };
 
 const INITIAL_ROWS: Row[] = [
@@ -62,6 +64,7 @@ export default function BillsGridPage({ jobName = 'Amy (BWF-26)' }: Props) {
   const [openId, setOpenId] = useState<string | null>(null);
   const [checked, setChecked] = useState<string[]>([]);
   const [toast, setToast] = useState<string | null>(null);
+  const [newMenuOpen, setNewMenuOpen] = useState(false);
 
   const visible = useMemo(() => rows.filter(TABS.find(t => t.key === tab)!.match), [rows, tab]);
   const totals = visible.reduce(
@@ -76,12 +79,13 @@ export default function BillsGridPage({ jobName = 'Amy (BWF-26)' }: Props) {
     title: r.title,
     type: r.type,
     status: r.status,
-    paidTo: r.paidTo || 'Home Depot',
+    paidTo: r.blank ? 'Misc' : (r.paidTo || 'Home Depot'),
+    blank: r.blank,
     billNumber: r.billNumber,
     job: r.job,
     /* A row's own amount has to be the one the detail totals to, otherwise the
        grid and the record disagree the moment you open it. */
-    costs: r.id === 'b2' ? undefined : [
+    costs: r.blank ? [] : r.id === 'b2' ? undefined : [
       {
         id: `${r.id}-1`, title: r.title || 'Item',
         costCode: '200.40 Electrical Rough-in', costType: 'Material',
@@ -89,6 +93,14 @@ export default function BillsGridPage({ jobName = 'Amy (BWF-26)' }: Props) {
       },
     ],
   });
+
+  const newRecord = (type: Row['type']) => {
+    const id = `b${Date.now()}`;
+    setRows(rs => [{ id, job: jobName, billNumber: '', title: '', type, paidTo: 'Misc', amount: 0, amountPaid: 0, status: 'Draft', blank: true }, ...rs]);
+    setTab('inbox');
+    setNewMenuOpen(false);
+    setOpenId(id);
+  };
 
   return (
     <div style={{ fontFamily: "'Inter', sans-serif", background: 'white', minHeight: '100%', padding: '20px 28px 40px' }}>
@@ -126,21 +138,39 @@ export default function BillsGridPage({ jobName = 'Amy (BWF-26)' }: Props) {
             <button
               className="btn btn-p"
               style={{ fontSize: 15, padding: '9px 18px', borderRadius: 'var(--radius) 0 0 var(--radius)' }}
-              onClick={() => {
-                const id = `b${Date.now()}`;
-                setRows(rs => [{ id, job: '', billNumber: '', title: '', type: 'Bill', paidTo: '', amount: 0, amountPaid: 0, status: 'Draft' }, ...rs]);
-                setTab('inbox');
-                setOpenId(id);
-              }}
+              onClick={() => newRecord('Bill')}
             >
               <svg width="15" height="15" viewBox="0 0 14 14" fill="none"><path d="M7 2.5v9M2.5 7h9" stroke="white" strokeWidth="1.7" strokeLinecap="round" /></svg>
               Bill
             </button>
             <span style={{ width: 1, background: 'rgba(255,255,255,0.35)' }} />
-            <button className="btn btn-p" aria-label="More new options" style={{ borderRadius: '0 var(--radius) var(--radius) 0', padding: '9px 12px' }}
-              onClick={() => setToast('New receipt, new vendor credit')}>
-              <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 4l4 4 4-4" stroke="white" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" /></svg>
-            </button>
+            <div style={{ position: 'relative', display: 'flex' }}>
+              <button className="btn btn-p" aria-label="More new options" aria-expanded={newMenuOpen} style={{ borderRadius: '0 var(--radius) var(--radius) 0', padding: '9px 12px' }}
+                onClick={() => setNewMenuOpen(o => !o)}>
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 4l4 4 4-4" stroke="white" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" /></svg>
+              </button>
+              {newMenuOpen && (
+                <>
+                  <div style={{ position: 'fixed', inset: 0, zIndex: 39 }} onClick={() => setNewMenuOpen(false)} />
+                  <div style={{
+                    position: 'absolute', top: 'calc(100% + 4px)', right: 0, minWidth: 180, zIndex: 40,
+                    background: 'white', border: '1px solid var(--g200)', borderRadius: 6,
+                    boxShadow: '0 8px 24px rgba(15,23,42,0.18)', overflow: 'hidden',
+                  }}>
+                    {(['Receipt', 'Vendor Credit'] as const).map(t => (
+                      <button
+                        key={t}
+                        type="button"
+                        onClick={() => newRecord(t)}
+                        style={{ display: 'block', width: '100%', textAlign: 'left', padding: '11px 16px', background: 'none', border: 'none', cursor: 'pointer', font: 'inherit', fontSize: 15, color: 'var(--g800)' }}
+                        onMouseEnter={e => (e.currentTarget.style.background = 'var(--g50)')}
+                        onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+                      >{t}</button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         </div>
       </div>
