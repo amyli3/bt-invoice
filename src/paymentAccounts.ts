@@ -19,7 +19,6 @@ export const QBO_PAYMENT_ACCOUNTS: PaymentAccount[] = [
   { name: 'Operating Checking (1234)', type: 'Bank' },
   { name: 'Payroll Checking (5521)', type: 'Bank' },
   { name: 'Reserve Savings (8890)', type: 'Bank' },
-  { name: 'Undeposited Funds', type: 'Other asset' },
 ];
 
 const KEY = 'bt-invoice:hidden-payment-accounts';
@@ -84,8 +83,7 @@ export type AliasMap = Record<string, string>;
 
 /* Dummy nicknames so the prototype opens with something to look at. They apply
    only until someone saves: once the admin presses Save, whatever they saved
-   (even nothing) replaces these. Undeposited Funds is left without one on
-   purpose, to show an account that falls back to its generic name. */
+   (even nothing) replaces these. */
 const SAMPLE_NICKNAMES: AliasMap = {
   'Capital One Spark Business (4821)': 'Office card',
   'Chase Ink Business Cash (9937)': 'Fuel card',
