@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
+import MfaDialog from './MfaDialog';
 import {
   QBO_PAYMENT_ACCOUNTS, setHiddenPaymentAccounts, setPaymentAccountAliases,
   accountDisplayName, genericAccountName, PEOPLE, personLabel, setPaymentAccountAccess, useHiddenPaymentAccounts,
@@ -157,8 +158,16 @@ export default function AccountingSetupModal({ onClose }: Props) {
     return clash ? 'Already used by another account' : null;
   };
   const hasAliasProblem = QBO_PAYMENT_ACCOUNTS.some(a => aliasProblem(a.name));
+  /* Saving changes who can use which account, so it asks the builder to verify
+     first. Nothing is written until they do; backing out leaves the drafts as
+     they were. */
+  const [mfaOpen, setMfaOpen] = useState(false);
   const save = () => {
     if (hasAliasProblem) return;
+    setMfaOpen(true);
+  };
+  const commitSave = () => {
+    setMfaOpen(false);
     setHiddenPaymentAccounts(hiddenDraft);
     setPaymentAccountAliases(aliasDraft);
     setPaymentAccountAccess(accessDraft);
@@ -428,6 +437,7 @@ export default function AccountingSetupModal({ onClose }: Props) {
           <button className="btn btn-p" onClick={save} disabled={hasAliasProblem} style={hasAliasProblem ? { opacity: 0.5, cursor: 'not-allowed' } : undefined}>Save</button>
         </div>
         {accessPopover}
+        {mfaOpen && <MfaDialog onVerified={commitSave} onCancel={() => setMfaOpen(false)} />}
       </div>
     </div>,
     document.body
